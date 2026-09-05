@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "flexMode": "full",
+  "defaultSeparator": " | ",
+  "lines": [[
+    { "id": "model", "type": "model", "color": "magenta" },
+    { "id": "context", "type": "context-window", "color": "cyan" },
+    { "id": "branch", "type": "git-branch", "color": "magenta" },
+    { "id": "changes", "type": "git-changes", "color": "yellow" }
+  ]]
+}

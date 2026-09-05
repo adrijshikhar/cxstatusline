@@ -1,14 +1,42 @@
+<div align="center">
+
+<pre>
+               _        _             _ _
+  ___ __ __ __| |_ __ _| |_ _   _ ___| (_)_ __   ___
+ / __|\ V // __| __/ _` | __| | | / __| | | '_ \ / _ \
+| (__ &gt; &lt; \__ \ || (_| | |_| |_| \__ \ | | | | |  __/
+ \___/_/\_\|___/\__\__,_|\__|\__,_|___/_|_|_| |_|\___|
+</pre>
+
 # cxstatusline
+
+**⚡ Your Codex session, at a glance.**
+
+*Model, context, Git, usage, and reset timers. Your terminal, your layout.*
+
+[![CI](https://github.com/adrijshikhar/cxstatusline/actions/workflows/ci.yml/badge.svg)](https://github.com/adrijshikhar/cxstatusline/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Node.js 22+](https://img.shields.io/badge/node-%E2%89%A522-green)](https://nodejs.org/)
+
+![cxstatusline configurator: adding a widget and changing colors with live sample-data previews](docs/demo.gif)
+
+</div>
+
+## ✨ Features
 
 A configurable, one-to-three-row statusline for [OpenAI Codex CLI](https://github.com/openai/codex),
 with an interactive configuration TUI, colors, Powerline themes and preset import/export.
 See model, context, Git, session duration, usage percentages and reset times without leaving Codex.
 Available data depends on your session and account.
 
-The renderer and configuration UI are adapted from [ccstatusline](https://github.com/sirmalloc/ccstatusline).
-Thank you to Matthew Breedlove and its contributors. This is an independent project, not an official OpenAI product.
+Independent project; not an official OpenAI product.
+
+<details>
+<summary>See the footer inside Codex</summary>
 
 ![cxstatusline footer inside Codex](docs/statusline.png)
+
+</details>
 
 ## Status and requirements
 
@@ -24,7 +52,7 @@ Source installation requires Node.js 22+, Bun 1.4+, Git, macOS Command Line Tool
 stock Codex installation, rustup and at least 20 GiB free build space. Keep stock Codex installed.
 Powerline glyphs need a compatible terminal font; plain separators work without one.
 
-## Install from source
+## 🚀 Install from source
 
 Install Command Line Tools with `xcode-select --install` if needed, and rustup from
 [rustup.rs](https://rustup.rs/) if it is not installed. Then:
@@ -47,7 +75,7 @@ checkout in place. The first Codex source build can take tens of minutes.
 Start Codex, accept its cxstatusline hook trust prompt, and open a new session after installation.
 An already-running process does not switch binaries when installation finishes.
 
-## Configure
+## 🎛️ Configure
 
 ```sh
 cxstatusline
@@ -81,7 +109,7 @@ hook, and keeps settings and source. It refuses while a build holds the lock. Cl
 sessions before reverting. If no saved launcher exists, the command explains what remains to
 restore; it never overwrites an unrelated executable.
 
-## Troubleshooting
+## 🩺 Troubleshooting
 
 - No footer: run `cxstatusline doctor`, check `which codex` and PATH, accept the hook prompt,
   and start a new session.
@@ -96,7 +124,20 @@ restore; it never overwrites an unrelated executable.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
 
+Renderer and configuration UI adapted from [ccstatusline](https://github.com/sirmalloc/ccstatusline).
+
 cxstatusline is [MIT licensed](LICENSE). [NOTICE](NOTICE) and
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) preserve upstream attribution.
 The build includes dependency license texts in `dist/THIRD_PARTY_LICENSES.txt`.
 OpenAI Codex remains separately licensed under Apache-2.0.
+
+<details>
+<summary>Changelog</summary>
+
+### 0.1.0
+
+Initial baseline: configurable one-to-three-row Codex statusline, interactive editor,
+colors and Powerline themes, preset import/export, source installation, update hooks,
+diagnostics and revert. Prebuilt distribution is still under private testing.
+
+</details>

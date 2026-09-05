@@ -27,3 +27,17 @@ Preserve copied ccstatusline UI/widget behavior and attribution. Unsupported Cla
 and custom commands remain outside the catalog. No `@ts-nocheck`. Include reproduction and test
 evidence in PRs. Never commit credentials, personal settings, logs or private planning documents.
 See SECURITY.md for sensitive reports.
+
+## Regenerate the README demo
+
+Install [VHS](https://github.com/charmbracelet/vhs) (`brew install vhs` on macOS),
+then run `bun run demo` from the repository root. VHS also requires ttyd and ffmpeg;
+Homebrew installs its dependencies. The recording drives the real configurator using
+built-in sample previews, `docs/demo-settings.json`, and a fresh temporary XDG config
+directory, never your settings.
+It does not start or patch Codex. Temporary demo settings remain under
+`/tmp/cxstatusline-demo.*` for inspection.
+
+Edit `docs/demo.tape` when menu navigation changes, regenerate `docs/demo.gif`, and
+watch the animation before committing both. Open it in a browser (macOS Preview shows
+individual frames). Keep sample data in recordings; do not record personal sessions.

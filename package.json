@@ -19,6 +19,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "demo": "bun run build && vhs docs/demo.tape",
     "build": "bun run scripts/build.ts",
     "test": "bun test",
     "test:coverage": "bun test --coverage",
