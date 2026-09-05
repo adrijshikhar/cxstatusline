@@ -1,0 +1,29 @@
+{
+  "payload_version": 1,
+  "model": { "name": "gpt-5-codex", "reasoning": "medium" },
+  "git": { "branch": "main", "changes": { "additions": 12, "deletions": 3 }, "pr": 4821 },
+  "usage": {
+    "context_used": 0.42,
+    "context_remaining": 0.58,
+    "context_tokens": 84000,
+    "context_window": 200000,
+    "used_tokens": 51234,
+    "input_tokens": 650000,
+    "output_tokens": 12000,
+    "cached_input_tokens": 520000,
+    "five_hour": { "used": 0.31, "resets_at": "2026-09-02T14:00:00Z" },
+    "weekly": { "used": 0.08, "resets_at": "2026-09-08T00:00:00Z" }
+  },
+  "session": {
+    "id": "0192a7f0-6c3e-7c1a-9b1e-3f5c2d1a0b9c",
+    "cwd": "/Users/nemesis/Projects/my-projects/cxstatusline",
+    "project_root": "/Users/nemesis/Projects/my-projects/cxstatusline",
+    "hostname": "host",
+    "approval_mode": "on-request",
+    "permissions": "workspace-write",
+    "run_state": "ready",
+    "codex_version": "0.152.1",
+    "started_at": "2026-09-02T10:00:00Z",
+    "thread_title": "dsl"
+  }
+}

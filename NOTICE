@@ -1,0 +1,17 @@
+cxstatusline
+
+Portions of src/utils/{ansi,colors,gradient,powerline-settings,powerline-theme-index,renderer,separator-index,terminal}.ts
+are derived from ccstatusline at commit 6a3d855b82faf75b249155dcfa1624780f89cbbd.
+
+Portions of src/{types/RenderContext.ts,utils/widget-manifest.ts,utils/widgets.ts,widgets/}
+are derived from ccstatusline at commit 6a3d855b82faf75b249155dcfa1624780f89cbbd.
+
+Portions of src/tui/components/{PowerlineSetup,PowerlineSeparatorEditor,PowerlineThemeSelector,GlobalOverridesMenu}.tsx
+are derived from ccstatusline at commit 6a3d855b82faf75b249155dcfa1624780f89cbbd.
+
+Portions of src/tui/components/{ExportConfigDialog,ImportConfigDialog,ImportPreviewDialog}.tsx
+are derived from ccstatusline at commit 6a3d855b82faf75b249155dcfa1624780f89cbbd.
+
+Copyright (c) 2025 Matthew Breedlove (https://github.com/sirmalloc)
+Original repository: https://github.com/sirmalloc/ccstatusline
+Licensed under the MIT License.

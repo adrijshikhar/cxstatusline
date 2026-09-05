@@ -1,0 +1,55 @@
+{
+  "version": 2,
+  "lines": [
+    [
+      { "id": "model", "type": "model", "color": "hex:61AFEF" },
+      { "id": "sep-model", "type": "separator" },
+      { "id": "thinking-effort", "type": "thinking-effort", "color": "hex:E06C75" },
+      { "id": "sep-thinking", "type": "separator" },
+      { "id": "context-bar", "type": "context-bar", "color": "hex:98C379" },
+      { "id": "sep-context", "type": "separator" },
+      { "id": "current-working-dir", "type": "current-working-dir", "color": "hex:ABB2BF" },
+      { "id": "sep-cwd", "type": "separator" },
+      { "id": "git-branch", "type": "git-branch", "color": "hex:C678DD" },
+      { "id": "sep-branch", "type": "separator" },
+      { "id": "git-changes", "type": "git-changes", "color": "hex:E5C07B" }
+    ],
+    [
+      { "id": "weekly-usage", "type": "weekly-usage", "color": "hex:61AFEF" },
+      { "id": "sep-weekly", "type": "separator" },
+      { "id": "session-clock", "type": "session-clock" },
+      { "id": "sep-session", "type": "separator" },
+      { "id": "input-speed", "type": "input-speed", "color": "hex:56B6C2" },
+      { "id": "sep-in", "type": "separator" },
+      { "id": "output-speed", "type": "output-speed", "color": "hex:61AFEF" },
+      { "id": "sep-out", "type": "separator" },
+      { "id": "tokens-cached", "type": "tokens-cached", "color": "hex:C678DD" }
+    ],
+    [
+      { "id": "free-memory", "type": "free-memory", "color": "hex:E06C75" },
+      { "id": "sep-memory", "type": "separator" },
+      { "id": "session-name", "type": "session-name" },
+      { "id": "sep-session-name", "type": "separator" },
+      { "id": "claude-session-id", "type": "claude-session-id" },
+      { "id": "sep-session-id", "type": "separator" },
+      { "id": "sandbox-status", "type": "sandbox-status" },
+      { "id": "sep-sandbox", "type": "separator" },
+      { "id": "version", "type": "version", "color": "hex:98C379" }
+    ]
+  ],
+  "flexMode": "full-minus-40",
+  "compactThreshold": 60,
+  "colorLevel": 3,
+  "inheritSeparatorColors": false,
+  "globalBold": false,
+  "minimalistMode": false,
+  "powerline": {
+    "enabled": false,
+    "separators": ["|"],
+    "separatorInvertBackground": [false],
+    "startCaps": [],
+    "endCaps": [],
+    "autoAlign": true,
+    "continueThemeAcrossLines": false
+  }
+}

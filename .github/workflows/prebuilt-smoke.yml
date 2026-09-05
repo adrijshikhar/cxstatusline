@@ -1,0 +1,146 @@
+name: Private prebuilt smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      codex_version:
+        description: Exact supported Codex version
+        type: choice
+        options: ["0.153.0", "0.152.1"]
+        default: "0.153.0"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: private-prebuilt-smoke-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CODEX_VERSION: ${{ inputs.codex_version || '0.153.0' }}
+  CARGO_TERM_COLOR: never
+  MACOSX_DEPLOYMENT_TARGET: "14.0"
+  CARGO_BUILD_JOBS: "3"
+  CARGO_PROFILE_RELEASE_DEBUG: "0"
+
+jobs:
+  validate:
+    if: github.event.repository.private == true
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.4.0"
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test
+      - run: bun run build
+      - run: node dist/cxstatusline.js --version
+
+  native:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    env:
+      EXPECTED_ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.4.0"
+      - name: Resolve exact supported patch
+        id: resolve
+        run: bun scripts/ci-prebuilt.ts resolve "$CODEX_VERSION"
+      - name: Check native runner
+        run: |
+          uname -m
+          sw_vers
+          bun -e 'if (process.platform !== "darwin" || process.arch !== process.env.EXPECTED_ARCH) throw new Error("wrong native runner")'
+          df -h .
+      - name: Fetch exact upstream and apply patch
+        env:
+          UPSTREAM_TAG: ${{ steps.resolve.outputs.tag }}
+          PATCH_FILE: ${{ steps.resolve.outputs.patch }}
+        run: |
+          git clone --depth 1 --branch "$UPSTREAM_TAG" https://github.com/openai/codex.git upstream
+          git -C upstream apply --index --check "$GITHUB_WORKSPACE/patches/$PATCH_FILE"
+          git -C upstream apply --index "$GITHUB_WORKSPACE/patches/$PATCH_FILE"
+          git -C upstream rev-parse HEAD
+      - name: Prepare Rust test tools
+        run: |
+          brew install just cargo-nextest
+          cd upstream/codex-rs
+          rustup show active-toolchain
+      - name: Focused patched Rust tests
+        working-directory: upstream
+        run: just test --release -p codex-tui cxstatusline --retries 0
+      - name: Build synchronized executable pair
+        working-directory: upstream/codex-rs
+        run: cargo build --release -p codex-cli --bin codex -p codex-code-mode-host --bin codex-code-mode-host
+      - name: Stage and smoke binaries
+        run: |
+          mkdir -p staging artifacts
+          cp upstream/codex-rs/target/release/codex upstream/codex-rs/target/release/codex-code-mode-host staging/
+          cp upstream/LICENSE upstream/NOTICE staging/
+          bun scripts/ci-prebuilt.ts verify "$CODEX_VERSION" staging "$EXPECTED_ARCH"
+          git -C upstream diff -- codex-rs/Cargo.lock > staging/Cargo.lock.diff
+          cp docs/prebuilt-ci.md staging/README.md
+          tar -czf "artifacts/codex-$CODEX_VERSION-darwin-$EXPECTED_ARCH-smoke.tar.gz" -C staging .
+          cd artifacts
+          shasum -a 256 ./*.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: private-smoke-${{ env.CODEX_VERSION }}-darwin-${{ matrix.arch }}
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 7
+
+  report:
+    if: always() && github.event.repository.private == true
+    needs: [validate, native]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          VALIDATE_RESULT: ${{ needs.validate.result }}
+          NATIVE_RESULT: ${{ needs.native.result }}
+        with:
+          script: |
+            const version = process.env.CODEX_VERSION;
+            if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error('invalid version');
+            const marker = '<!-- cxstatusline-private-prebuilt-smoke -->';
+            const title = `Prebuilt CI blocked: Codex ${version}`;
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const ok = process.env.VALIDATE_RESULT === 'success' && process.env.NATIVE_RESULT === 'success';
+            const issues = await github.paginate(github.rest.issues.listForRepo, { ...context.repo, state: 'open', per_page: 100 });
+            const issue = issues.find(i => !i.pull_request && i.title === title && i.body?.includes(marker));
+            if (ok) {
+              if (issue) {
+                await github.rest.issues.createComment({ ...context.repo, issue_number: issue.number, body: `Both native smoke builds passed: ${runUrl}. Installer/release acceptance is still separate.` });
+                await github.rest.issues.update({ ...context.repo, issue_number: issue.number, state: 'closed' });
+              }
+              await core.summary.addRaw(`Both native smoke builds passed. Private artifacts: ${runUrl}\nNot installer-ready releases.`).write();
+            } else {
+              const body = `${marker}\nCX source: ${context.sha}\nCodex: ${version}\nValidation: ${process.env.VALIDATE_RESULT}\nNative matrix: ${process.env.NATIVE_RESULT}\nRun (includes failing architecture/step): ${runUrl}\nRetry the failed jobs after inspecting the run. No releases were published and no installation was modified.`;
+              if (issue) await github.rest.issues.update({ ...context.repo, issue_number: issue.number, body });
+              else await github.rest.issues.create({ ...context.repo, title, body });
+              core.setFailed(`Private prebuilt smoke failed; ${runUrl}`);
+            }

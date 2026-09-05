@@ -1,0 +1,66 @@
+{
+  "version": 3,
+  "lines": [
+    [
+      { "id": "w-model", "type": "model", "color": "hex:61AFEF" },
+      { "id": "w-sep1", "type": "separator" },
+      { "id": "w-thinking", "type": "thinking-effort", "color": "hex:E06C75" },
+      { "id": "w-sep2", "type": "separator" },
+      { "id": "w-context-bar", "type": "context-bar", "color": "hex:98C379" },
+      { "id": "w-sep3b", "type": "separator" },
+      { "id": "w-cwd-l1", "type": "current-working-dir", "color": "hex:ABB2BF", "metadata": { "fishStyle": "true" } },
+      { "id": "w-sep4b", "type": "separator" },
+      { "id": "w-git-branch", "type": "git-branch", "color": "hex:C678DD" },
+      { "id": "w-sep5", "type": "separator" },
+      { "id": "w-git-changes", "type": "git-changes", "color": "hex:E5C07B" }
+    ],
+    [
+      { "id": "w-session-cost", "type": "session-cost", "color": "hex:98C379" },
+      { "id": "w-sep6", "type": "separator" },
+      { "id": "w-weekly-usage", "type": "weekly-usage", "color": "hex:61AFEF" },
+      { "id": "w-sep8", "type": "separator" },
+      { "id": "w-session-clock", "type": "session-clock", "color": "hex:56B6C2" },
+      { "id": "w-sep9", "type": "separator" },
+      { "id": "w-input-speed", "type": "input-speed", "color": "hex:56B6C2" },
+      { "id": "w-sep9b", "type": "separator" },
+      { "id": "w-output-speed", "type": "output-speed", "color": "hex:61AFEF" },
+      { "id": "w-sep9c", "type": "separator" },
+      { "id": "w-tokens-cached", "type": "tokens-cached", "color": "hex:5C6370" },
+      { "id": "w-sep10", "type": "separator" },
+      { "id": "w-session-usage-pct", "type": "session-usage", "color": "hex:C678DD", "metadata": { "display": "progress" } }
+    ],
+    [
+      { "id": "w-weather", "type": "custom-command", "commandPath": "/deferred/custom-command", "preserveColors": true, "timeout": 4000 },
+      { "id": "w-sep-nyan", "type": "separator" },
+      { "id": "w-memory", "type": "free-memory", "color": "hex:E06C75", "rawValue": false },
+      { "id": "w-sep-memory", "type": "separator" },
+      { "id": "w-vibe", "type": "custom-command", "commandPath": "/deferred/custom-command", "preserveColors": false, "timeout": 2000 },
+      { "id": "w-sep-skills", "type": "separator" },
+      { "id": "w-skills", "type": "skills", "color": "hex:E879F9", "rawValue": false, "metadata": { "mode": "current", "hideWhenEmpty": "false" } },
+      { "id": "847b3c43-83c9-4eba-87a5-288261b0691f", "type": "separator" },
+      { "id": "78f41413-b004-4a62-a2e6-1a2de0227765", "type": "session-name" },
+      { "id": "2edfa7b9-a14b-4943-8836-aa7b99c13233", "type": "separator" },
+      { "id": "c77a11e5-0942-4670-85ee-7f4e3afd516d", "type": "claude-session-id" }
+    ]
+  ],
+  "flexMode": "full-minus-40",
+  "compactThreshold": 60,
+  "colorLevel": 3,
+  "inheritSeparatorColors": false,
+  "globalBold": false,
+  "gitCacheTtlSeconds": 5,
+  "minimalistMode": false,
+  "powerline": {
+    "enabled": false,
+    "separators": ["|"],
+    "separatorInvertBackground": [false],
+    "startCaps": [],
+    "endCaps": [],
+    "autoAlign": true,
+    "continueThemeAcrossLines": false
+  },
+  "installation": {
+    "method": "auto-update",
+    "packageManager": "bun"
+  }
+}
