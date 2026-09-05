@@ -49,8 +49,10 @@ jobs:
         include:
           - runner: macos-15
             arch: arm64
+            target: aarch64-apple-darwin
           - runner: macos-15-intel
             arch: x64
+            target: x86_64-apple-darwin
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
     env:
@@ -80,6 +82,10 @@ jobs:
           git -C upstream apply --index --check "$GITHUB_WORKSPACE/patches/$PATCH_FILE"
           git -C upstream apply --index "$GITHUB_WORKSPACE/patches/$PATCH_FILE"
           git -C upstream rev-parse HEAD
+      - name: Prepare verified Codex V8 archive and bindings
+        env:
+          V8_TARGET: ${{ matrix.target }}
+        run: bash scripts/setup-ci-v8.sh "$GITHUB_WORKSPACE/upstream" "$V8_TARGET"
       - name: Prepare Rust test tools
         run: |
           brew install just cargo-nextest
