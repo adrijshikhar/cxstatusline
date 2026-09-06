@@ -127,6 +127,7 @@ jobs:
         env:
           VALIDATE_RESULT: ${{ needs.validate.result }}
           NATIVE_RESULT: ${{ needs.native.result }}
+          SELF_HOSTED: ${{ inputs.self_hosted }}
         with:
           script: |
             const version = process.env.CODEX_VERSION;
@@ -135,16 +136,18 @@ jobs:
             const title = `Prebuilt CI blocked: Codex ${version}`;
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const ok = process.env.VALIDATE_RESULT === 'success' && process.env.NATIVE_RESULT === 'success';
+            const selfHosted = process.env.SELF_HOSTED === 'true';
+            const matrix = selfHosted ? 'arm64 only (self-hosted runner)' : 'arm64 + x64 (hosted runners)';
             const issues = await github.paginate(github.rest.issues.listForRepo, { ...context.repo, state: 'open', per_page: 100 });
             const issue = issues.find(i => !i.pull_request && i.title === title && i.body?.includes(marker));
             if (ok) {
               if (issue) {
-                await github.rest.issues.createComment({ ...context.repo, issue_number: issue.number, body: `Both native smoke builds passed: ${runUrl}. Installer/release acceptance is still separate.` });
-                await github.rest.issues.update({ ...context.repo, issue_number: issue.number, state: 'closed' });
+                await github.rest.issues.createComment({ ...context.repo, issue_number: issue.number, body: `Native smoke build passed for ${matrix}: ${runUrl}. Installer/release acceptance is still separate.${selfHosted ? ' Issue left open: x64 was not built in this run.' : ''}` });
+                if (!selfHosted) await github.rest.issues.update({ ...context.repo, issue_number: issue.number, state: 'closed' });
               }
-              await core.summary.addRaw(`Both native smoke builds passed. Private artifacts: ${runUrl}\nNot installer-ready releases.`).write();
+              await core.summary.addRaw(`Native smoke build passed for ${matrix}. Private artifacts: ${runUrl}\nNot installer-ready releases.`).write();
             } else {
-              const body = `${marker}\nCX source: ${context.sha}\nCodex: ${version}\nValidation: ${process.env.VALIDATE_RESULT}\nNative matrix: ${process.env.NATIVE_RESULT}\nRun (includes failing architecture/step): ${runUrl}\nRetry the failed jobs after inspecting the run. No releases were published and no installation was modified.`;
+              const body = `${marker}\nCX source: ${context.sha}\nCodex: ${version}\nValidation: ${process.env.VALIDATE_RESULT}\nNative matrix: ${process.env.NATIVE_RESULT} (${matrix})\nRun (includes failing architecture/step): ${runUrl}\nRetry the failed jobs after inspecting the run. No releases were published and no installation was modified.`;
               if (issue) await github.rest.issues.update({ ...context.repo, issue_number: issue.number, body });
               else await github.rest.issues.create({ ...context.repo, title, body });
               core.setFailed(`Private prebuilt smoke failed; ${runUrl}`);
