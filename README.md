@@ -1,5 +1,10 @@
 <div align="center">
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/banner-dark.png">
+  <img alt="cxstatusline" src="docs/banner-light.png" width="720">
+</picture>
+
 # cxstatusline
 
 **⚡ Your Codex session, at a glance.**
