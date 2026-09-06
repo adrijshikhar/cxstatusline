@@ -6,7 +6,8 @@ import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import type { Context } from "../src/context";
-import type { FileDigest, PreparedPair } from "../src/distribution";
+import type { ArtifactFile, FileDigest, PreparedPair, ReleaseManifest } from "../src/distribution";
+import { resolveUpstream } from "../src/codex/upstream";
 import { resolvePaths } from "../src/paths";
 import {
   WRAPPER_MARKER,
@@ -259,6 +260,13 @@ function ctxFor(env: ReturnType<typeof tmpEnv>["env"], cxBin = "/cx"): Context {
   };
 }
 
+/** Replace fields of a parsed installation.json's provenance; `undefined` drops the key. */
+function withProvenance(whole: Record<string, unknown>, patch: Record<string, unknown>): Record<string, unknown> {
+  const provenance = { ...(whole.provenance as Record<string, unknown>), ...patch };
+  for (const [k, v] of Object.entries(patch)) if (v === undefined) delete provenance[k];
+  return { ...whole, provenance };
+}
+
 /** A HOME whose path contains a space, plus a stock upstream launcher at the wrapper path. */
 function spacedHome(): { env: ReturnType<typeof tmpEnv>["env"]; root: string; paths: ReturnType<typeof resolvePaths>; stock: string } {
   const { env, root } = tmpEnv("cxstatusline test ");
@@ -407,6 +415,121 @@ describe("generation activation", () => {
     activatePair(stagePair(root), ctxFor(env));
 
     expect(readState(paths.stateFile).state.launcher_restore).toEqual({ kind: "symlink", target: stock });
+  });
+
+  test("records upstream_bin alongside launcher_restore - the only record of where upstream is", () => {
+    const { env, root, paths, stock } = spacedHome();
+    expect(readState(paths.stateFile).state.upstream_bin).toBeNull();
+
+    activatePair(stagePair(root), ctxFor(env));
+
+    const { state } = readState(paths.stateFile);
+    expect(state.upstream_bin).toBe(stock);
+    expect(state.launcher_restore).toEqual({ kind: "symlink", target: stock });
+    // After activation our wrapper occupies the launcher path, so upstream is no longer findable:
+    // state.json is all doctor has left.
+    expect(resolveUpstream(paths, env, isOurWrapper, null).kind).toBe("not-found");
+  });
+
+  test("fills in a missing upstream_bin even when launcher_restore was already recorded", () => {
+    const { env, root, paths, stock } = spacedHome();
+    writeState(paths.stateFile, {
+      ...readState(paths.stateFile).state,
+      launcher_restore: { kind: "symlink", target: stock },
+      upstream_bin: null,
+    });
+
+    activatePair(stagePair(root), ctxFor(env));
+
+    expect(readState(paths.stateFile).state.upstream_bin).toBe(stock);
+  });
+
+  test("a hook-style ensureWrapper after activation leaves the v2 wrapper byte-identical", () => {
+    const { env, root, paths } = spacedHome();
+    activatePair(stagePair(root), ctxFor(env));
+    const before = readFileSync(paths.wrapperPath, "utf8");
+    makePatchedBin(paths.patchedBin); // the flat layout may still be lying around
+
+    expect(ensureWrapper(paths, "/cx", true)).toEqual({ kind: "present" });
+
+    expect(readFileSync(paths.wrapperPath, "utf8")).toBe(before);
+    expect(before).toBe(generationWrapperScript(paths.currentGeneration, "/cx"));
+  });
+
+  test("ensureWrapper re-places the v2 script, not v1, when the launcher was taken back", () => {
+    const { env, root, paths } = spacedHome();
+    activatePair(stagePair(root), ctxFor(env));
+    rmSync(paths.wrapperPath, { force: true });
+    symlinkSync(join(root, "stock codex"), paths.wrapperPath);
+
+    expect(ensureWrapper(paths, "/cx", true)).toEqual({ kind: "replaced" });
+
+    expect(readFileSync(paths.wrapperPath, "utf8")).toBe(generationWrapperScript(paths.currentGeneration, "/cx"));
+  });
+
+  test("without an active generation ensureWrapper still writes the legacy v1 script", () => {
+    const { env } = spacedHome();
+    const paths = resolvePaths(env);
+    makePatchedBin(paths.patchedBin);
+
+    expect(ensureWrapper(paths, "/cx", true)).toEqual({ kind: "replaced" });
+
+    expect(readFileSync(paths.wrapperPath, "utf8")).toBe(wrapperScript(paths.patchedBin, "/cx"));
+  });
+
+  test("a valid embedded release manifest survives readInstallation intact", () => {
+    const { env, root, paths } = spacedHome();
+    activatePair(stagePair(root), ctxFor(env));
+    const metadata = join(activeGeneration(paths) as string, "installation.json");
+    const whole = JSON.parse(readFileSync(metadata, "utf8")) as Record<string, unknown>;
+    const files = Object.fromEntries(
+      ["codex", "codex-code-mode-host", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"]
+        .map((f) => [f, { sha256: "f".repeat(64), size: 10 }]),
+    ) as Record<ArtifactFile, FileDigest>;
+    const manifest: ReleaseManifest = {
+      schema: 1,
+      cxVersion: "2.0.0",
+      codexVersion: "0.152.1",
+      upstreamTag: "rust-v0.152.1",
+      upstreamCommit: "b".repeat(40),
+      patchFile: "codex-0.152.1.patch",
+      patchSha256: "a".repeat(64),
+      sourceCommit: "c".repeat(40),
+      workflowUrl: "https://github.com/adrijshikhar/cxstatusline/actions/runs/123456789",
+      createdAt: "2026-09-05T12:00:00Z",
+      artifacts: [{ platform: "darwin-arm64" as const, filename: "codex-0.152.1-darwin-arm64.tar.gz", sha256: "a".repeat(64), size: 100, files }],
+    };
+    const release = { tag: "cxstatusline-v2.0.0-codex-v0.152.1", archiveSha256: "a".repeat(64), manifest };
+    writeFileSync(metadata, JSON.stringify(withProvenance(whole, { release })));
+
+    expect(readInstallation(paths)?.provenance.release).toEqual(release);
+  });
+
+  test("invalid installation.json means no active installation", () => {
+    const { env, root, paths } = spacedHome();
+    activatePair(stagePair(root), ctxFor(env));
+    const metadata = join(activeGeneration(paths) as string, "installation.json");
+    const whole = JSON.parse(readFileSync(metadata, "utf8")) as Record<string, unknown>;
+
+    const broken: readonly (readonly [string, string])[] = [
+      ["truncated json", readFileSync(metadata, "utf8").slice(0, 40)],
+      ["only the two fields the old check looked at", JSON.stringify({ codexVersion: "0.152.1", provenance: { source: "prebuilt" } })],
+      ["missing executables", JSON.stringify(withProvenance(whole, { executables: undefined }))],
+      ["short executable digest", JSON.stringify(withProvenance(whole, { executables: { codex: { sha256: "abc", size: 3 }, "codex-code-mode-host": { sha256: "d".repeat(64), size: 3 } } }))],
+      ["zero-size executable", JSON.stringify(withProvenance(whole, { executables: { codex: { sha256: "c".repeat(64), size: 0 }, "codex-code-mode-host": { sha256: "d".repeat(64), size: 3 } } }))],
+      ["upstreamCommit that is not a 40-hex sha", JSON.stringify(withProvenance(whole, { upstreamCommit: "not-a-sha" }))],
+      ["sourceCommit that is neither null nor a sha", JSON.stringify(withProvenance(whole, { sourceCommit: "" }))],
+      ["patchSha256 that is not 64 hex", JSON.stringify(withProvenance(whole, { patchSha256: "a".repeat(63) }))],
+      ["sourceDirty as a string", JSON.stringify(withProvenance(whole, { sourceDirty: "false" }))],
+      ["a prerelease codexVersion", JSON.stringify({ ...whole, codexVersion: "0.152.1-rc.1" })],
+      ["a release manifest that is not an object", JSON.stringify(withProvenance(whole, { release: { tag: "t", archiveSha256: "e".repeat(64), manifest: "nope" } }))],
+      ["a release manifest describing another release", JSON.stringify(withProvenance(whole, { release: { tag: "t", archiveSha256: "e".repeat(64), manifest: { schema: 1 } } }))],
+    ];
+
+    for (const [why, body] of broken) {
+      writeFileSync(metadata, body);
+      expect(`${why}: ${JSON.stringify(readInstallation(paths))}`).toBe(`${why}: null`);
+    }
   });
 
   test("a staged pair whose bytes do not match its digests is never published", () => {

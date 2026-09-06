@@ -1,13 +1,13 @@
 import { chmodSync, closeSync, copyFileSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
-import { resolveUpstream } from "../codex/upstream";
+import { preserveLauncherRestore, resolveUpstream } from "../codex/upstream";
 import type { Context } from "../context";
 import type { PreparedPair } from "../distribution";
 import type { Paths } from "../paths";
 import { sq } from "../sh";
 import { readState, writeState } from "../state";
-import { activeGeneration, createGeneration, readPointer, restorePointer, swapPointer } from "./generation";
+import { activeGeneration, createGeneration, readInstallation, readPointer, restorePointer, swapPointer } from "./generation";
 
 export {
   activeGeneration,
@@ -208,12 +208,29 @@ export function assertLauncherReplaceable(paths: Paths): void {
   if (reason) throw new Error(reason);
 }
 
-export function installWrapper(paths: Paths, cxBin: string): WrapperResult {
+function placeWrapperScript(paths: Paths, script: string): WrapperResult {
   const target = paths.wrapperPath;
   const foreign = foreignLauncher(target);
   if (foreign) return { kind: "refused", reason: foreign };
-  placeExecutable(target, (tmp) => writeFileSync(tmp, wrapperScript(paths.patchedBin, cxBin)));
+  placeExecutable(target, (tmp) => writeFileSync(tmp, script));
   return { kind: "replaced" };
+}
+
+export function installWrapper(paths: Paths, cxBin: string): WrapperResult {
+  return placeWrapperScript(paths, wrapperScript(paths.patchedBin, cxBin));
+}
+
+/**
+ * The script the launcher is supposed to hold right now.
+ * A valid active generation is the newer, authoritative layout, so the v2 script wins; without one
+ * we are still on the flat layout and the v1 script is correct. Getting this wrong in the other
+ * direction is what matters: writing v1 over a working v2 wrapper points `exec` at
+ * `paths.patchedBin`, which the generation layout never writes, and `codex` stops starting.
+ */
+function expectedWrapperScript(paths: Paths, cxBin: string): string {
+  return readInstallation(paths) !== null
+    ? generationWrapperScript(paths.currentGeneration, cxBin)
+    : wrapperScript(paths.patchedBin, cxBin);
 }
 
 /**
@@ -224,14 +241,17 @@ export function installWrapper(paths: Paths, cxBin: string): WrapperResult {
  * `exec`s a missing path turns a working `codex` into one that cannot start (spec L330-331).
  */
 export function ensureWrapper(paths: Paths, cxBin: string, patchedBinPresent: boolean): WrapperResult {
-  if (!patchedBinPresent) {
+  const generation = readInstallation(paths) !== null;
+  // `patchedBinPresent` only speaks for the flat layout. A generation's `codex` exists by
+  // construction (installation.json is written last), so it is not the caller's proof to give.
+  if (!generation && !patchedBinPresent) {
     return { kind: "refused", reason: `the patched binary ${paths.patchedBin} is missing; leaving the launcher alone` };
   }
-  if (isOurWrapper(paths.wrapperPath)
-    && readFileSync(paths.wrapperPath, "utf8") === wrapperScript(paths.patchedBin, cxBin)) {
+  const want = expectedWrapperScript(paths, cxBin);
+  if (isOurWrapper(paths.wrapperPath) && readFileSync(paths.wrapperPath, "utf8") === want) {
     return { kind: "present" };
   }
-  return installWrapper(paths, cxBin);
+  return placeWrapperScript(paths, want);
 }
 
 // ---------------------------------------------------------------------------
@@ -248,18 +268,24 @@ export interface ActivationOptions {
 }
 
 /**
- * Record how to put the stock launcher back, before we replace it.
- * Once our wrapper occupies `~/.local/bin/codex` the upstream symlink is unrecoverable, so a
- * failure to persist this must abort the install rather than proceed without a way home.
+ * Record where upstream lives and how to put its launcher back, before we replace it.
+ * Once our wrapper occupies `~/.local/bin/codex`, `resolveUpstream` refuses it and the PATH walk
+ * skips `~/.local/bin`, so `upstream_bin` and `launcher_restore` become the only record there is
+ * (src/state.ts). Both are persisted together, through the same `preserveLauncherRestore` helper
+ * the other two callers use, and a failed write aborts the install rather than proceeding without
+ * a way home.
  */
 function preserveStockLauncher(ctx: Context): void {
   const { state } = readState(ctx.paths.stateFile);
-  if (state.launcher_restore !== null) return;
+  if (state.launcher_restore !== null && state.upstream_bin !== null) return;
   const found = resolveUpstream(ctx.paths, ctx.env, isOurWrapper, state.upstream_bin);
-  writeState(ctx.paths.stateFile, {
-    ...state,
-    launcher_restore: found.kind === "found" ? found.launcher_restore : { kind: "none" },
-  });
+  writeState(ctx.paths.stateFile, found.kind === "found"
+    ? {
+      ...state,
+      upstream_bin: found.bin,
+      launcher_restore: preserveLauncherRestore(state.launcher_restore, found.launcher_restore),
+    }
+    : { ...state, launcher_restore: state.launcher_restore ?? { kind: "none" } });
 }
 
 /** Write the wrapper to a sibling temp file and prove it landed intact, before `current` moves. */
@@ -296,6 +322,8 @@ function stageWrapper(paths: Paths, cxBin: string): string {
  *
  * The caller owns `pair.directory` and removes it afterwards, and owns the state bookkeeping -
  * `installation.json` inside the generation, not state.json, is the record of what is active.
+ *
+ * Takes no lock of its own: the caller must hold the patch lock (`paths.lockFile`).
  */
 export function activatePair(pair: PreparedPair, ctx: Context, { rename = renameSync }: ActivationOptions = {}): void {
   const { paths } = ctx;

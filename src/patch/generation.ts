@@ -1,8 +1,10 @@
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
-import type { FileDigest, PreparedPair } from "../distribution";
+import { z } from "zod";
+import { type FileDigest, type Platform, type PreparedPair, validateManifest } from "../distribution";
 import type { Paths } from "../paths";
+import { parseSemver } from "../version";
 
 /** The metadata file that makes a generation self-describing - and authoritative over state.json. */
 export const INSTALLATION_FILE = "installation.json";
@@ -194,26 +196,84 @@ export function activeGeneration(paths: Paths): string | null {
   }
 }
 
-function isRecord(v: unknown): v is InstallationRecord {
-  if (typeof v !== "object" || v === null) return false;
-  const r = v as Record<string, unknown>;
-  const p = r.provenance as Record<string, unknown> | undefined;
-  return typeof r.codexVersion === "string"
-    && typeof p === "object" && p !== null
-    && (p.source === "prebuilt" || p.source === "compiled");
+const HEX40 = /^[0-9a-f]{40}$/;
+const HEX64 = /^[0-9a-f]{64}$/;
+
+const DigestSchema = z.object({
+  sha256: z.string().regex(HEX64, "sha256 must be 64 lowercase hex chars"),
+  size: z.number().refine((n) => Number.isSafeInteger(n) && n > 0, "size must be a positive safe integer"),
+});
+
+const StableVersion = z
+  .string()
+  .refine((v) => {
+    const parsed = parseSemver(v);
+    return parsed !== null && parsed.pre === null;
+  }, "must be a stable three-part semver");
+
+/**
+ * The full `PreparedPair`-minus-`directory` shape. Task 2 re-hashes from `provenance.executables`
+ * and re-uses `provenance.release.manifest`, so every field it reads has to be validated here:
+ * a truncated or hand-edited installation.json must not be trusted just because it parses.
+ */
+const RecordSchema = z.object({
+  codexVersion: StableVersion,
+  provenance: z.object({
+    source: z.enum(["prebuilt", "compiled"]),
+    cxVersion: z.string(),
+    platform: z.string(),
+    patchSha256: z.string().regex(HEX64, "patchSha256 must be 64 lowercase hex chars"),
+    upstreamCommit: z.string().regex(HEX40, "upstreamCommit must be 40 lowercase hex chars"),
+    sourceCommit: z.string().regex(HEX40, "sourceCommit must be 40 lowercase hex chars").nullable(),
+    sourceDirty: z.boolean(),
+    installedAt: z.string(),
+    executables: z.object({ codex: DigestSchema, "codex-code-mode-host": DigestSchema }),
+    release: z
+      .object({
+        tag: z.string(),
+        archiveSha256: z.string().regex(HEX64, "archiveSha256 must be 64 lowercase hex chars"),
+        manifest: z.record(z.string(), z.unknown()),
+      })
+      .optional(),
+  }),
+});
+
+/**
+ * Structural validation, plus the exact-release check for a prebuilt pair: the embedded manifest is
+ * re-validated with `validateManifest` against the identity the record itself claims, so a record
+ * can never carry a manifest describing some other release.
+ */
+function checkedRecord(v: unknown): InstallationRecord | null {
+  const parsed = RecordSchema.safeParse(v);
+  if (!parsed.success) return null;
+  const { provenance } = parsed.data;
+  if (!provenance.release) return parsed.data as unknown as InstallationRecord;
+  try {
+    const manifest = validateManifest(provenance.release.manifest, {
+      cxVersion: provenance.cxVersion,
+      codexVersion: parsed.data.codexVersion,
+      platform: provenance.platform as Platform,
+    });
+    const release = { ...provenance.release, manifest };
+    return { ...parsed.data, provenance: { ...provenance, release } } as unknown as InstallationRecord;
+  } catch {
+    return null;
+  }
 }
 
 /**
  * What is actually installed, read from the active generation.
  * This - not state.json - is the answer to "which pair is active": a bookkeeping write that fails
  * after the pointer commit must not make doctor or the hook claim the old pair is still running.
+ * Metadata that does not fully validate means null: a generation without valid metadata is not a
+ * complete generation, and callers must not act on half of a record.
  */
 export function readInstallation(paths: Paths): InstallationRecord | null {
   const dir = activeGeneration(paths);
   if (dir === null) return null;
   try {
     const raw: unknown = JSON.parse(readFileSync(join(dir, INSTALLATION_FILE), "utf8"));
-    return isRecord(raw) ? raw : null;
+    return checkedRecord(raw);
   } catch {
     return null;
   }
