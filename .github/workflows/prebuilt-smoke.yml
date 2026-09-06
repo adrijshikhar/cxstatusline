@@ -8,6 +8,10 @@ on:
         type: choice
         options: ["0.153.0", "0.152.1"]
         default: "0.153.0"
+      self_hosted:
+        description: Run on the owner's self-hosted Apple Silicon runner (arm64 only; no hosted minutes)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -26,7 +30,7 @@ env:
 jobs:
   validate:
     if: github.event.repository.private == true
-    runs-on: macos-15
+    runs-on: ${{ inputs.self_hosted && 'self-hosted' || 'macos-15' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -45,14 +49,9 @@ jobs:
     needs: validate
     strategy:
       fail-fast: false
+      # self_hosted: arm64 only, on the owner's Mac. Hosted: both Mac architectures.
       matrix:
-        include:
-          - runner: macos-15
-            arch: arm64
-            target: aarch64-apple-darwin
-          - runner: macos-15-intel
-            arch: x64
-            target: x86_64-apple-darwin
+        include: ${{ fromJSON(inputs.self_hosted && '[{"runner":"self-hosted","arch":"arm64","target":"aarch64-apple-darwin"}]' || '[{"runner":"macos-15","arch":"arm64","target":"aarch64-apple-darwin"},{"runner":"macos-15-intel","arch":"x64","target":"x86_64-apple-darwin"}]') }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
     env:
@@ -88,7 +87,7 @@ jobs:
         run: bash scripts/setup-ci-v8.sh "$GITHUB_WORKSPACE/upstream" "$V8_TARGET"
       - name: Prepare Rust test tools
         run: |
-          brew install just cargo-nextest
+          if ! command -v just >/dev/null || ! command -v cargo-nextest >/dev/null; then brew install just cargo-nextest; fi
           cd upstream/codex-rs
           rustup show active-toolchain
       - name: Focused patched Rust tests
@@ -118,7 +117,7 @@ jobs:
   report:
     if: always() && github.event.repository.private == true
     needs: [validate, native]
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.self_hosted && 'self-hosted' || 'ubuntu-latest' }}
     timeout-minutes: 5
     permissions:
       contents: read
