@@ -2,10 +2,10 @@
 
 <pre>
                _        _             _ _
-  ___ __ __ __| |_ __ _| |_ _   _ ___| (_)_ __   ___
- / __|\ V // __| __/ _` | __| | | / __| | | '_ \ / _ \
-| (__ &gt; &lt; \__ \ || (_| | |_| |_| \__ \ | | | | |  __/
- \___/_/\_\|___/\__\__,_|\__|\__,_|___/_|_|_| |_|\___|
+  _____  _____| |_ __ _| |_ _   _ ___| (_)_ __   ___
+ / __\ \/ / __| __/ _` | __| | | / __| | | '_ \ / _ \
+| (__ &gt;  &lt;\__ \ || (_| | |_| |_| \__ \ | | | | |  __/
+ \___/_/\_\___/\__\__,_|\__|\__,_|___/_|_|_| |_|\___|
 </pre>
 
 # cxstatusline
@@ -124,7 +124,8 @@ restore; it never overwrites an unrelated executable.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
 
-Renderer and configuration UI adapted from [ccstatusline](https://github.com/sirmalloc/ccstatusline).
+Inspired by [ccstatusline](https://github.com/sirmalloc/ccstatusline) for Claude Code.
+Its renderer and configuration UI are adapted here for Codex. Thanks to its creators and contributors!
 
 cxstatusline is [MIT licensed](LICENSE). [NOTICE](NOTICE) and
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) preserve upstream attribution.
