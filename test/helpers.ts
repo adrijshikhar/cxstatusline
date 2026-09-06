@@ -3,8 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Env, RunResult, Runner } from "../src/env";
 
-export function tmpEnv(): { env: Env; root: string } {
-  const root = mkdtempSync(join(tmpdir(), "cxstatusline-test-"));
+/**
+ * A throwaway HOME. `prefix` exists so activation tests can demand a directory whose name
+ * contains a space - the wrapper script and every staged path must survive it.
+ */
+export function tmpEnv(prefix = "cxstatusline-test-"): { env: Env; root: string } {
+  const root = mkdtempSync(join(tmpdir(), prefix));
   const env: Env = {
     HOME: root,
     XDG_CONFIG_HOME: join(root, ".config"),

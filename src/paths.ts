@@ -14,6 +14,11 @@ export interface Paths {
   readonly shareDir: string;
   readonly sourceDir: string;
   readonly libexecDir: string;
+  /** One immutable directory per installed pair. Never reused, never rewritten. */
+  readonly generationsDir: string;
+  /** The symlink that decides which generation a fresh `codex` runs. Renamed, never edited. */
+  readonly currentGeneration: string;
+  /** Legacy flat layout, kept so `revert` can still clean up installs made before generations. */
   readonly patchedBin: string;
   readonly patchedCodeModeHost: string;
   readonly binDir: string;
@@ -44,6 +49,9 @@ export function resolvePaths(env: Env): Paths {
     shareDir,
     sourceDir: join(shareDir, "codex"),
     libexecDir,
+    // Deliberately siblings: `rename(2)` of the pointer is only atomic within one filesystem.
+    generationsDir: join(libexecDir, "generations"),
+    currentGeneration: join(libexecDir, "current"),
     patchedBin: join(libexecDir, "codex"),
     patchedCodeModeHost: join(libexecDir, "codex-code-mode-host"),
     binDir,

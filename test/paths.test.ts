@@ -33,6 +33,15 @@ describe("resolvePaths", () => {
     expect(p.codexHome).toBe("/h/.codex");
   });
 
+  test("generations live under libexec and `current` is their sibling pointer", () => {
+    const p = resolvePaths({ HOME: "/h" });
+    expect(p.generationsDir).toBe("/h/.local/libexec/cxstatusline/generations");
+    expect(p.currentGeneration).toBe("/h/.local/libexec/cxstatusline/current");
+    // Same filesystem as `current` is what makes the pointer rename atomic.
+    expect(p.generationsDir.startsWith(`${p.libexecDir}/`)).toBe(true);
+    expect(p.currentGeneration.startsWith(`${p.libexecDir}/`)).toBe(true);
+  });
+
   test("throws without HOME", () => {
     expect(() => resolvePaths({})).toThrow(/HOME/);
   });

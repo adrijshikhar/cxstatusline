@@ -1,9 +1,35 @@
 import { chmodSync, closeSync, copyFileSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
+import { resolveUpstream } from "../codex/upstream";
+import type { Context } from "../context";
+import type { PreparedPair } from "../distribution";
 import type { Paths } from "../paths";
 import { sq } from "../sh";
+import { readState, writeState } from "../state";
+import { activeGeneration, createGeneration, readPointer, restorePointer, swapPointer } from "./generation";
 
+export {
+  activeGeneration,
+  createGeneration,
+  isGenerationDir,
+  listGenerations,
+  readInstallation,
+  type InstallationRecord,
+} from "./generation";
+
+/** The flat-layout wrapper. Owners installed before generations still have this one on disk. */
 export const WRAPPER_MARKER = "# cxstatusline-wrapper v1";
+
+/** The generation-resolving wrapper. */
+export const WRAPPER_MARKER_V2 = "# cxstatusline-wrapper v2";
+
+/**
+ * Every marker we have ever written. `isOurWrapper` must accept all of them, or an owner's v1
+ * launcher would look foreign and `revert` would refuse to take it back.
+ */
+const WRAPPER_MARKERS: readonly string[] = [WRAPPER_MARKER, WRAPPER_MARKER_V2];
+
 const CODE_MODE_HOST = "codex-code-mode-host";
 
 /** The `~/.local/bin/codex` wrapper. Everything but `update` execs into the patched binary. */
@@ -22,6 +48,27 @@ export function wrapperScript(patchedBin: string, cxBin: string): string {
   ].join("\n");
 }
 
+/**
+ * The `~/.local/bin/codex` wrapper for the generation layout.
+ * The executable path is pinned once, by resolving `current` to a real directory and exec'ing out
+ * of it: a generation switched in mid-session cannot move this process's binary out from under it.
+ */
+export function generationWrapperScript(currentGeneration: string, cxBin: string): string {
+  return [
+    "#!/bin/sh",
+    WRAPPER_MARKER_V2,
+    "# Managed by cxstatusline. `cxstatusline revert` restores stock Codex.",
+    `if [ "$1" = "update" ]; then`,
+    `  exec ${sq(cxBin)} update`,
+    "fi",
+    `CXSTATUSLINE_COMMAND=${sq(`${sq(cxBin)} render`)}`,
+    "export CXSTATUSLINE_COMMAND",
+    `generation=$(CDPATH= cd -P -- ${sq(currentGeneration)} && pwd -P) || exit 1`,
+    `exec "$generation/codex" "$@"`,
+    "",
+  ].join("\n");
+}
+
 export function isOurWrapper(path: string): boolean {
   try {
     const fd = openSync(path, "r");
@@ -29,7 +76,8 @@ export function isOurWrapper(path: string): boolean {
       // The managed marker is in the short header. Discovery also probes large native binaries.
       const header = Buffer.alloc(256);
       const size = readSync(fd, header, 0, header.length, 0);
-      return header.toString("utf8", 0, size).split("\n").slice(0, 3).includes(WRAPPER_MARKER);
+      const head = header.toString("utf8", 0, size).split("\n").slice(0, 3);
+      return WRAPPER_MARKERS.some((marker) => head.includes(marker));
     } finally {
       closeSync(fd);
     }
@@ -145,14 +193,25 @@ export function installPatchedBinary(
  * writers did not, so a Brew/Npm install (a regular file, not a symlink) would be deleted.
  * Hard constraint: "the upstream binary is never written" (spec L195).
  */
+function foreignLauncher(target: string): string | null {
+  return existsSync(target) && !isSymlink(target) && !isOurWrapper(target)
+    ? `${target} is a real file we did not write (not a symlink, no cxstatusline marker); refusing to replace it. Move it aside and re-run, or point PATH at a different bin dir.`
+    : null;
+}
+
+/**
+ * Fail before any download, build or generation directory exists when the launcher is not ours to
+ * replace. Hard constraint: "the upstream binary is never written" (spec L195).
+ */
+export function assertLauncherReplaceable(paths: Paths): void {
+  const reason = foreignLauncher(paths.wrapperPath);
+  if (reason) throw new Error(reason);
+}
+
 export function installWrapper(paths: Paths, cxBin: string): WrapperResult {
   const target = paths.wrapperPath;
-  if (existsSync(target) && !isSymlink(target) && !isOurWrapper(target)) {
-    return {
-      kind: "refused",
-      reason: `${target} is a real file we did not write (not a symlink, no cxstatusline marker); refusing to replace it. Move it aside and re-run, or point PATH at a different bin dir.`,
-    };
-  }
+  const foreign = foreignLauncher(target);
+  if (foreign) return { kind: "refused", reason: foreign };
   placeExecutable(target, (tmp) => writeFileSync(tmp, wrapperScript(paths.patchedBin, cxBin)));
   return { kind: "replaced" };
 }
@@ -173,4 +232,91 @@ export function ensureWrapper(paths: Paths, cxBin: string, patchedBinPresent: bo
     return { kind: "present" };
   }
   return installWrapper(paths, cxBin);
+}
+
+// ---------------------------------------------------------------------------
+// Generations: one directory is the unit of activation.
+// ---------------------------------------------------------------------------
+
+/**
+ * Seam for the failure-injection tests. `rename` is the single commit primitive used for the
+ * three points that matter - installation.json, the `current` pointer and the wrapper - so one
+ * injected function can fail any one of them exactly the way a full disk or a lost mount would.
+ */
+export interface ActivationOptions {
+  readonly rename?: typeof renameSync;
+}
+
+/**
+ * Record how to put the stock launcher back, before we replace it.
+ * Once our wrapper occupies `~/.local/bin/codex` the upstream symlink is unrecoverable, so a
+ * failure to persist this must abort the install rather than proceed without a way home.
+ */
+function preserveStockLauncher(ctx: Context): void {
+  const { state } = readState(ctx.paths.stateFile);
+  if (state.launcher_restore !== null) return;
+  const found = resolveUpstream(ctx.paths, ctx.env, isOurWrapper, state.upstream_bin);
+  writeState(ctx.paths.stateFile, {
+    ...state,
+    launcher_restore: found.kind === "found" ? found.launcher_restore : { kind: "none" },
+  });
+}
+
+/** Write the wrapper to a sibling temp file and prove it landed intact, before `current` moves. */
+function stageWrapper(paths: Paths, cxBin: string): string {
+  const want = generationWrapperScript(paths.currentGeneration, cxBin);
+  mkdirSync(paths.binDir, { recursive: true });
+  const tmp = `${paths.wrapperPath}.tmp-${process.pid}-${randomBytes(4).toString("hex")}`;
+  try {
+    writeFileSync(tmp, want);
+    chmodSync(tmp, 0o755);
+    if (readFileSync(tmp, "utf8") !== want) throw new Error(`${paths.wrapperPath} did not stage intact`);
+    return tmp;
+  } catch (e) {
+    rmSync(tmp, { force: true });
+    throw e;
+  }
+}
+
+/**
+ * Make `pair` the active Codex, as one step.
+ *
+ * The order is the whole point. A fresh `codex` invocation can only ever observe the stock
+ * launcher, the previously active generation, or this one - never a half-installed pair:
+ *
+ *   1. refuse a launcher that is not ours, and record how to restore the stock one;
+ *   2. stage the wrapper (nothing observable changes);
+ *   3. build the complete new generation (unreferenced, so still not observable);
+ *   4. rename `current` onto it - the single commit;
+ *   5. rename the wrapper into place.
+ *
+ * If step 5 fails the pointer goes back to where it was, which on a first install means no
+ * pointer at all and a still-launchable stock Codex. Generations are never deleted here: a live
+ * session may be executing out of one.
+ *
+ * The caller owns `pair.directory` and removes it afterwards, and owns the state bookkeeping -
+ * `installation.json` inside the generation, not state.json, is the record of what is active.
+ */
+export function activatePair(pair: PreparedPair, ctx: Context, { rename = renameSync }: ActivationOptions = {}): void {
+  const { paths } = ctx;
+  assertLauncherReplaceable(paths);
+  preserveStockLauncher(ctx);
+
+  const wrapperTmp = stageWrapper(paths, ctx.cxBin);
+  let generation: string | undefined;
+  let previous: string | null = null;
+  let committed = false;
+  try {
+    generation = createGeneration(pair, paths, rename);
+    previous = readPointer(paths);
+    swapPointer(paths, generation, rename);
+    committed = true;
+    rename(wrapperTmp, paths.wrapperPath);
+  } catch (e) {
+    rmSync(wrapperTmp, { force: true });
+    // renameSync, never the injected `rename`: the injected one is what just failed, and the
+    // rollback has to use the real primitive to actually put the pointer back.
+    if (committed) restorePointer(paths, previous, renameSync);
+    throw e;
+  }
 }

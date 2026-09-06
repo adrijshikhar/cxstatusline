@@ -1,7 +1,8 @@
-import { existsSync, lstatSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, rmSync, symlinkSync } from "node:fs";
 import type { Context } from "../context";
 import { uninstallHook } from "../hook/install";
 import { acquireLock, lockHolder } from "../lock";
+import { isGenerationDir, listGenerations } from "../patch/generation";
 import { isOurWrapper } from "../patch/wrapper";
 import { readState, writeState } from "../state";
 
@@ -35,6 +36,31 @@ export function revert(ctx: Context): RevertResult {
   }
 }
 
+/**
+ * Drop the pointer and every generation we can prove is ours, leaving anything else alone.
+ * Retention is deliberate: generations accumulate until this runs, because a live Codex session
+ * may still be executing out of an older one. Run `revert` after closing your CX sessions.
+ */
+function removeGenerations(ctx: Context, actions: string[]): void {
+  const { currentGeneration, generationsDir } = ctx.paths;
+  if (existsSync(currentGeneration) || safeIsSymlink(currentGeneration)) {
+    rmSync(currentGeneration, { recursive: true, force: true });
+    actions.push(`removed generation pointer ${currentGeneration}`);
+  }
+  if (!existsSync(generationsDir)) return;
+  let removed = 0;
+  for (const dir of listGenerations(ctx.paths)) {
+    if (!isGenerationDir(dir)) {
+      actions.push(`${dir} is not a cxstatusline generation; left in place`);
+      continue;
+    }
+    rmSync(dir, { recursive: true, force: true });
+    removed += 1;
+  }
+  actions.push(`removed ${removed} cxstatusline generation${removed === 1 ? "" : "s"} from ${generationsDir}`);
+  if (readdirSync(generationsDir).length === 0) rmSync(generationsDir, { recursive: true, force: true });
+}
+
 function revertLocked(ctx: Context): RevertResult {
   const actions: string[] = [];
   let code: 0 | 1 = 0;
@@ -56,6 +82,9 @@ function revertLocked(ctx: Context): RevertResult {
       actions.push(`${w} is not ours; left in place`);
     }
   }
+  removeGenerations(ctx, actions);
+  // The owner's pre-generations flat layout. The release notes call the transition an explicit
+  // revert/reinstall, so `revert` still has to be able to clean up what that layout left behind.
   if (existsSync(ctx.paths.patchedBin)) {
     rmSync(ctx.paths.patchedBin);
     actions.push(`removed patched binary ${ctx.paths.patchedBin}`);

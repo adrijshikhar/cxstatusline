@@ -106,6 +106,18 @@ hook, and keeps settings and source. It refuses while a build holds the lock. Cl
 sessions before reverting. If no saved launcher exists, the command explains what remains to
 restore; it never overwrites an unrelated executable.
 
+Each install lands as one immutable generation under
+`~/.local/libexec/cxstatusline/generations/`, and `~/.local/libexec/cxstatusline/current` is the
+symlink that decides which one a fresh `codex` runs. Older generations are kept on purpose - a
+Codex session started earlier is still executing out of one - so they accumulate (roughly the
+size of the Codex binary pair each) until you run `cxstatusline revert`, which is the only thing
+that removes them. Close your patched sessions first. Revert only deletes directories it can
+prove are cxstatusline generations; anything else under that path is left in place.
+
+If you installed cxstatusline before generations existed (a flat
+`~/.local/libexec/cxstatusline/codex` pair), run `cxstatusline revert` once and reinstall - there
+is no in-place migration.
+
 ## 🩺 Troubleshooting
 
 - No footer: run `cxstatusline doctor`, check `which codex` and PATH, accept the hook prompt,

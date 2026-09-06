@@ -42,6 +42,26 @@ describe("state", () => {
     writeFileSync(`${f}${BACKUP_SUFFIX}`, "also broken");
     expect(readState(f)).toEqual({ state: DEFAULT_STATE, corrupt: true });
   });
+  test("a v1 state.json written before generations still reads unchanged", () => {
+    const f = file();
+    mkdirSync(join(f, ".."), { recursive: true });
+    // Byte-for-byte what the owner's installed cxstatusline wrote before this change.
+    writeFileSync(f, JSON.stringify({
+      version: 1,
+      policy: "stable-minors",
+      patched_from: "0.152.1",
+      upstream_bin: "/Users/o/.codex/bin/codex",
+      launcher_restore: { kind: "symlink", target: "/Users/o/.codex/bin/codex" },
+      last_attempt: { at: "2026-09-01T00:00:00.000Z", ok: true, version: "0.152.1" },
+    }, null, 2));
+    const r = readState(f);
+    expect(r.corrupt).toBe(false);
+    expect(r.state.patched_from).toBe("0.152.1");
+    expect(r.state.launcher_restore).toEqual({ kind: "symlink", target: "/Users/o/.codex/bin/codex" });
+    // Generations added no State field: the shape is exactly the v1 shape.
+    expect(Object.keys(r.state).sort()).toEqual(Object.keys(DEFAULT_STATE).sort());
+  });
+
   test("wrong shape -> default + corrupt flag; unknown keys are dropped", () => {
     const f = file();
     mkdirSync(join(f, ".."), { recursive: true });
