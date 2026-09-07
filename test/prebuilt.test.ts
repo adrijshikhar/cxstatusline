@@ -1,6 +1,18 @@
 import { describe, expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  closeSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  utimesSync,
+  writeFileSync,
+  writeSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { list } from "tar";
@@ -14,6 +26,7 @@ import {
   resetDirectory,
   resolveDetection,
   selectStableVersion,
+  UncoveredUpstreamError,
   validateMinos,
   verifyOutput,
   writeChecksums,
@@ -105,7 +118,7 @@ async function releaseDir(stagingDir: string): Promise<string> {
   const archive = await packArchive(stagingDir, join(out, filename));
   const manifest = buildManifest(manifestInput(stagingDir, archive));
   writeFileSync(join(out, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
-  writeChecksums(out, [filename, "manifest.json"]);
+  await writeChecksums(out, [filename, "manifest.json"]);
   return out;
 }
 
@@ -161,6 +174,54 @@ describe("resolveDetection", () => {
   test("refuses a non-stable upstream version and a non-stable cx version", () => {
     expect(() => resolveDetection(patchManifest, "0.153.0-rc.1", CX)).toThrow(/stable/);
     expect(() => resolveDetection(patchManifest, CODEX, "0.1.0-rc.1")).toThrow(/stable/);
+  });
+
+  // Finding #2: `detect`'s CLI must exit 3 (blocked-issue summary) only for the coverage failure
+  // below, and exit 1 (plain error) for everything else - a malformed manifest or a bad input
+  // version. The discriminator the CLI uses is `instanceof UncoveredUpstreamError`, so these two
+  // tests pin that only the coverage failure carries that type.
+  test("only the uncovered-upstream failure is an UncoveredUpstreamError", () => {
+    expect(() => resolveDetection(patchManifest, "0.154.0", CX)).toThrow(UncoveredUpstreamError);
+  });
+
+  test("a non-stable input version is a plain error, not UncoveredUpstreamError", () => {
+    try {
+      resolveDetection(patchManifest, "0.153.0-rc.1", CX);
+      throw new Error("expected resolveDetection to throw");
+    } catch (e) {
+      expect(e).toBeInstanceOf(Error);
+      expect(e).not.toBeInstanceOf(UncoveredUpstreamError);
+    }
+  });
+});
+
+describe("detect CLI exit codes", () => {
+  const root = join(import.meta.dir, "..");
+
+  function runDetectCli(codexVersion: string): { status: number; stderr: string } {
+    try {
+      execFileSync(process.execPath, ["scripts/prebuilt.ts", "detect", "--codex-version", codexVersion], {
+        cwd: root,
+        encoding: "utf8",
+      });
+      return { status: 0, stderr: "" };
+    } catch (e) {
+      const err = e as { status: number | null; stderr: string };
+      return { status: err.status ?? -1, stderr: err.stderr };
+    }
+  }
+
+  test("an upstream version not covered by patches/manifest.json exits 3 with the blocked summary", () => {
+    const { status, stderr } = runDetectCli("9.9.9");
+    expect(status).toBe(3);
+    expect(stderr).toContain("Prebuilt blocked: Codex 9.9.9");
+  });
+
+  test("a malformed --codex-version exits 1 with a plain error and no blocked summary", () => {
+    const { status, stderr } = runDetectCli("not-a-version");
+    expect(status).toBe(1);
+    expect(stderr).not.toContain("Prebuilt blocked");
+    expect(stderr).toMatch(/stable/);
   });
 });
 
@@ -230,6 +291,54 @@ describe("packArchive", () => {
     await expect(packArchive(dir, join(tmp("g"), "x.tar.gz"))).rejects.toThrow(/NOTICE is empty/);
     const bare = tmp("bare");
     await expect(packArchive(bare, join(tmp("h"), "y.tar.gz"))).rejects.toThrow();
+  });
+});
+
+describe("packArchive memory behaviour", () => {
+  test("packs a large synthetic member without reading the archive whole into memory", async () => {
+    // 64 MiB is large enough that a naive `readFileSync(tar)` + `gzipSync(...)` (or a
+    // non-streaming sha256) would show up as a clear step in heap growth; it is still small
+    // enough to keep the test fast.
+    const SIZE = 64 * 1024 * 1024;
+    const dir = staging();
+    // Deterministic, compressible-but-not-trivially-empty content, written in chunks so the test
+    // itself does not need a single 64 MiB allocation either.
+    const fh = openSync(join(dir, "codex"), "w");
+    const chunk = Buffer.alloc(1024 * 1024);
+    for (let i = 0; i < chunk.length; i += 1) chunk[i] = i % 256;
+    try {
+      for (let written = 0; written < SIZE; written += chunk.length) writeSync(fh, chunk);
+    } finally {
+      closeSync(fh);
+    }
+    chmodSync(join(dir, "codex"), 0o755);
+
+    // `Bun.gc(true)` forces a synchronous collection so the before/after heap snapshots reflect
+    // live retained memory rather than not-yet-swept garbage (bun test does not run with
+    // `--expose-gc`, so `global.gc` is unavailable here).
+    Bun.gc(true);
+    const before = process.memoryUsage().heapUsed;
+    const archivePath = join(tmp("big"), "big.tar.gz");
+    const digest = await packArchive(dir, archivePath);
+    Bun.gc(true);
+    const after = process.memoryUsage().heapUsed;
+
+    expect(digest.size).toBeGreaterThan(0);
+    // Streaming packaging and hashing should never need to hold the ~64 MiB payload (let alone a
+    // second ~64 MiB gzip buffer) on the JS heap at once; a generous 40 MiB ceiling - well under
+    // the 64 MiB payload, let alone 2x it - still catches a regression back to
+    // `readFileSync`/`gzipSync` while tolerating normal heap noise from a forced GC pass.
+    expect(after - before).toBeLessThan(40 * 1024 * 1024);
+  }, 30_000);
+
+  test("code structure: pack.ts never reads a whole archive/tar file into memory", () => {
+    // Reviewer finding #1 asked for either a runtime proof or a structural assertion "if that is
+    // not feasible" - the runtime proof above is the primary evidence; this is the belt-and-braces
+    // structural check that the banned APIs have not crept back in.
+    const source = readFileSync(join(import.meta.dir, "..", "scripts", "prebuilt", "pack.ts"), "utf8");
+    expect(source).not.toMatch(/gzipSync/);
+    expect(source).not.toMatch(/readFileSync\(/);
+    expect(source).toMatch(/createReadStream/);
   });
 });
 

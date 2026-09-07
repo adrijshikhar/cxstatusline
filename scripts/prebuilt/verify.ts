@@ -77,10 +77,10 @@ function readManifest(outDir: string, o: VerifyOptions): ReleaseManifest {
 }
 
 /** Every staged member's bytes must equal the digest the manifest published for it. */
-function checkExtractedDigests(staged: string, manifest: ReleaseManifest, checks: string[]): void {
+async function checkExtractedDigests(staged: string, manifest: ReleaseManifest, checks: string[]): Promise<void> {
   const files = manifest.artifacts[0]!.files;
   for (const name of ARCHIVE_ENTRIES) {
-    const actual = sha256File(join(staged, name));
+    const actual = await sha256File(join(staged, name));
     const expected = files[name];
     if (actual.sha256 !== expected.sha256 || actual.size !== expected.size) {
       throw new Error(`extracted ${name} does not match the digest recorded in manifest.json`);
@@ -121,7 +121,7 @@ export async function verifyOutput(o: VerifyOptions): Promise<VerifyReport> {
   if (!existsSync(archivePath)) throw new Error(`${artifact.filename} is missing from ${o.outDir}`);
 
   const checks: string[] = [];
-  const actual = sha256File(archivePath);
+  const actual = await sha256File(archivePath);
   if (actual.sha256 !== artifact.sha256 || actual.size !== artifact.size) {
     throw new Error(`${artifact.filename} sha256/size does not match manifest.json`);
   }
@@ -129,7 +129,7 @@ export async function verifyOutput(o: VerifyOptions): Promise<VerifyReport> {
 
   const sums = parseChecksums(readFileSync(join(o.outDir, "SHA256SUMS"), "utf8"));
   if (sums[artifact.filename] !== artifact.sha256) throw new Error("SHA256SUMS disagrees with manifest.json");
-  const manifestDigest = sha256File(join(o.outDir, "manifest.json")).sha256;
+  const manifestDigest = (await sha256File(join(o.outDir, "manifest.json"))).sha256;
   if (sums["manifest.json"] !== manifestDigest) throw new Error("SHA256SUMS does not match manifest.json's own bytes");
   checks.push("SHA256SUMS matches manifest");
 
@@ -137,7 +137,7 @@ export async function verifyOutput(o: VerifyOptions): Promise<VerifyReport> {
   try {
     await extractArchive(archivePath, staged);
     checks.push("archive passes the installer's five-file validator");
-    checkExtractedDigests(staged, manifest, checks);
+    await checkExtractedDigests(staged, manifest, checks);
     if (o.skipMacho) checks.push("Mach-O arch/linkage/minos SKIPPED");
     else checkMachO(staged, o, checks);
     checkSmoke(staged, o, checks);

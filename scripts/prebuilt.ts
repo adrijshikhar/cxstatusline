@@ -11,7 +11,14 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSyn
 import { join, resolve } from "node:path";
 import { platformFor, validateManifest } from "../src/distribution";
 import { loadManifest } from "../src/patch/manifest";
-import { blockedIssueTitle, resolveDetection, selectStableVersion, UNCOVERED_EXIT_CODE, type Detection } from "./prebuilt/detect";
+import {
+  blockedIssueTitle,
+  resolveDetection,
+  selectStableVersion,
+  UncoveredUpstreamError,
+  UNCOVERED_EXIT_CODE,
+  type Detection,
+} from "./prebuilt/detect";
 import { buildManifest, workflowUrlFromEnv, type ManifestInput } from "./prebuilt/manifest";
 import {
   ARCHIVE_ENTRIES,
@@ -39,6 +46,7 @@ export {
   resolveDetection,
   selectStableVersion,
   sha256File,
+  UncoveredUpstreamError,
   UNCOVERED_EXIT_CODE,
   validateMinos,
   verifyOutput,
@@ -131,8 +139,12 @@ async function fetchUpstreamReleases(): Promise<unknown> {
 /**
  * Resolve the release inputs. `--codex-version` (anything but `auto`) pins the version; otherwise
  * the highest stable upstream release is chosen and must be covered by `patches/manifest.json`.
- * An uncovered upstream exits `UNCOVERED_EXIT_CODE` so the workflow can report it as blocked
- * rather than as an infrastructure failure.
+ *
+ * Exit codes are deliberately narrow: only `UncoveredUpstreamError` - the highest stable upstream
+ * moved past every supported patch - is "blocked, not broken" (`UNCOVERED_EXIT_CODE` with the
+ * blocked-issue summary Task 7 keys its issue upsert on). A malformed `patches/manifest.json` or a
+ * non-stable `--codex-version` is a plain infrastructure/input error: exit 1, no blocked summary,
+ * so it is never mistaken for upstream-uncovered.
  */
 async function runDetect(flags: Record<string, string>): Promise<void> {
   const requested = flags["codex-version"];
@@ -142,12 +154,13 @@ async function runDetect(flags: Record<string, string>): Promise<void> {
     : null;
   const codexVersion = pinned ? requested! : selectStableVersion(releases ?? (await fetchUpstreamReleases()));
   const cx = cxVersion();
+  const manifest = loadManifest(patchesDir());
   let detection: Detection;
   try {
-    detection = resolveDetection(loadManifest(patchesDir()), codexVersion, cx);
+    detection = resolveDetection(manifest, codexVersion, cx);
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    summary([`## ${blockedIssueTitle(codexVersion)}`, "", message]);
+    if (!(e instanceof UncoveredUpstreamError)) throw e;
+    summary([`## ${blockedIssueTitle(codexVersion)}`, "", e.message]);
     process.exit(UNCOVERED_EXIT_CODE);
   }
   if (!existsSync(join(patchesDir(), detection.patchFile))) {
@@ -169,7 +182,7 @@ async function runDetect(flags: Record<string, string>): Promise<void> {
  * Clone the exact upstream tag and apply the exact supported patch. `--check` first so a conflict
  * fails before the index is touched; the patch is never edited and the source is never fixed up.
  */
-function runBuild(flags: Record<string, string>): void {
+async function runBuild(flags: Record<string, string>): Promise<void> {
   const detection = resolveDetection(loadManifest(patchesDir()), required(flags, "codex-version"), cxVersion());
   const upstream = resolve(required(flags, "upstream"));
   const patch = join(patchesDir(), detection.patchFile);
@@ -179,7 +192,7 @@ function runBuild(flags: Record<string, string>): void {
   git(["-C", upstream, "apply", "--index", patch]);
   emit({
     upstream_commit: git(["-C", upstream, "rev-parse", "HEAD"]),
-    patch_sha256: sha256File(patch).sha256,
+    patch_sha256: (await sha256File(patch)).sha256,
     upstream_tag: detection.upstreamTag,
     patch_file: detection.patchFile,
   });
@@ -226,12 +239,12 @@ async function runPackage(flags: Record<string, string>): Promise<void> {
     codexVersion: detection.codexVersion,
     platform,
     upstreamCommit: upstreamCommit(upstream),
-    patchSha256: sha256File(join(patchesDir(), detection.patchFile)).sha256,
+    patchSha256: (await sha256File(join(patchesDir(), detection.patchFile))).sha256,
     sourceCommit: sourceCommit(),
     workflowUrl,
     createdAt: new Date().toISOString(),
     archive,
-    files: fileDigests(stagingDir),
+    files: await fileDigests(stagingDir),
   });
   validateManifest(JSON.parse(JSON.stringify(manifest)), {
     cxVersion: detection.cxVersion,
@@ -239,7 +252,7 @@ async function runPackage(flags: Record<string, string>): Promise<void> {
     platform,
   });
   writeFileSync(join(outDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
-  writeChecksums(outDir, [filename, "manifest.json"]);
+  await writeChecksums(outDir, [filename, "manifest.json"]);
   emit({ tag: detection.tag, archive: filename, archive_sha256: archive.sha256, platform });
 }
 
@@ -276,13 +289,22 @@ const USAGE = [
 
 if (import.meta.main) {
   const [command, ...rest] = process.argv.slice(2);
-  const flags = parseFlags(rest);
-  if (command === "detect") await runDetect(flags);
-  else if (command === "build") runBuild(flags);
-  else if (command === "package") await runPackage(flags);
-  else if (command === "verify") await runVerify(flags);
-  else {
-    process.stderr.write(`${USAGE}\n`);
-    process.exit(2);
+  try {
+    const flags = parseFlags(rest);
+    if (command === "detect") await runDetect(flags);
+    else if (command === "build") await runBuild(flags);
+    else if (command === "package") await runPackage(flags);
+    else if (command === "verify") await runVerify(flags);
+    else {
+      process.stderr.write(`${USAGE}\n`);
+      process.exit(2);
+    }
+  } catch (e) {
+    // Anything that reaches here - a malformed patches/manifest.json, a bad flag, a non-stable
+    // input version - is a plain error (exit 1), never the blocked-issue exit 3. `runDetect`
+    // exits directly (via `process.exit(UNCOVERED_EXIT_CODE)`) for the one failure that is
+    // "blocked, not broken", so it never reaches this catch.
+    console.error(e instanceof Error ? e.message : String(e));
+    process.exit(1);
   }
 }

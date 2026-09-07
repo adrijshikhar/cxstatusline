@@ -72,8 +72,13 @@ stays in place as the proven build baseline. Its job graph is
   `CXSTATUSLINE_RELEASE_BUILD=1` (which refuses a dirty or commit-less checkout) and asserts
   the bundle prints the detected `cx_version`.
 - **`native`** clones the exact upstream tag, applies the exact patch with
-  `git apply --index --check` before `git apply --index`, prepares the Codex V8 archive, runs
-  the focused patched Rust tests, builds the executable pair, then packages and verifies.
+  `git apply --index --check` before `git apply --index`, restores a Cargo build cache
+  (`upstream/codex-rs/target`, `~/.cargo/registry`, `~/.cargo/git`) keyed on
+  runner OS/arch, the upstream tag, the upstream `rust-toolchain.toml` hash, the `Cargo.lock`
+  hash and the applied patch's sha256, prepares the Codex V8 archive, runs
+  the focused patched Rust tests, builds the executable pair, then packages and verifies. The
+  upstream checkout itself is still reset and re-cloned every run - only compiled artifacts and
+  downloaded crates are cached.
   Packaging is deterministic: an explicit five-file list in fixed order (never `.`, which
   would add the `./` entry the installer rejects), `portable` tar headers with no uid/gid, a
   fixed archive mtime, modes forced to 0755/0644, and gzip whose header carries no timestamp.
@@ -103,3 +108,9 @@ by `MACOSX_DEPLOYMENT_TARGET=14.0` plus the `vtool -show-build` `minos` and `oto
 system-only-linkage checks. That is evidence of intent, not proof of behaviour on macOS 14, and
 it is recorded as an open gap rather than papered over. Hiding build tools from `PATH` on a
 macOS 15 runner would not close it either.
+
+The Rust dependency-license audit of the two binaries (`codex`, `codex-code-mode-host`) has also
+not yet been performed. `THIRD_PARTY_NOTICES.md` covers this repository's own JS dependencies, but
+no equivalent inventory exists yet for the Rust crate graph the patched upstream build pulls in.
+This is deferred to the public-launch checklist, same as the macOS 14 gap above; neither release
+notes nor this document should imply it has been done until it has.

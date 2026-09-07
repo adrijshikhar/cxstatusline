@@ -5,9 +5,8 @@
  * bytes. It is not a claim that the Rust build itself is bit-reproducible.
  */
 import { createHash } from "node:crypto";
-import { chmodSync, copyFileSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, createReadStream, lstatSync, mkdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { gzipSync } from "node:zlib";
 import { create } from "tar";
 import type { ArtifactFile, FileDigest, Platform } from "../../src/distribution";
 
@@ -34,9 +33,18 @@ export function archiveFilename(codexVersion: string, platform: Platform): strin
   return `cxstatusline-codex-${codexVersion}-${platform}.tar.gz`;
 }
 
-export function sha256File(file: string): FileDigest {
-  const bytes = readFileSync(file);
-  return { sha256: createHash("sha256").update(bytes).digest("hex"), size: bytes.length };
+/**
+ * Streamed sha256 + size, so a several-hundred-megabyte binary or archive is never held whole in
+ * memory - the same pattern `scripts/ci-prebuilt.ts` uses.
+ */
+export async function sha256File(file: string): Promise<FileDigest> {
+  const digest = createHash("sha256");
+  let size = 0;
+  for await (const chunk of createReadStream(file)) {
+    digest.update(chunk as Buffer);
+    size += (chunk as Buffer).length;
+  }
+  return { sha256: digest.digest("hex"), size };
 }
 
 function isExecutable(name: ArtifactFile): boolean {
@@ -55,32 +63,42 @@ function normalizeStaging(stagingDir: string): void {
 }
 
 /**
- * Pack `stagingDir`'s five members into `outPath` and return the archive's own digest.
+ * Pack `stagingDir`'s five members directly into the gzipped `outPath` and return the archive's
+ * own digest, without ever holding the archive (staged binaries can be hundreds of megabytes, and
+ * a ~1 GB tar would otherwise need the whole input buffer plus a whole zlib output buffer in one
+ * process).
  *
- * Determinism comes from four things: an explicit file list in fixed order (never `.`, which would
- * add the `./` entry the installer rejects), `portable: true` to drop uid/gid/uname/atime/ctime,
- * a fixed `mtime`, and modes forced to 0755/0644. gzip is applied separately with node's zlib,
- * whose gzip header carries no timestamp.
+ * node-tar streams entry bytes straight into its own gzip stream and that stream straight into a
+ * file descriptor (`file` + `sync: true` uses `PackSync` piped to a `WriteStreamSync`, chunk by
+ * chunk - see `node_modules/tar/dist/commonjs/create.js`), so nothing here reads the archive back
+ * into memory before it is hashed; `sha256File` streams the written file instead.
+ *
+ * Determinism comes from: an explicit file list in fixed order (never `.`, which would add the
+ * `./` entry the installer rejects), `portable: true` (drops uid/gid/uname/atime/ctime from the
+ * tar headers *and* zeroes the gzip header's mtime/OS byte - `portable` is threaded into the gzip
+ * config by node-tar itself), a fixed tar `mtime`, and modes forced to 0755/0644.
  */
 export async function packArchive(stagingDir: string, outPath: string): Promise<FileDigest> {
   normalizeStaging(stagingDir);
   mkdirSync(dirname(outPath), { recursive: true });
-  const tarPath = `${outPath}.tar`;
-  try {
-    await create(
-      { cwd: stagingDir, file: tarPath, gzip: false, portable: true, mtime: ARCHIVE_MTIME, follow: false, sync: true },
-      [...ARCHIVE_ENTRIES],
-    );
-    writeFileSync(outPath, gzipSync(readFileSync(tarPath), { level: 9 }));
-  } finally {
-    rmSync(tarPath, { force: true });
-  }
+  await create(
+    {
+      cwd: stagingDir,
+      file: outPath,
+      gzip: { level: 9 },
+      portable: true,
+      mtime: ARCHIVE_MTIME,
+      follow: false,
+      sync: true,
+    },
+    [...ARCHIVE_ENTRIES],
+  );
   return sha256File(outPath);
 }
 
-export function fileDigests(stagingDir: string): Record<ArtifactFile, FileDigest> {
+export async function fileDigests(stagingDir: string): Promise<Record<ArtifactFile, FileDigest>> {
   const out: Record<string, FileDigest> = {};
-  for (const name of ARCHIVE_ENTRIES) out[name] = sha256File(join(stagingDir, name));
+  for (const name of ARCHIVE_ENTRIES) out[name] = await sha256File(join(stagingDir, name));
   return out as Record<ArtifactFile, FileDigest>;
 }
 
@@ -88,11 +106,12 @@ export function fileDigests(stagingDir: string): Record<ArtifactFile, FileDigest
  * `shasum -a 256` format, so the published list can be checked with the stock macOS tool.
  * Names are basenames only; the caller passes the files it actually wrote.
  */
-export function writeChecksums(outDir: string, filenames: readonly string[]): string {
-  const lines = filenames.map((name) => {
+export async function writeChecksums(outDir: string, filenames: readonly string[]): Promise<string> {
+  const lines: string[] = [];
+  for (const name of filenames) {
     if (name !== basename(name)) throw new Error(`checksum entry ${JSON.stringify(name)} must be a basename`);
-    return `${sha256File(join(outDir, name)).sha256}  ${name}`;
-  });
+    lines.push(`${(await sha256File(join(outDir, name))).sha256}  ${name}`);
+  }
   const body = `${lines.join("\n")}\n`;
   writeFileSync(join(outDir, "SHA256SUMS"), body);
   return body;

@@ -13,6 +13,17 @@ const UPSTREAM_TAG_PREFIX = "rust-v";
 /** Exit code the `detect` CLI uses when upstream has moved past every supported patch. */
 export const UNCOVERED_EXIT_CODE = 3;
 
+/**
+ * Thrown by `resolveDetection` for exactly one reason: the highest stable upstream version is not
+ * covered by `patches/manifest.json`. This is the *only* failure the `detect` CLI treats as
+ * "blocked, not broken" (exit `UNCOVERED_EXIT_CODE` with the blocked-issue summary) - a malformed
+ * manifest or a non-stable input version is a plain error (exit 1), not a coverage gap, so it must
+ * not be mistaken for one downstream (Task 7's blocked-issue upsert keys off exit 3).
+ */
+export class UncoveredUpstreamError extends Error {
+  override readonly name = "UncoveredUpstreamError";
+}
+
 export interface Detection {
   readonly codexVersion: string;
   readonly cxVersion: string;
@@ -70,7 +81,7 @@ export function resolveDetection(m: Manifest, codexVersion: string, cxVersion: s
   const patch = resolvePatch(m, parsed);
   if (patch === null) {
     const candidate = m.candidate ?? m.patches.at(-1)?.max ?? "none";
-    throw new Error(
+    throw new UncoveredUpstreamError(
       `upstream Codex ${codexVersion} is not covered by patches/manifest.json; `
         + `the newest explicitly supported candidate is ${candidate}. `
         + `Add and test patches/codex-${codexVersion}.patch before releasing that version.`,
