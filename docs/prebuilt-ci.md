@@ -44,3 +44,62 @@ The archive must contain exactly five regular files as plain basenames: `codex`,
 else - a leading `./` directory entry from `tar -C staging .`, a link, a device, a
 duplicate or an extra file - is rejected on the entry header, before any byte is
 written. Pack with explicit file arguments, never with `.`.
+
+## Prebuilt release workflow (`.github/workflows/prebuilt.yml`)
+
+`Prebuilt release` is the release pipeline, separate from the smoke workflow above, which
+stays in place as the proven build baseline. Its job graph is
+`detect -> validate -> native`, and it currently ends by saving one workflow artifact.
+
+- **Scope: arm64 only.** The native matrix has exactly one entry, `darwin-arm64` /
+  `aarch64-apple-darwin`. Nothing is cross-compiled and no universal binary is produced, so a
+  release manifest carries exactly one artifact (the installer schema permits one or two).
+  Intel support needs an Intel runner and its own dispatch; do not infer it from an arm64 run.
+- **Self-hosted dispatch.** `self_hosted=true` moves every job to
+  `[self-hosted, macOS, ARM64]`; `false` uses `ubuntu-latest` / `macos-15`. Hosted macOS
+  minutes are billing-blocked, so the owner dispatches with `self_hosted=true`. Steps work on
+  both: `brew install` is skipped when `just`/`cargo-nextest` already exist, and only
+  `RUNNER_TEMP`/`GITHUB_WORKSPACE`/`GITHUB_OUTPUT` are assumed.
+- **`detect`** runs `bun scripts/prebuilt.ts detect`. With `codex_version=auto` it lists
+  `openai/codex` releases, picks the highest **stable** `rust-vX.Y.Z` by semver comparison
+  (not by publish order and not lexicographically - `0.153.0` beats `0.99.0`), drops drafts,
+  prereleases and malformed tags, and then requires `patches/manifest.json` to cover that
+  version explicitly. If upstream has moved past every supported patch, `detect` exits 3 and
+  names both the uncovered upstream version and `patches/manifest.json`'s `candidate`. That
+  field is informational only: it never widens `resolvePatch`, which stays exact-match.
+  The job outputs `codex_version`, `cx_version`, `tag`, `upstream_tag` and `patch_file`.
+- **`validate`** installs frozen dependencies, typechecks, runs `bun test`, builds with
+  `CXSTATUSLINE_RELEASE_BUILD=1` (which refuses a dirty or commit-less checkout) and asserts
+  the bundle prints the detected `cx_version`.
+- **`native`** clones the exact upstream tag, applies the exact patch with
+  `git apply --index --check` before `git apply --index`, prepares the Codex V8 archive, runs
+  the focused patched Rust tests, builds the executable pair, then packages and verifies.
+  Packaging is deterministic: an explicit five-file list in fixed order (never `.`, which
+  would add the `./` entry the installer rejects), `portable` tar headers with no uid/gid, a
+  fixed archive mtime, modes forced to 0755/0644, and gzip whose header carries no timestamp.
+  Identical staged inputs therefore produce identical archive bytes - which is *not* a claim
+  that the Rust build itself is bit-reproducible.
+- **Verification** re-derives every published claim from the bytes on disk using the
+  installer's own code: `validateManifest` from `src/distribution.ts` for the manifest,
+  `extractArchive` from `src/distribution/archive.ts` for the archive, then `SHA256SUMS`
+  agreement, per-file digests, Mach-O architecture, system-only linkage, `vtool` `minos` at or
+  below 14.0, staged `codex --version` and the companion's `--listen` help.
+- **Outputs.** `release-<tag>` holds exactly the three release assets (archive,
+  `manifest.json`, `SHA256SUMS`) for 7 days; `provenance-<tag>` holds the `Cargo.lock` diff
+  and digest, runner OS/CPU, `rustc --version` and the raw `vtool`/`otool` output. Workflow
+  artifacts are private to the run - they are not a release.
+
+### Not yet wired
+
+The `publish` dispatch input is defined but no job consumes it yet, and there is no `schedule`
+trigger. When the cron is added it will do nothing until an owner-published `v<CX>` **source**
+release exists, because scheduled runs resolve their CX input from that release rather than from
+whatever is on `main`. Nothing in this workflow creates a tag or a release today.
+
+### Known acceptance gap
+
+There is no clean macOS 14 machine or VM available, so macOS 14 compatibility is evidenced only
+by `MACOSX_DEPLOYMENT_TARGET=14.0` plus the `vtool -show-build` `minos` and `otool -L`
+system-only-linkage checks. That is evidence of intent, not proof of behaviour on macOS 14, and
+it is recorded as an open gap rather than papered over. Hiding build tools from `PATH` on a
+macOS 15 runner would not close it either.

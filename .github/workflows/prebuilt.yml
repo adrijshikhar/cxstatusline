@@ -1,0 +1,169 @@
+name: Prebuilt release
+
+# Apple-Silicon-only private prebuilt release pipeline.
+#
+# detect -> validate -> native(arm64) -> one workflow artifact `release-<tag>`.
+# The `publish` input and the `tag` / `codex_version` / `cx_version` outputs exist for the
+# publish and report jobs, which are added separately; nothing here creates a release or a tag.
+
+on:
+  workflow_dispatch:
+    inputs:
+      codex_version:
+        description: Codex version to build (auto = highest stable upstream release that this repo patches)
+        type: choice
+        options: ["auto", "0.153.0", "0.152.1"]
+        default: "auto"
+      self_hosted:
+        description: Run on the owner's self-hosted Apple Silicon runner (arm64 only; no hosted minutes)
+        type: boolean
+        default: false
+      publish:
+        description: Publish the verified artifact as a GitHub release (consumed by the publish job)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prebuilt-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: never
+  MACOSX_DEPLOYMENT_TARGET: "14.0"
+  CARGO_BUILD_JOBS: "3"
+  CARGO_PROFILE_RELEASE_DEBUG: "0"
+
+jobs:
+  # Resolves every release input once, so no later job re-derives the version or the tag.
+  detect:
+    runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64"]') || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    outputs:
+      codex_version: ${{ steps.detect.outputs.codex_version }}
+      cx_version: ${{ steps.detect.outputs.cx_version }}
+      tag: ${{ steps.detect.outputs.tag }}
+      upstream_tag: ${{ steps.detect.outputs.upstream_tag }}
+      patch_file: ${{ steps.detect.outputs.patch_file }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.4.0"
+      - run: bun install --frozen-lockfile
+      # Exit 3 means upstream moved past every supported patch: blocked, not broken.
+      - name: Resolve release inputs
+        id: detect
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_CODEX_VERSION: ${{ inputs.codex_version }}
+        run: bun scripts/prebuilt.ts detect --codex-version "$REQUESTED_CODEX_VERSION"
+
+  validate:
+    needs: detect
+    runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64"]') || 'macos-15' }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.4.0"
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test
+      # CXSTATUSLINE_RELEASE_BUILD=1 refuses a dirty or commit-less checkout.
+      - run: CXSTATUSLINE_RELEASE_BUILD=1 bun run build
+      - name: Bundle reports the detected cxstatusline version
+        env:
+          EXPECTED_CX: ${{ needs.detect.outputs.cx_version }}
+        run: |
+          actual="$(node dist/cxstatusline.js --version)"
+          echo "$actual"
+          test "$actual" = "cxstatusline $EXPECTED_CX"
+
+  native:
+    needs: [detect, validate]
+    runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64"]') || 'macos-15' }}
+    timeout-minutes: 180
+    env:
+      CODEX_VERSION: ${{ needs.detect.outputs.codex_version }}
+      CX_VERSION: ${{ needs.detect.outputs.cx_version }}
+      EXPECTED_ARCH: arm64
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.4.0"
+      - run: bun install --frozen-lockfile
+      - name: Check native runner
+        run: |
+          uname -m
+          sw_vers
+          bun -e 'if (process.platform !== "darwin" || process.arch !== process.env.EXPECTED_ARCH) throw new Error("wrong native runner")'
+          df -h .
+      # Clones the exact upstream tag and applies the exact patch; `--check` first, never a fixup.
+      - name: Fetch exact upstream and apply patch
+        id: build
+        run: bun scripts/prebuilt.ts build --codex-version "$CODEX_VERSION" --upstream "$GITHUB_WORKSPACE/upstream"
+      - name: Prepare verified Codex V8 archive and bindings
+        run: bash scripts/setup-ci-v8.sh "$GITHUB_WORKSPACE/upstream" aarch64-apple-darwin
+      - name: Prepare Rust test tools
+        run: |
+          if ! command -v just >/dev/null || ! command -v cargo-nextest >/dev/null; then brew install just cargo-nextest; fi
+          cd upstream/codex-rs
+          rustup show active-toolchain
+      - name: Focused patched Rust tests
+        working-directory: upstream
+        run: just test --release -p codex-tui cxstatusline --retries 0
+      - name: Build synchronized executable pair
+        working-directory: upstream/codex-rs
+        run: cargo build --release -p codex-cli --bin codex -p codex-code-mode-host --bin codex-code-mode-host
+      # `out/` ends up holding exactly the three release assets; nothing else may be added to it.
+      - name: Package release assets
+        run: |
+          bun scripts/prebuilt.ts package \
+            --codex-version "$CODEX_VERSION" \
+            --cx-version "$CX_VERSION" \
+            --upstream "$GITHUB_WORKSPACE/upstream" \
+            --staging "$RUNNER_TEMP/staging" \
+            --out "$GITHUB_WORKSPACE/out"
+      - name: Verify release assets
+        run: bun scripts/prebuilt.ts verify --out "$GITHUB_WORKSPACE/out" --codex-version "$CODEX_VERSION" --cx-version "$CX_VERSION"
+      - name: Record build provenance
+        env:
+          UPSTREAM_COMMIT: ${{ steps.build.outputs.upstream_commit }}
+        run: |
+          mkdir -p provenance
+          git -C upstream diff -- codex-rs/Cargo.lock > provenance/Cargo.lock.diff
+          shasum -a 256 upstream/codex-rs/Cargo.lock > provenance/Cargo.lock.sha256
+          {
+            echo "upstream_commit=$UPSTREAM_COMMIT"
+            echo "source_commit=$GITHUB_SHA"
+            uname -m
+            sw_vers
+            rustc --version
+          } > provenance/environment.txt
+          for bin in codex codex-code-mode-host; do
+            vtool -show-build "upstream/codex-rs/target/release/$bin" >> provenance/macho.txt
+            otool -L "upstream/codex-rs/target/release/$bin" >> provenance/macho.txt
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-${{ needs.detect.outputs.tag }}
+          path: out/
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: provenance-${{ needs.detect.outputs.tag }}
+          path: provenance/
+          if-no-files-found: error
+          retention-days: 7
