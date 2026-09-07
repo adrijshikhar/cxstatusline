@@ -7,7 +7,7 @@
  * here for `test/prebuilt.test.ts`.
  */
 import { execFileSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { platformFor, validateManifest } from "../src/distribution";
 import { loadManifest } from "../src/patch/manifest";
@@ -91,6 +91,20 @@ function patchesDir(): string {
   return join(root, "patches");
 }
 
+/**
+ * Recursive deletion of a caller-supplied path, but only when the directory still looks like the
+ * thing we put there. A self-hosted runner reuses its workspace, so these directories do have to
+ * be reset - and a mistyped `--upstream /Users/me` must not be what does it.
+ */
+export function resetDirectory(dir: string, looksOurs: (entries: readonly string[]) => boolean): void {
+  if (!existsSync(dir)) return;
+  const entries = readdirSync(dir);
+  if (entries.length > 0 && !looksOurs(entries)) {
+    throw new Error(`refusing to delete ${dir}: it does not look like a directory this script created`);
+  }
+  rmSync(dir, { recursive: true, force: true });
+}
+
 function emit(values: Record<string, string>): void {
   const body = Object.entries(values).map(([k, v]) => `${k}=${v}\n`).join("");
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, body);
@@ -159,7 +173,7 @@ function runBuild(flags: Record<string, string>): void {
   const detection = resolveDetection(loadManifest(patchesDir()), required(flags, "codex-version"), cxVersion());
   const upstream = resolve(required(flags, "upstream"));
   const patch = join(patchesDir(), detection.patchFile);
-  if (existsSync(upstream)) rmSync(upstream, { recursive: true, force: true });
+  resetDirectory(upstream, (entries) => entries.includes(".git"));
   git(["clone", "--depth", "1", "--branch", detection.upstreamTag, "https://github.com/openai/codex.git", upstream]);
   git(["-C", upstream, "apply", "--index", "--check", patch]);
   git(["-C", upstream, "apply", "--index", patch]);
@@ -201,7 +215,7 @@ async function runPackage(flags: Record<string, string>): Promise<void> {
     throw new Error("no workflow run URL: pass --workflow-url or run inside GitHub Actions");
   }
 
-  rmSync(stagingDir, { recursive: true, force: true });
+  resetDirectory(stagingDir, (entries) => entries.every((e) => (ARCHIVE_ENTRIES as readonly string[]).includes(e)));
   assembleStaging({ upstreamDir: upstream, repoRoot: root, stagingDir });
   mkdirSync(outDir, { recursive: true });
   const filename = archiveFilename(detection.codexVersion, platform);

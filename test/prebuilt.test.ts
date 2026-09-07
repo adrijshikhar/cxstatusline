@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { list } from "tar";
@@ -11,6 +11,7 @@ import {
   blockedIssueTitle,
   buildManifest,
   packArchive,
+  resetDirectory,
   resolveDetection,
   selectStableVersion,
   validateMinos,
@@ -241,6 +242,26 @@ describe("writeChecksums", () => {
     const manifest = JSON.parse(readFileSync(join(out, "manifest.json"), "utf8")) as { artifacts: [{ sha256: string }] };
     expect(entry?.split("  ")[0]).toBe(manifest.artifacts[0].sha256);
     expect(sums).toHaveLength(2);
+  });
+});
+
+describe("resetDirectory", () => {
+  test("clears a directory it recognises and refuses one it does not", () => {
+    const ours = staging();
+    resetDirectory(ours, (e) => e.every((n) => (ARCHIVE_ENTRIES as readonly string[]).includes(n)));
+    expect(existsSync(ours)).toBe(false);
+
+    const theirs = tmp("theirs");
+    writeFileSync(join(theirs, "keep.txt"), "precious\n");
+    expect(() => resetDirectory(theirs, (e) => e.includes(".git"))).toThrow(/refusing to delete/);
+    expect(readFileSync(join(theirs, "keep.txt"), "utf8")).toBe("precious\n");
+  });
+
+  test("an absent or empty directory is a no-op, not an error", () => {
+    const empty = tmp("empty-reset");
+    resetDirectory(empty, () => false);
+    expect(existsSync(empty)).toBe(false);
+    resetDirectory(join(empty, "gone"), () => false);
   });
 });
 
