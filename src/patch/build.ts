@@ -48,7 +48,7 @@ function must(step: string, run: Runner, log: (l: string) => void, cmd: string, 
  * silently skipping it. Which one ran is recorded in the log, because "the tests passed" is only
  * meaningful if you can tell what was run.
  */
-function runFocusedTests(plan: BuildPlan, run: Runner, log: (l: string) => void, which: Which, crateDir: string): void {
+function runFocusedTests(run: Runner, log: (l: string) => void, which: Which, crateDir: string): void {
   if (which("just")) {
     log("running the focused Rust tests with just");
     must("just test", run, log, "just", ["test", "--release", "-p", "codex-tui", "cxstatusline", "--retries", "0"], crateDir);
@@ -123,6 +123,6 @@ export function buildPatched(plan: BuildPlan, run: Runner, log: (line: string) =
     }
     return bin;
   }) as [string, string];
-  runFocusedTests(plan, run, log, which, crateDir);
+  runFocusedTests(run, log, which, crateDir);
   return { codex, codexCodeModeHost, upstreamCommit };
 }

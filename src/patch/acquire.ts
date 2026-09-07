@@ -240,7 +240,7 @@ export function describeOutcome(o: PatchOutcome): string {
   switch (o.kind) {
     case "installed":
       return o.reused
-        ? `Codex ${o.version} (prebuilt) was already installed; reused the existing generation. Open a new session to use it.`
+        ? `Codex ${o.version} (${o.source}) was already installed; reused the existing generation. Open a new session to use it.`
         : `Codex ${o.version} installed from ${o.source === "prebuilt" ? "the prebuilt release" : "source"}. Open a new session to use it.`;
     case "held": return `holding: upstream ${o.upstream}, patched from ${o.patched} (policy). Use --force to install anyway.`;
     case "refused": return `refused: ${o.reason}`;

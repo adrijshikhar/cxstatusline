@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertPackageFiles } from "../scripts/check-package";
@@ -24,14 +24,15 @@ test("a source run invents no provenance", () => {
   expect(VERSION).toMatch(/^\d+\.\d+\.\d+$/);
 });
 
-/** The bundle under test, built once by `bun run build`. */
+/**
+ * The bundle under test, rebuilt from this checkout.
+ * Always rebuilt, never reused: a `dist/` left over from an earlier commit carries that commit's
+ * provenance, and the assertion below is precisely about which commit got stamped.
+ */
 function bundle(): string {
-  const dist = join(process.cwd(), "dist", "cxstatusline.js");
-  if (!existsSync(dist)) {
-    const r = spawnSync("bun", ["run", "build"], { encoding: "utf8" });
-    if (r.status !== 0) throw new Error(`bun run build failed: ${r.stderr}`);
-  }
-  return dist;
+  const r = spawnSync("bun", ["run", "build"], { encoding: "utf8" });
+  if (r.status !== 0) throw new Error(`bun run build failed: ${r.stderr}`);
+  return join(process.cwd(), "dist", "cxstatusline.js");
 }
 
 test("the packed CLI runs outside any git checkout and keeps its embedded provenance", () => {
