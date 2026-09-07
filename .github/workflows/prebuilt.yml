@@ -45,6 +45,11 @@ env:
 jobs:
   # Resolves every release input once, so no later job re-derives the version or the tag.
   detect:
+    # Private-repository guard, same as prebuilt-smoke.yml: this pipeline publishes private
+    # releases and files private issues, and must never run against a fork or a repository that
+    # has been made public. `github.event.repository` is present on both `schedule` and
+    # `workflow_dispatch`. Guarding `detect` also stops `validate`/`native`, which need it.
+    if: github.event.repository.private == true
     runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64"]') || 'ubuntu-latest' }}
     timeout-minutes: 10
     outputs:
@@ -142,6 +147,7 @@ jobs:
     env:
       CODEX_VERSION: ${{ needs.detect.outputs.codex_version }}
       CX_VERSION: ${{ needs.detect.outputs.cx_version }}
+      SOURCE_COMMIT: ${{ needs.detect.outputs.source_commit }}
       EXPECTED_ARCH: arm64
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -214,6 +220,7 @@ jobs:
           bun scripts/prebuilt.ts package \
             --codex-version "$CODEX_VERSION" \
             --cx-version "$CX_VERSION" \
+            --source-commit "$SOURCE_COMMIT" \
             --upstream "$GITHUB_WORKSPACE/upstream" \
             --staging "$RUNNER_TEMP/staging" \
             --out "$GITHUB_WORKSPACE/out" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
@@ -227,11 +234,15 @@ jobs:
           UPSTREAM_COMMIT: ${{ steps.build.outputs.upstream_commit }}
         run: |
           mkdir -p provenance
-          git -C upstream diff -- codex-rs/Cargo.lock > provenance/Cargo.lock.diff
+          # The patch was applied with `git apply --index`, so its Cargo.lock change is staged:
+          # an unstaged diff would be empty and record no provenance at all. The unstaged diff is
+          # kept as a second file because cargo can rewrite the lockfile during the build.
+          git -C upstream diff --cached -- codex-rs/Cargo.lock > provenance/Cargo.lock.patched.diff
+          git -C upstream diff -- codex-rs/Cargo.lock > provenance/Cargo.lock.build.diff
           shasum -a 256 upstream/codex-rs/Cargo.lock > provenance/Cargo.lock.sha256
           {
             echo "upstream_commit=$UPSTREAM_COMMIT"
-            echo "source_commit=$GITHUB_SHA"
+            echo "source_commit=$SOURCE_COMMIT"
             uname -m
             sw_vers
             rustc --version
@@ -268,7 +279,9 @@ jobs:
   # change, ever. Exit 3 means blocked: the owner has to act and `report` files one issue.
   publish:
     needs: [detect, native]
-    if: needs.detect.outputs.should_build == 'true' && (github.event_name == 'schedule' || inputs.publish == true)
+    if: >-
+      github.event.repository.private == true && needs.detect.outputs.should_build == 'true'
+      && (github.event_name == 'schedule' || inputs.publish == true)
     runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64"]') || 'macos-15' }}
     timeout-minutes: 60
     permissions:
@@ -280,6 +293,10 @@ jobs:
       release_url: ${{ steps.publish.outputs.release_url }}
       published: ${{ steps.publish.outputs.published }}
     steps:
+      # `gh` is the only way this job talks to GitHub, and a self-hosted runner is not guaranteed
+      # to have it. Fail here with a named cause rather than inside the script.
+      - name: Require gh on this runner
+        run: command -v gh >/dev/null || { echo "::error::gh CLI is required on this runner"; exit 1; }
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
@@ -287,12 +304,24 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: "1.4.0"
-      - run: bun install --frozen-lockfile
+      # Teed like every other failing-capable step, so `report` has an excerpt when dependency
+      # installation is what broke.
+      - run: set -o pipefail; bun install --frozen-lockfile 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-publish.log"
       # The exact bytes `native` verified: nothing is rebuilt and no timestamp is regenerated.
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - id: fetch-assets
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: release-${{ needs.detect.outputs.tag }}
           path: release-assets
+      # The documented expired-artifact case: without this line the publish log would be empty and
+      # `report` would say "no error excerpt captured" for a failure with a known, nameable cause.
+      - name: Record a missing release artifact
+        if: failure() && steps.fetch-assets.outcome == 'failure'
+        env:
+          ARTIFACT: release-${{ needs.detect.outputs.tag }}
+        run: |
+          echo "workflow artifact $ARTIFACT could not be downloaded (missing, expired or never uploaded);" \
+            "re-run the build to regenerate it" | tee -a "$RUNNER_TEMP/prebuilt-publish.log"
       - name: Publish release
         id: publish
         env:
@@ -333,6 +362,10 @@ jobs:
       contents: read
       issues: write
     steps:
+      # `gh` is the only way this job talks to GitHub, and a self-hosted runner is not guaranteed
+      # to have it. Fail here with a named cause rather than inside the script.
+      - name: Require gh on this runner
+        run: command -v gh >/dev/null || { echo "::error::gh CLI is required on this runner"; exit 1; }
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
