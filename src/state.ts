@@ -2,6 +2,16 @@ import { existsSync, readFileSync } from "node:fs";
 import { writeFileAtomic } from "./atomic";
 import { POLICIES, type Policy } from "./version";
 
+/**
+ * The `Attempt.reason` a prebuilt acquisition records when no release exists for the version yet.
+ * A distinct token, not prose: the hook has to recognise it to bound its retries, and prose would
+ * make that a substring guess.
+ */
+export const RELEASE_UNAVAILABLE = "release-unavailable";
+
+/** How long the hook waits before trying an unavailable release again. Explicit installs ignore it. */
+export const RELEASE_RETRY_AFTER_MS = 24 * 60 * 60 * 1000;
+
 export interface Attempt {
   readonly at: string; // ISO
   readonly ok: boolean;

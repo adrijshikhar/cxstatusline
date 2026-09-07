@@ -1,15 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { Context } from "../src/context";
 import { realHookDeps, runHook } from "../src/hook/run";
 import { resolvePaths } from "../src/paths";
-import { installWrapper, isOurWrapper } from "../src/patch/wrapper";
-import { DEFAULT_STATE, readState, writeState, type State } from "../src/state";
+import { WRAPPER_MARKER_V2, installWrapper, isOurWrapper } from "../src/patch/wrapper";
+import { createGeneration, swapPointer } from "../src/patch/generation";
+import { DEFAULT_STATE, readState, writeState, RELEASE_UNAVAILABLE, type State } from "../src/state";
 import { fakeExec, tmpEnv } from "./helpers";
 
-function setup(state: Partial<State>, upstreamVersion = "0.152.1") {
-  const { env, root } = tmpEnv();
+function setup(state: Partial<State>, upstreamVersion = "0.152.1", now = "2026-09-02T12:00:00Z") {
+  const { env, root } = tmpEnv("cxstatusline test ");
   const paths = resolvePaths(env);
   const upstream = join(root, ".codex/packages/standalone/current/bin/codex");
   mkdirSync(join(upstream, ".."), { recursive: true });
@@ -25,10 +27,46 @@ function setup(state: Partial<State>, upstreamVersion = "0.152.1") {
   const spawned: string[][] = [];
   const ctx: Context = {
     env, paths, run, which: () => "/x", freeBytes: () => 1e12, cxBin: "/cx", patchesDir: "/p",
-    now: () => new Date("2026-09-02T12:00:00Z"), log: () => {}, say: () => {},
+    now: () => new Date(now), log: () => {}, say: () => {},
   };
   const deps = { spawnDetached: (bin: string, args: string[]) => { spawned.push([bin, ...args]); } };
   return { ctx, deps, paths, spawned, upstream, root };
+}
+
+/** Put a complete generation in place, the way `activatePair` leaves the machine. */
+function installGeneration(paths: ReturnType<typeof resolvePaths>): string {
+  const pair = {
+    codexVersion: "0.152.1",
+    provenance: {
+      source: "prebuilt" as const,
+      cxVersion: "0.1.0",
+      platform: "darwin-arm64",
+      patchSha256: "a".repeat(64),
+      upstreamCommit: "b".repeat(40),
+      sourceCommit: null,
+      sourceDirty: false,
+      installedAt: "2026-09-02T12:00:00.000Z",
+      executables: {
+        codex: digest("GEN-CODEX"),
+        "codex-code-mode-host": digest("GEN-HOST"),
+      },
+    },
+  };
+  const staging = mkdtempSync(join(paths.libexecDir, "staging "));
+  writeFileSync(join(staging, "codex"), "GEN-CODEX");
+  writeFileSync(join(staging, "codex-code-mode-host"), "GEN-HOST");
+  for (const f of ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"]) writeFileSync(join(staging, f), `${f} body`);
+  try {
+    const dir = createGeneration({ ...pair, directory: staging }, paths);
+    swapPointer(paths, dir);
+    return dir;
+  } finally {
+    rmSync(staging, { recursive: true, force: true });
+  }
+}
+
+function digest(text: string): { sha256: string; size: number } {
+  return { sha256: createHash("sha256").update(text).digest("hex"), size: Buffer.byteLength(text) };
 }
 
 const startup = JSON.stringify({ session_id: "s", cwd: "/", hook_event_name: "SessionStart", source: "startup" });
@@ -44,12 +82,12 @@ describe("runHook", () => {
     symlinkSync(newer, paths.wrapperPath);
     const run = fakeExec((cmd) => ({ stdout: `codex-cli ${cmd === newer ? "0.153.0" : "0.152.1"}\n` })).run;
     expect(msg(runHook({ ...ctx, run }, startup, deps).stdout)).toMatch(/0\.153\.0.*background/);
-    expect(spawned).toEqual([["/cx", "patch"]]);
+    expect(spawned).toEqual([["/cx", "hook", "acquire"]]);
     expect(readlinkSync(paths.wrapperPath)).toBe(newer);
     expect(existsSync(upstream)).toBe(true);
     expect(readState(paths.stateFile).state).toMatchObject({ upstream_bin: newer, launcher_restore: { kind: "symlink", target: newer } });
   });
-  test("active rebuild takes precedence over an old failed attempt", () => {
+  test("an active install takes precedence over an old failed attempt", () => {
     const { ctx, deps, paths, spawned } = setup({ last_attempt: { at: "t", ok: false, version: "0.153.0", reason: "old failure" } }, "0.153.0");
     writeFileSync(paths.lockFile, `${process.pid}\n`);
     expect(msg(runHook(ctx, startup, deps).stdout)).toMatch(/already in progress/);
@@ -95,13 +133,13 @@ describe("runHook", () => {
     for (const source of ["resume", "clear"]) {
       const { ctx, deps, spawned } = setup({}, "0.153.0");
       runHook(ctx, JSON.stringify({ source }), deps);
-      expect(spawned).toEqual([["/cx", "patch"]]);
+      expect(spawned).toEqual([["/cx", "hook", "acquire"]]);
     }
   });
   test("drift under stable-minors: spawns patch detached and says so", () => {
     const { ctx, deps, spawned, paths } = setup({}, "0.153.0");
     const r = runHook(ctx, startup, deps);
-    expect(spawned).toEqual([["/cx", "patch"]]);
+    expect(spawned).toEqual([["/cx", "hook", "acquire"]]);
     expect(msg(r.stdout)).toMatch(/0\.153\.0.*0\.152\.1.*background.*reopen/i);
     expect(readState(paths.stateFile).state.patched_from).toBe("0.152.1"); // the child writes it, not us
   });
@@ -110,7 +148,7 @@ describe("runHook", () => {
     rmSync(paths.wrapperPath);
     symlinkSync(upstream, paths.wrapperPath); // upstream's installer took the path back
     const r = runHook(ctx, startup, deps);
-    expect(readlinkSync(paths.wrapperPath)).toBe(upstream); // left alone during the rebuild window
+    expect(readlinkSync(paths.wrapperPath)).toBe(upstream); // left alone during the install window
     expect(msg(r.stdout)).not.toMatch(/restored the cxstatusline wrapper/);
   });
   test("patch release within the minor: silent hold", () => {
@@ -118,17 +156,17 @@ describe("runHook", () => {
     expect(runHook(ctx, startup, deps).stdout).toBe("");
     expect(spawned).toEqual([]);
   });
-  test("lock held by a live process: says rebuild is in progress, no spawn", () => {
+  test("lock held by a live process: says the install is in progress, no spawn", () => {
     const { ctx, deps, spawned, paths } = setup({}, "0.153.0");
     mkdirSync(paths.stateDir, { recursive: true });
     writeFileSync(paths.lockFile, `${process.pid}\n`);
-    expect(msg(runHook(ctx, startup, deps).stdout)).toMatch(/rebuild.*0\.153\.0.*already in progress/i);
+    expect(msg(runHook(ctx, startup, deps).stdout)).toMatch(/install for Codex 0\.153\.0 is already in progress/i);
     expect(spawned).toEqual([]);
   });
   test("previous attempt failed for this version: reports once, does not respawn", () => {
     const { ctx, deps, spawned } = setup({ last_attempt: { at: "t", ok: false, version: "0.153.0", reason: "cargo build: E0425" } }, "0.153.0");
     const r = runHook(ctx, startup, deps);
-    expect(msg(r.stdout)).toMatch(/last repatch for 0\.153\.0 failed: cargo build: E0425/);
+    expect(msg(r.stdout)).toMatch(/last install attempt for 0\.153\.0 failed: cargo build: E0425/);
     expect(spawned).toEqual([]);
   });
   test("wrapper clobbered by upstream's installer, no drift: re-placed and reported", () => {
@@ -206,6 +244,30 @@ describe("runHook", () => {
     const { ctx, deps, spawned } = setup({}, "0.153.0");
     runHook(ctx, "not json", deps);
     expect(spawned).toHaveLength(1);
+  });
+  test("a healthy generation install keeps the wrapper without any flat-layout binary", () => {
+    const { ctx, deps, paths } = setup({});
+    // The generation layout never writes paths.patchedBin, so its absence must not be reported as
+    // a broken install once installation.json says a complete pair is active.
+    rmSync(paths.patchedBin);
+    rmSync(paths.patchedCodeModeHost);
+    installGeneration(paths);
+    // The first pass upgrades the v1 wrapper an older install left behind...
+    expect(msg(runHook(ctx, startup, deps).stdout)).toMatch(/restored the cxstatusline wrapper/);
+    expect(readFileSync(paths.wrapperPath, "utf8")).toContain(WRAPPER_MARKER_V2);
+    // ...and from then on a healthy generation install is silent.
+    expect(msg(runHook(ctx, startup, deps).stdout)).toBe("");
+    expect(isOurWrapper(paths.wrapperPath)).toBe(true);
+  });
+  test("an unavailable prebuilt release is retried at most once a day", () => {
+    const attempt = { at: "2026-09-02T12:00:00Z", ok: false, version: "0.153.0", reason: RELEASE_UNAVAILABLE };
+    const soon = setup({ last_attempt: attempt }, "0.153.0", "2026-09-03T11:00:00Z");
+    expect(msg(runHook(soon.ctx, startup, soon.deps).stdout)).toMatch(/no prebuilt Codex 0\.153\.0.*retry/i);
+    expect(soon.spawned).toEqual([]);
+
+    const later = setup({ last_attempt: attempt }, "0.153.0", "2026-09-03T13:00:00Z");
+    runHook(later.ctx, startup, later.deps);
+    expect(later.spawned).toEqual([["/cx", "hook", "acquire"]]); // a newly published release is not suppressed forever
   });
   test("stdout is either empty or exactly one JSON object with only systemMessage", () => {
     const { ctx, deps } = setup({}, "0.153.0");

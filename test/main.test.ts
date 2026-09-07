@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { main } from "../src/main";
+import { chmodSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import type { Context } from "../src/context";
+import type { Env } from "../src/env";
+import { USAGE, main, type MainDeps } from "../src/main";
 import { resolvePaths } from "../src/paths";
-import { tmpEnv } from "./helpers";
+import { fakeExec, tmpEnv, type RecordedCall } from "./helpers";
 
 const golden = readFileSync(new URL("./fixtures/payload-v1.json", import.meta.url), "utf8");
 
@@ -112,4 +115,91 @@ describe("main(['hook']) always exits 0", () => {
     const t = io("not json at all");
     expect(await main(["hook"], t.io)).toBe(0);
   });
+});
+
+// --- command dispatch -------------------------------------------------------
+
+/**
+ * A Context that cannot reach the owner's machine: a throwaway HOME, a runner that refuses every
+ * Rust tool, and no disk headroom for staging, so the prebuilt path stops at its own preflight
+ * instead of going near the network. What each command is asserted on is therefore *which*
+ * preflight it hit, which is exactly the dispatch decision under test.
+ */
+function dispatchDeps(): { deps: MainDeps; calls: RecordedCall[]; env: Env } {
+  const { env, root } = tmpEnv("cxstatusline test ");
+  const paths = resolvePaths(env);
+  const upstream = join(root, ".codex/packages/standalone/current/bin/codex");
+  mkdirSync(join(upstream, ".."), { recursive: true });
+  writeFileSync(upstream, "UPSTREAM-ELF");
+  chmodSync(upstream, 0o755);
+  mkdirSync(paths.binDir, { recursive: true });
+  symlinkSync(upstream, paths.wrapperPath);
+  const patchesDir = join(root, "patches");
+  mkdirSync(patchesDir, { recursive: true });
+  writeFileSync(join(patchesDir, "manifest.json"),
+    JSON.stringify({ version: 1, tag_prefix: "rust-v", patches: [{ min: "0.152.1", max: "0.152.1", file: "p.patch" }] }));
+  writeFileSync(join(patchesDir, "p.patch"), "");
+  const { run, calls } = fakeExec((cmd, args) => {
+    if (args[0] === "--version") return { stdout: "codex-cli 0.152.1\n" };
+    return {};
+  });
+  const context: NonNullable<MainDeps["context"]> = (_env, cio) => ({
+    env,
+    paths,
+    run,
+    // `rustup` absent: the compile preflight refuses by name, so a compile dispatch is unmistakable.
+    which: (cmd) => (cmd === "rustup" ? null : `/usr/bin/${cmd}`),
+    // Below MIN_STAGING_FREE_BYTES: the prebuilt preflight refuses before any download.
+    freeBytes: () => 1024,
+    cxBin: join(paths.binDir, "cxstatusline"),
+    patchesDir,
+    now: () => new Date("2026-09-02T12:00:00Z"),
+    // The seam replaces only *where* the Context comes from, not where its output goes.
+    log: cio.log,
+    say: cio.say,
+  });
+  return { deps: { context }, calls, env };
+}
+
+describe("command dispatch", () => {
+  const cases: readonly { argv: readonly string[]; code: number; expect: RegExp }[] = [
+    { argv: ["install"], code: 1, expect: /staging a prebuilt Codex pair needs 2 GiB/ },
+    { argv: ["install", "--compile"], code: 1, expect: /rustup is not on PATH/ },
+    { argv: ["patch"], code: 1, expect: /rustup is not on PATH/ },
+    { argv: ["patch", "--force"], code: 1, expect: /rustup is not on PATH/ },
+  ];
+  for (const c of cases) {
+    test(`\`${c.argv.join(" ")}\` reaches its own preflight`, async () => {
+      const t = io("");
+      const d = dispatchDeps();
+      expect(await main(c.argv, { ...t.io, env: d.env }, d.deps)).toBe(c.code);
+      expect(t.out.join("")).toMatch(c.expect);
+      expect(d.calls.some((k) => k.cmd === "cargo" || k.cmd === "rustup")).toBe(false);
+    });
+  }
+  test("`update` runs the upstream updater first, then the prebuilt path", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    expect(await main(["update"], { ...t.io, env: d.env }, d.deps)).toBe(1);
+    expect(d.calls.filter((k) => k.args[0] === "update")).toHaveLength(1);
+    expect(d.calls.find((k) => k.args[0] === "update")?.opts?.interactive).toBe(true);
+    expect(t.out.join("")).toMatch(/staging a prebuilt Codex pair needs 2 GiB/);
+  });
+  test("`hook acquire` acquires the prebuilt pair and never touches hooks.json", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    expect(await main(["hook", "acquire"], { ...t.io, env: d.env }, d.deps)).toBe(1);
+    expect(t.out.join("")).toMatch(/staging a prebuilt Codex pair needs 2 GiB/);
+    expect(existsSync(resolvePaths(d.env).hooksFile)).toBe(false);
+    expect(USAGE).not.toContain("acquire"); // internal: never advertised
+  });
+  for (const flag of [["--compiled"], ["--force"], ["--compile", "--force"]]) {
+    test(`install ${flag.join(" ")} is a usage error, not a default`, async () => {
+      const t = io("");
+      const d = dispatchDeps();
+      expect(await main(["install", ...flag], { ...t.io, env: d.env }, d.deps)).toBe(2);
+      expect(t.out).toEqual([]);
+      expect(t.err.join("")).toMatch(/usage/i);
+    });
+  }
 });

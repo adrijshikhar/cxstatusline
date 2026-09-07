@@ -71,7 +71,7 @@ export function doctorReport(ctx: Context): DoctorLine[] {
   const patched = state.patched_from ? parseSemver(state.patched_from) : null;
   const drift = (): DoctorLine => {
     if (!upstream || !patched) return line("drift", "n/a");
-    if (needsRepatch(upstream, patched, state.policy)) return line("drift", `rebuild due: ${patched.raw} -> ${upstream.raw}`, false);
+    if (needsRepatch(upstream, patched, state.policy)) return line("drift", `install due: ${patched.raw} -> ${upstream.raw}`, false);
     if (behindWithinMinor(upstream, patched)) return line("drift", `behind within minor: ${patched.raw} < ${upstream.raw} (held by policy; \`patch --force\` to pick up)`);
     return line("drift", "none", true);
   };

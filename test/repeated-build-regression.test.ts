@@ -39,29 +39,37 @@ for (const prior of ["none", "shipped", "conflict", "symlink"] as const) {
         } else writeFileSync(file, prior === "shipped" ? content : "owner data");
       }
       const bin = join(sourceDir, "codex-rs/target/release/codex");
+      const host = join(sourceDir, "codex-rs/target/release/codex-code-mode-host");
       mkdirSync(join(bin, ".."), { recursive: true });
       writeFileSync(join(bin, "..", "keep"), "cached");
       writeFileSync(join(sourceDir, "keep"), "untracked");
       let builds = 0;
+      let testRuns = 0;
       const run: Runner = (cmd, args, opts) => {
+        if (cmd === "cargo" && args[0] === "test") {
+          testRuns++;
+          return { status: 0, stdout: "", stderr: "" };
+        }
         if (cmd === "cargo") {
           builds++;
           writeFileSync(bin, "ELF");
+          writeFileSync(host, "HOST-ELF");
           return { status: 0, stdout: "", stderr: "" };
         }
         if (args[2] === "fetch") return { status: 0, stdout: "", stderr: "" };
         const r = spawnSync(cmd, [...args], { cwd: opts?.cwd, encoding: "utf8" });
         return { status: r.status, stdout: r.stdout, stderr: r.stderr };
       };
-      const build = () => buildPatched({ sourceDir, patchFile, tag: "rust-v0.153.0" }, run, () => {});
+      const build = () => buildPatched({ sourceDir, patchFile, tag: "rust-v0.153.0" }, run, () => {}, () => null);
       if (prior === "conflict" || prior === "symlink") {
         expect(build).toThrow(/snapshot|already exists/);
         expect(builds).toBe(0);
         expect(readFileSync(file, "utf8")).toBe(prior === "conflict" ? "owner data" : content);
       } else {
-        expect(build()).toBe(bin);
-        expect(build()).toBe(bin);
+        expect(build()).toMatchObject({ codex: bin, codexCodeModeHost: host, upstreamCommit: expect.stringMatching(/^[0-9a-f]{40}$/) });
+        expect(build()).toMatchObject({ codex: bin, codexCodeModeHost: host });
         expect(builds).toBe(2);
+        expect(testRuns).toBe(2); // the focused suite runs before every pair is handed back
         expect(readFileSync(file, "utf8")).toBe(content);
       }
       expect(readFileSync(join(sourceDir, "keep"), "utf8")).toBe("untracked");

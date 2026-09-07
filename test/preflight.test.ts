@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { MIN_FREE_BYTES, REQUIRED_TOOLCHAIN, preflight, realDeps, type PreflightDeps } from "../src/patch/preflight";
-import { fakeExec } from "./helpers";
+import { chmodSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { MIN_FREE_BYTES, MIN_STAGING_FREE_BYTES, REQUIRED_TOOLCHAIN, prebuiltPreflight, preflight, realDeps, type PreflightDeps } from "../src/patch/preflight";
+import { fakeExec, tmpEnv } from "./helpers";
 
 /** A machine where everything is present and the toolchain is correct. */
 const healthyRun = fakeExec((cmd, args) => {
@@ -66,5 +68,34 @@ describe("preflight", () => {
     const missing = join(root, "not", "created", "yet");
     expect(realDeps().freeBytes(missing)).toBeGreaterThan(0);
     expect(existsSync(missing)).toBe(false);
+  });
+});
+
+describe("prebuiltPreflight", () => {
+  const dirs = (root: string) => ({ libexecDir: join(root, ".local", "libexec", "cxstatusline"), binDir: join(root, ".local", "bin") });
+
+  test("a writable home with room to stage passes without asking about Rust", () => {
+    const { root } = tmpEnv();
+    const asked: string[] = [];
+    const r = prebuiltPreflight({ freeBytes: (p) => { asked.push(p); return MIN_STAGING_FREE_BYTES * 2; } }, dirs(root));
+    expect(r).toEqual({ ok: true });
+    expect(asked).toEqual([dirs(root).libexecDir]);
+  });
+  test("less than 2 GiB under libexec is refused before any download", () => {
+    const { root } = tmpEnv();
+    const r = prebuiltPreflight({ freeBytes: () => MIN_STAGING_FREE_BYTES - 1 }, dirs(root));
+    expect(r).toMatchObject({ ok: false, reason: expect.stringContaining("2 GiB") });
+  });
+  test("an unwritable destination is named", () => {
+    const { root } = tmpEnv();
+    const d = dirs(root);
+    mkdirSync(d.binDir, { recursive: true });
+    chmodSync(d.binDir, 0o500);
+    try {
+      const r = prebuiltPreflight({ freeBytes: () => MIN_STAGING_FREE_BYTES * 2 }, d);
+      expect(r).toMatchObject({ ok: false, reason: expect.stringContaining(d.binDir) });
+    } finally {
+      chmodSync(d.binDir, 0o700);
+    }
   });
 });

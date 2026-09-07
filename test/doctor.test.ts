@@ -118,9 +118,9 @@ describe("doctorReport", () => {
     writeState(paths.stateFile, { ...DEFAULT_STATE, patched_from: "0.152.1", upstream_bin: upstream });
     expect(get(doctorReport(c), "drift")).toMatchObject({ ok: null, value: expect.stringMatching(/behind within minor.*0\.152\.1.*0\.152\.3/) });
   });
-  test("rebuild due", () => {
+  test("install due", () => {
     const { c, paths, upstream } = ctx("0.153.0");
     writeState(paths.stateFile, { ...DEFAULT_STATE, patched_from: "0.152.1", upstream_bin: upstream });
-    expect(get(doctorReport(c), "drift")).toMatchObject({ ok: false, value: expect.stringMatching(/rebuild due.*0\.152\.1.*0\.153\.0/) });
+    expect(get(doctorReport(c), "drift")).toMatchObject({ ok: false, value: expect.stringMatching(/install due.*0\.152\.1.*0\.153\.0/) });
   });
 });

@@ -5,6 +5,13 @@ import type { Runner } from "../env";
 
 export const MIN_FREE_BYTES = 20 * 1024 ** 3;
 
+/**
+ * Headroom the default (prebuilt) install needs: one downloaded archive plus one extracted staging
+ * copy plus the generation it is copied into, all under `libexecDir`. Nothing like a source build,
+ * so the 20 GiB compile figure would refuse machines that can install perfectly well.
+ */
+export const MIN_STAGING_FREE_BYTES = 2 * 1024 ** 3;
+
 /** From `codex-rs/rust-toolchain.toml` at the supported tags. */
 export const REQUIRED_TOOLCHAIN = "1.95.0";
 export const REQUIRED_COMPONENTS = ["clippy", "rustfmt", "rust-src"] as const;
@@ -64,6 +71,33 @@ export function preflight(deps: PreflightDeps, shareDir: string): PreflightResul
   if (free < MIN_FREE_BYTES) {
     return no(`${gib(free)} free at ${shareDir}; a Codex release build needs 20 GiB`,
       "free disk space or point XDG_DATA_HOME elsewhere");
+  }
+  return { ok: true };
+}
+
+/**
+ * The default install path's preflight: no Rust, no source tree, no 20 GiB.
+ * What it does check is what a download-and-activate can still fail on late and expensively -
+ * a destination we cannot write, and not enough room to stage the pair before swapping it in.
+ */
+export function prebuiltPreflight(
+  deps: { freeBytes(path: string): number },
+  paths: { readonly libexecDir: string; readonly binDir: string },
+): PreflightResult {
+  for (const dir of [paths.libexecDir, paths.binDir]) {
+    // The nearest existing ancestor, so asking the question never creates the directory itself.
+    const probe = nearestExisting(dir);
+    try {
+      accessSync(probe, constants.W_OK);
+    } catch {
+      return no(`${probe} is not writable, so ${dir} cannot be installed into`,
+        `fix the permissions on ${probe}, then re-run`);
+    }
+  }
+  const free = deps.freeBytes(paths.libexecDir);
+  if (free < MIN_STAGING_FREE_BYTES) {
+    return no(`${gib(free)} free at ${paths.libexecDir}; staging a prebuilt Codex pair needs 2 GiB`,
+      "free disk space, then re-run");
   }
   return { ok: true };
 }

@@ -4,8 +4,8 @@ import { dirname } from "node:path";
 import type { Context } from "../context";
 import { acquireLock } from "../lock";
 import { describeLookup, preserveLauncherRestore, readUpstreamVersion, resolveUpstream } from "../codex/upstream";
-import { ensureWrapper, isOurWrapper } from "../patch/wrapper";
-import { readState, writeState, type State } from "../state";
+import { ensureWrapper, isOurWrapper, readInstallation } from "../patch/wrapper";
+import { readState, writeState, RELEASE_RETRY_AFTER_MS, RELEASE_UNAVAILABLE, type State } from "../state";
 import { needsRepatch, parseSemver, type SemVer } from "../version";
 
 export interface HookInput {
@@ -69,13 +69,18 @@ function locateUpstream(ctx: Context, state: State): Located | string {
  * whose `exec` target does not exist, which stops `codex` from starting at all.
  */
 function maintainWrapper(ctx: Context, messages: string[]): void {
-  if (!existsSync(ctx.paths.patchedBin)) {
-    messages.push(`cxstatusline: the patched binary ${ctx.paths.patchedBin} is missing; Codex is running unpatched. Run \`cxstatusline install\`.`);
-    return;
-  }
-  if (!existsSync(ctx.paths.patchedCodeModeHost)) {
-    messages.push(`cxstatusline: the required Code Mode host ${ctx.paths.patchedCodeModeHost} is missing; run \`cxstatusline install\` to restore it.`);
-    return;
+  // An active generation carries both executables by construction (installation.json is written
+  // last), so the flat-layout files are only worth checking when there is no generation at all -
+  // otherwise every healthy generation install would be reported as a broken one.
+  if (readInstallation(ctx.paths) === null) {
+    if (!existsSync(ctx.paths.patchedBin)) {
+      messages.push(`cxstatusline: the patched binary ${ctx.paths.patchedBin} is missing; Codex is running unpatched. Run \`cxstatusline install\`.`);
+      return;
+    }
+    if (!existsSync(ctx.paths.patchedCodeModeHost)) {
+      messages.push(`cxstatusline: the required Code Mode host ${ctx.paths.patchedCodeModeHost} is missing; run \`cxstatusline install\` to restore it.`);
+      return;
+    }
   }
   const w = ensureWrapper(ctx.paths, ctx.cxBin, true);
   if (w.kind === "replaced") {
@@ -83,6 +88,27 @@ function maintainWrapper(ctx: Context, messages: string[]): void {
   } else if (w.kind === "refused") {
     messages.push(`cxstatusline: ${w.reason}`);
   }
+}
+
+/**
+ * Should this SessionStart stay its hand because the last attempt for this exact version failed?
+ *
+ * A missing release is the one failure that fixes itself: CI publishes the pair a while after
+ * upstream ships, so it is retried after `RELEASE_RETRY_AFTER_MS` rather than suppressed forever.
+ * Every other failure is a machine-local problem that a retry would only repeat, so it is reported
+ * once and left to the user. An explicit `cxstatusline install` ignores all of this.
+ */
+function suppressed(ctx: Context, state: State, upstream: SemVer, messages: string[]): boolean {
+  const attempt = state.last_attempt;
+  if (!attempt || attempt.ok || attempt.version !== upstream.raw) return false;
+  if (attempt.reason !== RELEASE_UNAVAILABLE) {
+    messages.push(`cxstatusline: last install attempt for ${upstream.raw} failed: ${attempt.reason ?? "unknown"}. Fix the cause, then run \`cxstatusline install\`.`);
+    return true;
+  }
+  const at = Date.parse(attempt.at);
+  if (!Number.isFinite(at) || ctx.now().getTime() - at >= RELEASE_RETRY_AFTER_MS) return false;
+  messages.push(`cxstatusline: no prebuilt Codex ${upstream.raw} pair is published yet; will retry in a day. Run \`cxstatusline install\` to try now.`);
+  return true;
 }
 
 /** SessionStart handler. Never throws, never blocks, never builds inline. */
@@ -119,20 +145,17 @@ export function runHook(ctx: Context, stdin: string, deps: HookDeps): { stdout: 
   if (drift) {
     const release = acquireLock(ctx.paths.lockFile);
     if (!release) {
-      messages.push(`cxstatusline: rebuild for Codex ${upstream.raw} is already in progress; reopen Codex after it finishes.`);
+      messages.push(`cxstatusline: the install for Codex ${upstream.raw} is already in progress; reopen Codex after it finishes.`);
       return done();
     }
     release();
   }
 
-  if (state.last_attempt && !state.last_attempt.ok && state.last_attempt.version === upstream.raw) {
-    messages.push(`cxstatusline: last repatch for ${upstream.raw} failed: ${state.last_attempt.reason ?? "unknown"}. Fix the cause, then run \`cxstatusline patch --force\`.`);
-    return done();
-  }
+  if (suppressed(ctx, state, upstream, messages)) return done();
 
   if (drift) {
-    deps.spawnDetached(ctx.cxBin, ["patch"], ctx.paths.patchLog);
-    messages.push(`cxstatusline: Codex updated to ${upstream.raw} (patched from ${state.patched_from}). Rebuilding cxstatusline in the background - reopen Codex in a few minutes. Log: ${ctx.paths.patchLog}`);
+    deps.spawnDetached(ctx.cxBin, ["hook", "acquire"], ctx.paths.patchLog);
+    messages.push(`cxstatusline: Codex updated to ${upstream.raw} (installed pair is from ${state.patched_from}). Installing the new pair in the background - reopen Codex in a few minutes. Log: ${ctx.paths.patchLog}`);
   }
   return done();
 }

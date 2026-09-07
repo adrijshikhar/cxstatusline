@@ -1,134 +1,24 @@
-import { appendFileSync, existsSync, mkdirSync } from "node:fs";
+import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Context } from "../context";
 import { acquireLock } from "../lock";
-import { describeLookup, preserveLauncherRestore, readUpstreamVersion, resolveUpstream } from "../codex/upstream";
-import { readState, writeState, type State } from "../state";
-import { needsRepatch, parseSemver, type SemVer } from "../version";
-import { BuildError, buildPatched } from "./build";
-import { ManifestError, loadManifest, resolvePatch } from "./manifest";
-import { preflight } from "./preflight";
-import { installPatchedBinary, installWrapper, isOurWrapper } from "./wrapper";
+import type { TransportOptions } from "../distribution/transport";
 import { installHook } from "../hook/install";
+import { writeState } from "../state";
+import { parseSemver } from "../version";
+import { describeOutcome, loadState, runAcquisition, upstreamFor, type PatchOutcome } from "./acquire";
+import { ManifestError, loadManifest, resolvePatch } from "./manifest";
 
-export type PatchOutcome =
-  | { kind: "built"; version: string }
-  | { kind: "held"; upstream: string; patched: string }
-  | { kind: "refused"; reason: string }
-  | { kind: "locked" }
-  | { kind: "failed"; reason: string };
+export {
+  describeOutcome,
+  runAcquisition,
+  type AcquisitionOptions,
+  type AcquisitionSource,
+  type PatchOutcome,
+} from "./acquire";
 
-function loadState(ctx: Context): State {
-  const { state, corrupt } = readState(ctx.paths.stateFile);
-  if (corrupt) {
-    ctx.say(`state.json was corrupt; recovered what could be read from ${ctx.paths.stateFile}.bak (${ctx.paths.stateFile})`);
-  }
-  return state;
-}
-
-function recordFailure(ctx: Context, state: State, version: string, reason: string): void {
-  writeState(ctx.paths.stateFile, { ...state, last_attempt: { at: ctx.now().toISOString(), ok: false, version, reason } });
-}
-
-interface Located {
-  readonly state: State;
-  readonly bin: string;
-}
-
-/** Current external launcher/PATH wins; the saved release is only a last resort. */
-function upstreamFor(ctx: Context, state: State): Located | { reason: string } {
-  const found = resolveUpstream(ctx.paths, ctx.env, isOurWrapper, state.upstream_bin);
-  if (found.kind !== "found") return { reason: describeLookup(found) };
-  const launcher_restore = preserveLauncherRestore(state.launcher_restore, found.launcher_restore);
-  return { state: { ...state, upstream_bin: found.bin, launcher_restore }, bin: found.bin };
-}
-
-/**
- * Everything that can write `state.json` runs under the lock.
- * Why the lock is taken first: `recordFailure` used to run outside it while the success write ran
- * inside, so two concurrent `patch` runs could interleave their `last_attempt` records.
- */
-export function runPatch(ctx: Context, opts: { force: boolean }): PatchOutcome {
-  const release = acquireLock(ctx.paths.lockFile);
-  if (!release) return { kind: "locked" };
-  try {
-    return runPatchLocked(ctx, loadState(ctx), opts);
-  } finally {
-    release();
-  }
-}
-
-function runPatchLocked(ctx: Context, initial: State, opts: { force: boolean }): PatchOutcome {
-  const located = upstreamFor(ctx, initial);
-  if ("reason" in located) {
-    recordFailure(ctx, initial, "unknown", located.reason);
-    return { kind: "refused", reason: located.reason };
-  }
-  const state = located.state;
-  // Persist the resolved upstream_bin/launcher_restore immediately - before the `held` check and
-  // long before build()'s wrapper/binary mutation. If build()'s own final writeState later fails
-  // (e.g. a full XDG_STATE_HOME right after a multi-GB cargo build), this earlier write is what
-  // lets `revert` still find its way back to upstream.
-  writeState(ctx.paths.stateFile, state);
-  const upstream = readUpstreamVersion(located.bin, ctx.run);
-  if (!upstream) {
-    const reason = `could not read a version from ${located.bin} --version`;
-    recordFailure(ctx, state, "unknown", reason);
-    return { kind: "refused", reason };
-  }
-  const patched = state.patched_from ? parseSemver(state.patched_from) : null;
-  if (!opts.force && !needsRepatch(upstream, patched, state.policy)) {
-    return { kind: "held", upstream: upstream.raw, patched: state.patched_from ?? "never" };
-  }
-  // Why the try: `loadManifest` throws on a missing or malformed manifest, and "patch resolution
-  // fails closed" means a refusal the caller can print, not an uncaught stack trace.
-  let ref: { file: string; tag: string } | null;
-  try {
-    ref = resolvePatch(loadManifest(ctx.patchesDir), upstream);
-  } catch (e) {
-    const reason = e instanceof ManifestError ? e.message : `patches/manifest.json could not be read: ${String(e)}`;
-    recordFailure(ctx, state, upstream.raw, reason);
-    return { kind: "refused", reason };
-  }
-  if (!ref) {
-    const reason = `Codex ${upstream.raw} is outside every supported range in patches/manifest.json; refusing to patch`;
-    recordFailure(ctx, state, upstream.raw, reason);
-    return { kind: "refused", reason };
-  }
-  const pf = preflight({ which: ctx.which, run: ctx.run, freeBytes: ctx.freeBytes }, ctx.paths.shareDir);
-  if (!pf.ok) {
-    const reason = `${pf.reason}. Fix: ${pf.fix}`;
-    recordFailure(ctx, state, upstream.raw, reason);
-    return { kind: "refused", reason };
-  }
-  return build(ctx, state, located.bin, upstream, ref);
-}
-
-function build(ctx: Context, state: State, upstreamBin: string, upstream: SemVer, ref: { file: string; tag: string }): PatchOutcome {
-  try {
-    const bin = buildPatched(
-      { tag: ref.tag, sourceDir: ctx.paths.sourceDir, patchFile: join(ctx.patchesDir, ref.file) },
-      ctx.run,
-      ctx.log,
-    );
-    installPatchedBinary(bin, upstreamBin, ctx.paths);
-    const placed = installWrapper(ctx.paths, ctx.cxBin);
-    if (placed.kind === "refused") {
-      recordFailure(ctx, state, upstream.raw, placed.reason);
-      return { kind: "refused", reason: placed.reason };
-    }
-    writeState(ctx.paths.stateFile, {
-      ...state,
-      patched_from: upstream.raw,
-      last_attempt: { at: ctx.now().toISOString(), ok: true, version: upstream.raw },
-    });
-    return { kind: "built", version: upstream.raw };
-  } catch (e) {
-    const reason = e instanceof BuildError ? e.message : `unexpected: ${String(e)}`;
-    recordFailure(ctx, state, upstream.raw, reason);
-    return { kind: "failed", reason };
-  }
-}
+/** The repository the fallback advice points at, and the only one its issue lookup ever queries. */
+const REPO = "adrijshikhar/cxstatusline";
 
 /** Pretend we were patched from `version` so the next SessionStart sees drift. Nothing else changes. */
 export function simulateDrift(ctx: Context, version: string): string {
@@ -138,14 +28,95 @@ export function simulateDrift(ctx: Context, version: string): string {
   try {
     const state = loadState(ctx);
     writeState(ctx.paths.stateFile, { ...state, patched_from: version });
-    return `state.json now claims the patched binary was built from ${version}. Start a Codex session: the hook should detect drift, rebuild detached, and the session after that should run the new binary.`;
+    return `state.json now claims the installed pair came from ${version}. Start a Codex session: the hook should detect drift, install in the background, and the session after that should run the new pair.`;
   } finally {
     release();
   }
 }
 
-/** `codex update` -> upstream's own updater, then repatch. */
-export function runUpdate(ctx: Context): number {
+/** True when `patches/manifest.json` covers this exact version, so `--compile` is real advice. */
+function manifestCovers(ctx: Context, version: string): boolean {
+  const parsed = parseSemver(version);
+  if (!parsed) return false;
+  try {
+    return resolvePatch(loadManifest(ctx.patchesDir), parsed) !== null;
+  } catch (e) {
+    if (e instanceof ManifestError) return false;
+    throw e;
+  }
+}
+
+/**
+ * The one tracking issue for this blocked version, if it exists.
+ * Deliberately silent when `gh` is missing or unhappy: a broken lookup is not news, and a link we
+ * cannot confirm exists is worse than no link.
+ */
+function blockedIssueUrl(ctx: Context, version: string): string | null {
+  if (!ctx.which("gh")) return null;
+  const title = `Prebuilt blocked: Codex ${version}`;
+  const r = ctx.run("gh", ["issue", "list", "--repo", REPO, "--search", title, "--state", "all", "--json", "title,url", "--limit", "30"]);
+  if (r.status !== 0) return null;
+  try {
+    const rows = JSON.parse(r.stdout) as unknown;
+    if (!Array.isArray(rows)) return null;
+    const hit = rows.find((row): row is { title: string; url: string } =>
+      typeof row === "object" && row !== null
+      && (row as { title?: unknown }).title === title
+      && typeof (row as { url?: unknown }).url === "string");
+    return hit ? hit.url : null;
+  } catch {
+    return null;
+  }
+}
+
+/** What a user can actually do after `unavailable`. Never suggests a build that cannot work. */
+export function fallbackAdvice(ctx: Context, version: string): string[] {
+  if (manifestCovers(ctx, version)) {
+    return [`Run \`cxstatusline install --compile\` to build Codex ${version} from source instead.`];
+  }
+  const lines = [`Neither a prebuilt release nor a local patch is available for Codex ${version}; the pair you already have is untouched.`];
+  const url = blockedIssueUrl(ctx, version);
+  if (url) lines.push(`Tracking issue: ${url}`);
+  return lines;
+}
+
+function report(ctx: Context, outcome: PatchOutcome): void {
+  ctx.say(describeOutcome(outcome));
+  if (outcome.kind === "unavailable") for (const line of fallbackAdvice(ctx, outcome.version)) ctx.say(line);
+}
+
+/** `cxstatusline patch [--force]`: the explicit compile-from-source path. */
+export function runPatch(ctx: Context, opts: { force: boolean }): Promise<PatchOutcome> {
+  return runAcquisition(ctx, { source: "compiled", force: opts.force });
+}
+
+/**
+ * `cxstatusline install [--compile]`: acquire a pair, then merge the SessionStart hook.
+ * Why the hook write is caught: the pair is already active at that point, so a hand-broken
+ * hooks.json must not make `install` look like it did nothing.
+ */
+export async function runInstall(ctx: Context, opts: { compile: boolean }, transport: TransportOptions = {}): Promise<number> {
+  const outcome = await runAcquisition(ctx, { source: opts.compile ? "compiled" : "prebuilt", force: true }, transport);
+  report(ctx, outcome);
+  if (outcome.kind !== "installed") return 1;
+  try {
+    const r = installHook(ctx.paths.hooksFile, ctx.cxBin);
+    ctx.say(`hook ${r} in ${ctx.paths.hooksFile}`);
+    if (r === "added") ctx.say("Start Codex once and accept the cxstatusline hook when prompted.");
+    return 0;
+  } catch (e) {
+    ctx.say(`Codex ${outcome.version} is installed, but the SessionStart hook could not be written: ${String(e)}`);
+    ctx.say(`Fix ${ctx.paths.hooksFile} by hand, then run \`cxstatusline hook install\`.`);
+    return 1;
+  }
+}
+
+/**
+ * `codex update` -> upstream's own updater, then the prebuilt pair for whatever it landed on.
+ * Never falls back to compiling: an update that cannot find its release leaves the working pair
+ * exactly where it is, and says so.
+ */
+export async function runUpdate(ctx: Context, transport: TransportOptions = {}): Promise<number> {
   const state = loadState(ctx);
   const located = upstreamFor(ctx, state);
   if ("reason" in located) {
@@ -157,52 +128,17 @@ export function runUpdate(ctx: Context): number {
   // always "" in this mode - never interpolate it into a message.
   const r = ctx.run(located.bin, ["update"], { interactive: true });
   if (r.status !== 0) {
-    ctx.say(`upstream updater exited ${String(r.status)}; see its output above. Not repatching.`);
+    ctx.say(`upstream updater exited ${String(r.status)}; see its output above. Not installing.`);
     return 1;
   }
-  const outcome = runPatch(ctx, { force: true });
-  ctx.say(describeOutcome(outcome));
-  return outcome.kind === "built" ? 0 : 1;
-}
-
-/** Named `describeOutcome`, not `describe`, so test files can import it next to bun:test's `describe`. */
-export function describeOutcome(o: PatchOutcome): string {
-  switch (o.kind) {
-    case "built": return `patched Codex ${o.version} installed`;
-    case "held": return `holding: upstream ${o.upstream}, patched from ${o.patched} (policy). Use --force to rebuild anyway.`;
-    case "refused": return `refused: ${o.reason}`;
-    case "locked": return "another cxstatusline patch is already running";
-    case "failed": return `build failed: ${o.reason}`;
-  }
-}
-
-/**
- * `cxstatusline install`: force a patch, then merge the SessionStart hook.
- * Why the hook write is caught: the patched binary is already installed at that point, so a
- * hand-broken hooks.json must not make `install` look like it did nothing.
- */
-export function runInstall(ctx: Context): number {
-  const outcome = runPatch(ctx, { force: true });
-  ctx.say(describeOutcome(outcome));
-  if (outcome.kind !== "built") return 1;
-  try {
-    const r = installHook(ctx.paths.hooksFile, ctx.cxBin);
-    ctx.say(`hook ${r} in ${ctx.paths.hooksFile}`);
-    if (r === "added") ctx.say("Start Codex once and accept the cxstatusline hook when prompted.");
-    return 0;
-  } catch (e) {
-    ctx.say(`the patched binary is installed, but the SessionStart hook could not be written: ${String(e)}`);
-    ctx.say(`Fix ${ctx.paths.hooksFile} by hand, then run \`cxstatusline hook install\`.`);
-    return 1;
-  }
+  // Upstream just moved: runAcquisition re-resolves the launcher and re-reads its version rather
+  // than trusting anything read before the updater ran.
+  const outcome = await runAcquisition(ctx, { source: "prebuilt", force: true }, transport);
+  report(ctx, outcome);
+  return outcome.kind === "installed" ? 0 : 1;
 }
 
 export function appendLog(file: string, line: string): void {
   mkdirSync(join(file, ".."), { recursive: true });
   appendFileSync(file, `${new Date().toISOString()} ${line}\n`);
-}
-
-/** True when a patched binary is on disk - the proof `ensureWrapper` requires. */
-export function patchedBinPresent(ctx: Context): boolean {
-  return existsSync(ctx.paths.patchedBin) && existsSync(ctx.paths.patchedCodeModeHost);
 }
