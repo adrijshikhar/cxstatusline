@@ -1,4 +1,5 @@
 import { existsSync, lstatSync, readdirSync, rmSync, symlinkSync } from "node:fs";
+import { join } from "node:path";
 import type { Context } from "../context";
 import { uninstallHook } from "../hook/install";
 import { acquireLock, lockHolder } from "../lock";
@@ -61,6 +62,29 @@ function removeGenerations(ctx: Context, actions: string[]): void {
   if (readdirSync(generationsDir).length === 0) rmSync(generationsDir, { recursive: true, force: true });
 }
 
+/**
+ * The only names cxstatusline ever creates directly under `libexecDir` besides `current` and
+ * `generations`: a staged pointer (`current.<hex>` from `swapPointer`), a prebuilt download
+ * (`download-*`), an extracted prebuilt pair (`staging-*`) and a compiled pair (`compiled-*`).
+ * A crash between staging and activation leaves one behind, and nothing else ever removes it.
+ */
+const OWNED_LIBEXEC_PREFIXES: readonly string[] = ["current.", "staging-", "download-", "compiled-"];
+
+/**
+ * Leftover staging debris directly under `libexecDir`. Only these four prefixes, only the entry
+ * itself: `rmSync` unlinks a symlink rather than following it, so a staged pointer's target is
+ * never touched, and anything the owner put there is left exactly where it is.
+ */
+function removeStagingDebris(ctx: Context, actions: string[]): void {
+  const { libexecDir } = ctx.paths;
+  if (!existsSync(libexecDir)) return;
+  const debris = readdirSync(libexecDir).filter((n) => OWNED_LIBEXEC_PREFIXES.some((p) => n.startsWith(p)));
+  for (const name of debris) rmSync(join(libexecDir, name), { recursive: true, force: true });
+  if (debris.length > 0) {
+    actions.push(`removed ${debris.length} leftover staging entr${debris.length === 1 ? "y" : "ies"} from ${libexecDir}`);
+  }
+}
+
 function revertLocked(ctx: Context): RevertResult {
   const actions: string[] = [];
   let code: 0 | 1 = 0;
@@ -83,6 +107,7 @@ function revertLocked(ctx: Context): RevertResult {
     }
   }
   removeGenerations(ctx, actions);
+  removeStagingDebris(ctx, actions);
   // The owner's pre-generations flat layout. The release notes call the transition an explicit
   // revert/reinstall, so `revert` still has to be able to clean up what that layout left behind.
   if (existsSync(ctx.paths.patchedBin)) {

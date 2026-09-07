@@ -47,6 +47,33 @@ describe("revert", () => {
     expect(actions.actions.join("\n")).toMatch(/restored.*symlink/);
     expect(actions.code).toBe(0);
   });
+  test("removes only its own staging debris directly under libexec", () => {
+    const { env, root } = tmpEnv();
+    const paths = resolvePaths(env);
+    mkdirSync(paths.libexecDir, { recursive: true });
+    // Ours: the four prefixes a crash between staging and activation can leave behind.
+    mkdirSync(join(paths.libexecDir, "staging-abc123"), { recursive: true });
+    writeFileSync(join(paths.libexecDir, "staging-abc123", "codex"), "ELF");
+    mkdirSync(join(paths.libexecDir, "download-abc123"), { recursive: true });
+    mkdirSync(join(paths.libexecDir, "compiled-abc123"), { recursive: true });
+    const pointerTarget = join(root, "pointer-target");
+    mkdirSync(pointerTarget, { recursive: true });
+    symlinkSync(pointerTarget, join(paths.libexecDir, "current.deadbeef"));
+    // Not ours: an unrelated name and a similarly named file the owner put there.
+    mkdirSync(join(paths.libexecDir, "owner-backup"), { recursive: true });
+    writeFileSync(join(paths.libexecDir, "notes.txt"), "keep me");
+
+    const result = revert(context(env));
+
+    expect(existsSync(join(paths.libexecDir, "staging-abc123"))).toBe(false);
+    expect(existsSync(join(paths.libexecDir, "download-abc123"))).toBe(false);
+    expect(existsSync(join(paths.libexecDir, "compiled-abc123"))).toBe(false);
+    expect(existsSync(join(paths.libexecDir, "current.deadbeef"))).toBe(false);
+    expect(existsSync(pointerTarget)).toBe(true); // the symlink was unlinked, not followed
+    expect(existsSync(join(paths.libexecDir, "owner-backup"))).toBe(true);
+    expect(readFileSync(join(paths.libexecDir, "notes.txt"), "utf8")).toBe("keep me");
+    expect(result.actions.join("\n")).toMatch(/removed 4 leftover staging entries/);
+  });
   test("with no recorded symlink the wrapper is simply removed", () => {
     const { env } = tmpEnv();
     const paths = resolvePaths(env);

@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { validateManifest, type ExpectedRelease, type ReleaseManifest } from "../../src/distribution";
 import { ghText, type GhRunner } from "./gh";
 import { parseChecksums, sha256File } from "./pack";
+import { redact } from "./redact";
 
 /** Asset names are our own, but they still index into a filesystem and a `--pattern`. */
 export const SAFE_ASSET_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$/;
@@ -156,7 +157,9 @@ export function inspectRelease(run: GhRunner, tag: string): ReleaseView {
     if (/release not found|not found|HTTP 404/i.test(result.stderr)) {
       return { state: "absent", url: "", body: "", assets: [] };
     }
-    throw new Error(`gh release view ${tag} failed (exit ${result.status}): ${result.stderr.trim()}`);
+    // gh's stderr can carry a token or a presigned URL, and this message reaches a step summary
+    // and an issue body.
+    throw new Error(`gh release view ${tag} failed (exit ${result.status}): ${redact(result.stderr.trim())}`);
   }
   const raw = JSON.parse(result.stdout) as {
     isDraft?: unknown;

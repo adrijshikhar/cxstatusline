@@ -10,6 +10,12 @@ const REPO = "adrijshikhar/cxstatusline";
 
 const MAX_REDIRECTS = 5;
 const REQUEST_TIMEOUT_MS = 60_000;
+/**
+ * `gh release download` has to move a whole archive, so it gets far longer than an HTTP request -
+ * but it still gets a bound. Without one, a stalled transfer hangs the install (and, through the
+ * SessionStart hook, a background install) forever.
+ */
+const GH_TIMEOUT_MS = 600_000;
 const REDIRECT_STATUS = new Set([301, 302, 303, 307, 308]);
 
 /** Asset size ceilings. Nothing in the release can raise them. */
@@ -174,7 +180,11 @@ async function ghDownload(
   if (ctx.which("gh") === null) {
     throw new GhMissingError(`${asset} is not public for release ${tag} and GitHub CLI (gh) is not installed`);
   }
-  const result = ctx.run("gh", ["release", "download", tag, "--repo", REPO, "--pattern", asset, "--dir", dirname(dest)]);
+  const result = ctx.run(
+    "gh",
+    ["release", "download", tag, "--repo", REPO, "--pattern", asset, "--dir", dirname(dest)],
+    { timeoutMs: GH_TIMEOUT_MS },
+  );
   if (result.status !== 0) {
     const detail = sanitize(result.stderr || result.stdout);
     if (/auth|logged in|log in|login|credential/i.test(detail)) {

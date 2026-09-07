@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { validateManifest, type Platform, type ReleaseManifest } from "../../src/distribution";
+import { validateManifest, type Artifact, type Platform, type ReleaseManifest } from "../../src/distribution";
 import { extractArchive } from "../../src/distribution/archive";
 import { validateLinkage, validateVersion } from "../ci-prebuilt";
 import { ARCHIVE_ENTRIES, parseChecksums, sha256File } from "./pack";
@@ -76,9 +76,13 @@ function readManifest(outDir: string, o: VerifyOptions): ReleaseManifest {
   });
 }
 
-/** Every staged member's bytes must equal the digest the manifest published for it. */
-async function checkExtractedDigests(staged: string, manifest: ReleaseManifest, checks: string[]): Promise<void> {
-  const files = manifest.artifacts[0]!.files;
+/**
+ * Every staged member's bytes must equal the digest the manifest published for it - for the
+ * artifact the archive was actually chosen from, not `artifacts[0]`: the schema permits two, and
+ * comparing an arm64 extract against the x64 artifact's digests would fail for the wrong reason.
+ */
+async function checkExtractedDigests(staged: string, artifact: Artifact, checks: string[]): Promise<void> {
+  const files = artifact.files;
   for (const name of ARCHIVE_ENTRIES) {
     const actual = await sha256File(join(staged, name));
     const expected = files[name];
@@ -137,7 +141,7 @@ export async function verifyOutput(o: VerifyOptions): Promise<VerifyReport> {
   try {
     await extractArchive(archivePath, staged);
     checks.push("archive passes the installer's five-file validator");
-    await checkExtractedDigests(staged, manifest, checks);
+    await checkExtractedDigests(staged, artifact, checks);
     if (o.skipMacho) checks.push("Mach-O arch/linkage/minos SKIPPED");
     else checkMachO(staged, o, checks);
     checkSmoke(staged, o, checks);

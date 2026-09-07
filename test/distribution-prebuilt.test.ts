@@ -342,6 +342,24 @@ test("a body shorter than its content-length is refused as truncated", async () 
   expect(libexecEntries(ctx)).toEqual([]);
 });
 
+test("a body with no content-length that streams past the ceiling is refused mid-stream", async () => {
+  const { ctx } = prebuiltCtx();
+  // No content-length header, so the declared-size check cannot catch this: only the running byte
+  // count can. The manifest ceiling is 1 MiB; this body would be 2 MiB if it were allowed to run.
+  const chunk = new Uint8Array(256 * 1024).fill(0x7b);
+  const stub: FetchLike = async () =>
+    new Response(
+      new ReadableStream<Uint8Array>({
+        pull(controller) {
+          controller.enqueue(chunk);
+        },
+      }),
+      { status: 200 },
+    );
+  await expect(preparePrebuilt(ctx, EXPECTED, { fetch: stub, baseUrl: NOWHERE })).rejects.toThrow(/larger than the/);
+  expect(libexecEntries(ctx)).toEqual([]);
+});
+
 test("a redirect off https is refused", async () => {
   const { ctx } = prebuiltCtx();
   const stub: FetchLike = async () =>

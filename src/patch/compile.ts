@@ -1,4 +1,4 @@
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, statSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { Context } from "../context";
@@ -43,11 +43,19 @@ function stage(ctx: Context, built: BuildResult): { directory: string; executabl
     "codex-code-mode-host": built.codexCodeModeHost,
   };
   const executables: Partial<Record<"codex" | "codex-code-mode-host", FileDigest>> = {};
-  for (const name of GENERATION_EXECUTABLES) {
-    const target = join(directory, name);
-    copyFileSync(sources[name], target);
-    chmodSync(target, 0o755);
-    executables[name] = digestOf(target);
+  // A failed copy or chmod would otherwise leave a half-populated `compiled-*` directory under
+  // `libexecDir` that nothing ever removes, and that `revert` then has to explain. Mirrors
+  // `stageArchive` in src/distribution/prebuilt.ts.
+  try {
+    for (const name of GENERATION_EXECUTABLES) {
+      const target = join(directory, name);
+      copyFileSync(sources[name], target);
+      chmodSync(target, 0o755);
+      executables[name] = digestOf(target);
+    }
+  } catch (e) {
+    rmSync(directory, { recursive: true, force: true });
+    throw e;
   }
   return {
     directory,

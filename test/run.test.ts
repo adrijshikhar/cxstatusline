@@ -22,6 +22,8 @@ interface Options {
   upstreamVersion?: string;
   which?: (c: string) => string | null;
   cargoFails?: boolean;
+  /** cargo exits 0 but one built path cannot be copied, so staging fails half-way. */
+  hostUnusable?: boolean;
   manifest?: string;
   freeBytes?: (p: string) => number;
   gh?: (args: readonly string[]) => Partial<RunResult>;
@@ -59,7 +61,10 @@ function ctx(over: Options = {}) {
       for (const name of ["codex", "codex-code-mode-host"]) {
         const bin = join(paths.sourceDir, "codex-rs/target/release", name);
         mkdirSync(join(bin, ".."), { recursive: true });
-        writeFileSync(bin, `ELF-${name}`);
+        // A directory passes buildPatched's exists/non-empty check and then fails the copy, which
+        // is what an unusable build output looks like from the stager's side.
+        if (over.hostUnusable && name === "codex-code-mode-host") mkdirSync(bin, { recursive: true });
+        else writeFileSync(bin, `ELF-${name}`);
       }
       return {};
     }
@@ -117,6 +122,14 @@ describe("runAcquisition (compiled)", () => {
     expect(existsSync(paths.lockFile)).toBe(false);
     expect(readFileSync(real, "utf8")).toBe("UPSTREAM-ELF"); // upstream never written
     expect(strayStaging(paths)).toEqual([]); // the staging directory is removed
+  });
+  test("a staging failure removes the half-written compiled- directory", async () => {
+    const { c, paths } = ctx({ hostUnusable: true });
+    const outcome = await runAcquisition(c, { source: "compiled", force: false });
+    expect(outcome.kind).toBe("failed");
+    // The first executable was already copied when the second one failed; nothing may survive.
+    expect(strayStaging(paths)).toEqual([]);
+    expect(readInstallation(paths)).toBeNull();
   });
   test("a newer launcher wins over the saved upstream_bin", async () => {
     const { c, paths, root } = ctx({ upstreamVersion: "0.153.0" });
