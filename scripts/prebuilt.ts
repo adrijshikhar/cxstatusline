@@ -1,290 +1,35 @@
 /**
- * Prebuilt release CLI: `detect | build | package | verify`.
+ * Prebuilt release CLI: `detect | build | package | verify | publish | report`.
  *
  * Runs under `bun` in CI but stays Node-API-only, like `scripts/ci-prebuilt.ts`. Every subprocess
  * is invoked with an argument array - upstream tags and versions come from the network, so nothing
- * is ever handed to a shell. The pure helpers live in `scripts/prebuilt/*` and are re-exported
- * here for `test/prebuilt.test.ts`.
+ * is ever handed to a shell. The subcommands live in `scripts/prebuilt/cli-*.ts`, the logic they
+ * call in the other `scripts/prebuilt/*` modules, and `./prebuilt/api` re-exports the tested
+ * surface so `test/prebuilt*.test.ts` has one import path.
  */
-import { execFileSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { platformFor, validateManifest } from "../src/distribution";
-import { loadManifest } from "../src/patch/manifest";
-import {
-  blockedIssueTitle,
-  resolveDetection,
-  selectStableVersion,
-  UncoveredUpstreamError,
-  UNCOVERED_EXIT_CODE,
-  type Detection,
-} from "./prebuilt/detect";
-import { buildManifest, workflowUrlFromEnv, type ManifestInput } from "./prebuilt/manifest";
-import {
-  ARCHIVE_ENTRIES,
-  ARCHIVE_MTIME,
-  archiveFilename,
-  assembleStaging,
-  fileDigests,
-  packArchive,
-  parseChecksums,
-  sha256File,
-  writeChecksums,
-} from "./prebuilt/pack";
-import { validateMinos, verifyOutput } from "./prebuilt/verify";
+import { runBuild, runPackage, runVerify } from "./prebuilt/cli-build";
+import { runDetect } from "./prebuilt/cli-detect";
+import { runPublish, runReportCommand } from "./prebuilt/cli-publish";
+import { parseFlags } from "./prebuilt/env";
 
-export {
-  ARCHIVE_ENTRIES,
-  ARCHIVE_MTIME,
-  archiveFilename,
-  assembleStaging,
-  blockedIssueTitle,
-  buildManifest,
-  fileDigests,
-  packArchive,
-  parseChecksums,
-  resolveDetection,
-  selectStableVersion,
-  sha256File,
-  UncoveredUpstreamError,
-  UNCOVERED_EXIT_CODE,
-  validateMinos,
-  verifyOutput,
-  workflowUrlFromEnv,
-  writeChecksums,
-};
-export type { Detection, ManifestInput };
-
-const root = resolve(import.meta.dir, "..");
-const RELEASES_URL = "https://api.github.com/repos/openai/codex/releases?per_page=100";
-const HEX40 = /^[0-9a-f]{40}$/;
-
-// ---- argv ----
-
-/** `--flag value` / `--flag` only. Positional arguments are a usage error, never a silent default. */
-function parseFlags(argv: readonly string[]): Record<string, string> {
-  const flags: Record<string, string> = {};
-  for (let i = 0; i < argv.length; i += 1) {
-    const token = argv[i]!;
-    if (!token.startsWith("--")) throw new Error(`unexpected argument ${JSON.stringify(token)}`);
-    const next = argv[i + 1];
-    if (next === undefined || next.startsWith("--")) flags[token.slice(2)] = "true";
-    else {
-      flags[token.slice(2)] = next;
-      i += 1;
-    }
-  }
-  return flags;
-}
-
-function required(flags: Record<string, string>, name: string): string {
-  const value = flags[name];
-  if (value === undefined || value === "true") throw new Error(`--${name} is required`);
-  return value;
-}
-
-// ---- shared helpers ----
-
-function git(args: readonly string[]): string {
-  return execFileSync("git", [...args], { encoding: "utf8", timeout: 300_000, maxBuffer: 8 * 1024 * 1024 }).trim();
-}
-
-function cxVersion(): string {
-  const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { version?: unknown };
-  if (typeof pkg.version !== "string") throw new Error("package.json has no version");
-  return pkg.version;
-}
-
-function patchesDir(): string {
-  return join(root, "patches");
-}
-
-/**
- * Recursive deletion of a caller-supplied path, but only when the directory still looks like the
- * thing we put there. A self-hosted runner reuses its workspace, so these directories do have to
- * be reset - and a mistyped `--upstream /Users/me` must not be what does it.
- */
-export function resetDirectory(dir: string, looksOurs: (entries: readonly string[]) => boolean): void {
-  if (!existsSync(dir)) return;
-  const entries = readdirSync(dir);
-  if (entries.length > 0 && !looksOurs(entries)) {
-    throw new Error(`refusing to delete ${dir}: it does not look like a directory this script created`);
-  }
-  rmSync(dir, { recursive: true, force: true });
-}
-
-function emit(values: Record<string, string>): void {
-  const body = Object.entries(values).map(([k, v]) => `${k}=${v}\n`).join("");
-  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, body);
-  process.stdout.write(body);
-}
-
-function summary(lines: readonly string[]): void {
-  const body = `${lines.join("\n")}\n`;
-  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, body);
-  process.stderr.write(body);
-}
-
-// ---- detect ----
-
-async function fetchUpstreamReleases(): Promise<unknown> {
-  const headers: Record<string, string> = { accept: "application/vnd.github+json", "user-agent": "cxstatusline-prebuilt" };
-  const token = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN;
-  if (token) headers.authorization = `Bearer ${token}`;
-  const response = await fetch(RELEASES_URL, { headers, signal: AbortSignal.timeout(30_000) });
-  if (!response.ok) throw new Error(`upstream release listing failed with HTTP ${response.status}`);
-  return response.json();
-}
-
-/**
- * Resolve the release inputs. `--codex-version` (anything but `auto`) pins the version; otherwise
- * the highest stable upstream release is chosen and must be covered by `patches/manifest.json`.
- *
- * Exit codes are deliberately narrow: only `UncoveredUpstreamError` - the highest stable upstream
- * moved past every supported patch - is "blocked, not broken" (`UNCOVERED_EXIT_CODE` with the
- * blocked-issue summary Task 7 keys its issue upsert on). A malformed `patches/manifest.json` or a
- * non-stable `--codex-version` is a plain infrastructure/input error: exit 1, no blocked summary,
- * so it is never mistaken for upstream-uncovered.
- */
-async function runDetect(flags: Record<string, string>): Promise<void> {
-  const requested = flags["codex-version"];
-  const pinned = requested !== undefined && requested !== "auto" && requested !== "true";
-  const releases = flags["releases-file"] !== undefined
-    ? (JSON.parse(readFileSync(flags["releases-file"], "utf8")) as unknown)
-    : null;
-  const codexVersion = pinned ? requested! : selectStableVersion(releases ?? (await fetchUpstreamReleases()));
-  const cx = cxVersion();
-  const manifest = loadManifest(patchesDir());
-  let detection: Detection;
-  try {
-    detection = resolveDetection(manifest, codexVersion, cx);
-  } catch (e) {
-    if (!(e instanceof UncoveredUpstreamError)) throw e;
-    summary([`## ${blockedIssueTitle(codexVersion)}`, "", e.message]);
-    process.exit(UNCOVERED_EXIT_CODE);
-  }
-  if (!existsSync(join(patchesDir(), detection.patchFile))) {
-    throw new Error(`patches/${detection.patchFile} is referenced by the manifest but missing from the checkout`);
-  }
-  emit({
-    codex_version: detection.codexVersion,
-    cx_version: detection.cxVersion,
-    tag: detection.tag,
-    upstream_tag: detection.upstreamTag,
-    patch_file: detection.patchFile,
-    source: pinned ? "dispatch" : "auto",
-  });
-}
-
-// ---- build ----
-
-/**
- * Clone the exact upstream tag and apply the exact supported patch. `--check` first so a conflict
- * fails before the index is touched; the patch is never edited and the source is never fixed up.
- */
-async function runBuild(flags: Record<string, string>): Promise<void> {
-  const detection = resolveDetection(loadManifest(patchesDir()), required(flags, "codex-version"), cxVersion());
-  const upstream = resolve(required(flags, "upstream"));
-  const patch = join(patchesDir(), detection.patchFile);
-  resetDirectory(upstream, (entries) => entries.includes(".git"));
-  git(["clone", "--depth", "1", "--branch", detection.upstreamTag, "https://github.com/openai/codex.git", upstream]);
-  git(["-C", upstream, "apply", "--index", "--check", patch]);
-  git(["-C", upstream, "apply", "--index", patch]);
-  emit({
-    upstream_commit: git(["-C", upstream, "rev-parse", "HEAD"]),
-    patch_sha256: (await sha256File(patch)).sha256,
-    upstream_tag: detection.upstreamTag,
-    patch_file: detection.patchFile,
-  });
-}
-
-// ---- package ----
-
-function sourceCommit(): string {
-  const commit = process.env.GITHUB_SHA ?? git(["-C", root, "rev-parse", "HEAD"]);
-  if (!HEX40.test(commit)) throw new Error(`source commit ${JSON.stringify(commit)} is not a 40-hex commit`);
-  return commit;
-}
-
-function upstreamCommit(upstream: string): string {
-  const commit = git(["-C", upstream, "rev-parse", "HEAD"]);
-  if (!HEX40.test(commit)) throw new Error("upstream checkout has no usable commit");
-  return commit;
-}
-
-/** Stage the five members, pack them deterministically, then write `manifest.json` + `SHA256SUMS`. */
-async function runPackage(flags: Record<string, string>): Promise<void> {
-  const detection = resolveDetection(
-    loadManifest(patchesDir()),
-    required(flags, "codex-version"),
-    required(flags, "cx-version"),
-  );
-  const upstream = resolve(required(flags, "upstream"));
-  const stagingDir = resolve(required(flags, "staging"));
-  const outDir = resolve(required(flags, "out"));
-  const platform = platformFor(process.platform, process.arch);
-  const workflowUrl = flags["workflow-url"] ?? workflowUrlFromEnv(process.env);
-  if (workflowUrl === null || workflowUrl === "true") {
-    throw new Error("no workflow run URL: pass --workflow-url or run inside GitHub Actions");
-  }
-
-  resetDirectory(stagingDir, (entries) => entries.every((e) => (ARCHIVE_ENTRIES as readonly string[]).includes(e)));
-  assembleStaging({ upstreamDir: upstream, repoRoot: root, stagingDir });
-  mkdirSync(outDir, { recursive: true });
-  const filename = archiveFilename(detection.codexVersion, platform);
-  const archive = await packArchive(stagingDir, join(outDir, filename));
-
-  const manifest = buildManifest({
-    cxVersion: detection.cxVersion,
-    codexVersion: detection.codexVersion,
-    platform,
-    upstreamCommit: upstreamCommit(upstream),
-    patchSha256: (await sha256File(join(patchesDir(), detection.patchFile))).sha256,
-    sourceCommit: sourceCommit(),
-    workflowUrl,
-    createdAt: new Date().toISOString(),
-    archive,
-    files: await fileDigests(stagingDir),
-  });
-  validateManifest(JSON.parse(JSON.stringify(manifest)), {
-    cxVersion: detection.cxVersion,
-    codexVersion: detection.codexVersion,
-    platform,
-  });
-  writeFileSync(join(outDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
-  await writeChecksums(outDir, [filename, "manifest.json"]);
-  emit({ tag: detection.tag, archive: filename, archive_sha256: archive.sha256, platform });
-}
-
-// ---- verify ----
-
-async function runVerify(flags: Record<string, string>): Promise<void> {
-  const report = await verifyOutput({
-    outDir: resolve(required(flags, "out")),
-    cxVersion: required(flags, "cx-version"),
-    codexVersion: required(flags, "codex-version"),
-    platform: platformFor(process.platform, process.arch),
-    skipMacho: flags["skip-macho"] === "true",
-  });
-  summary([
-    `## Prebuilt verification: ${report.archive}`,
-    "",
-    ...report.checks.map((c) => `- ${c}`),
-    "",
-    report.machoSkipped ? "Mach-O probes were SKIPPED for this run." : "",
-    "Known acceptance gap: no clean macOS 14 machine or VM was used; the deployment target is",
-    "evidence of intent, not proof of macOS 14 behaviour.",
-  ]);
-}
+export * from "./prebuilt/api";
+export { resetDirectory } from "./prebuilt/env";
 
 // ---- CLI ----
 
 const USAGE = [
   "usage: bun scripts/prebuilt.ts <command> [flags]",
-  "  detect  [--codex-version auto|X.Y.Z] [--releases-file FILE]",
+  "  detect  [--codex-version auto|X.Y.Z] [--event NAME] [--repo OWNER/NAME] [--platform P]",
+  "          [--releases-file FILE] [--source-releases-file FILE]",
   "  build   --codex-version X.Y.Z --upstream DIR",
   "  package --codex-version X.Y.Z --cx-version X.Y.Z --upstream DIR --staging DIR --out DIR [--workflow-url URL]",
   "  verify  --out DIR --codex-version X.Y.Z --cx-version X.Y.Z [--skip-macho]",
+  "  publish --tag TAG --dir DIR --run-id ID --run-url URL --source-commit SHA",
+  "          --codex-version X.Y.Z --cx-version X.Y.Z [--event NAME] [--platform P]",
+  "  report  --detect R --validate R --native R --publish R --codex-version V --tag TAG --run-url URL",
+  "          --source-commit SHA --patch-sha256 SHA --event NAME [--cx-version V] [--upstream-tag TAG]",
+  "          [--repo OWNER/NAME] [--should-build true|false] [--publish-requested true|false]",
+  "          [--release-url URL] [--error-file PATH]",
 ].join("\n");
 
 if (import.meta.main) {
@@ -295,6 +40,8 @@ if (import.meta.main) {
     else if (command === "build") await runBuild(flags);
     else if (command === "package") await runPackage(flags);
     else if (command === "verify") await runVerify(flags);
+    else if (command === "publish") await runPublish(flags);
+    else if (command === "report") await runReportCommand(flags);
     else {
       process.stderr.write(`${USAGE}\n`);
       process.exit(2);

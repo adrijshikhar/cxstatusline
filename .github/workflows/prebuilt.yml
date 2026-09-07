@@ -2,11 +2,17 @@ name: Prebuilt release
 
 # Apple-Silicon-only private prebuilt release pipeline.
 #
-# detect -> validate -> native(arm64) -> one workflow artifact `release-<tag>`.
-# The `publish` input and the `tag` / `codex_version` / `cx_version` outputs exist for the
-# publish and report jobs, which are added separately; nothing here creates a release or a tag.
+# detect -> validate -> native(arm64) -> publish -> report(always).
+#
+# Scheduled runs build the highest stable owner-published `v<CX>` **source release**, pinned to the
+# commit that tag points at, and publish. Manual dispatch builds the dispatched commit and
+# publishes only with `publish=true`. `contents: write` is granted to the `publish` job alone and
+# `issues: write` to the `report` job alone; everything else is read-only.
 
 on:
+  schedule:
+    # Nothing happens on a schedule until an owner-published `v<CX>` source release exists.
+    - cron: "17 3 * * *"
   workflow_dispatch:
     inputs:
       codex_version:
@@ -47,6 +53,10 @@ jobs:
       tag: ${{ steps.detect.outputs.tag }}
       upstream_tag: ${{ steps.detect.outputs.upstream_tag }}
       patch_file: ${{ steps.detect.outputs.patch_file }}
+      patch_sha256: ${{ steps.detect.outputs.patch_sha256 }}
+      source_commit: ${{ steps.detect.outputs.source_commit }}
+      release_state: ${{ steps.detect.outputs.release_state }}
+      should_build: ${{ steps.detect.outputs.should_build }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -55,22 +65,32 @@ jobs:
         with:
           bun-version: "1.4.0"
       - run: bun install --frozen-lockfile
-      # Exit 3 means upstream moved past every supported patch: blocked, not broken.
+      # Exit 3 is "blocked, not broken": upstream moved past every supported patch, or the tag is
+      # already published from different bytes (immutability - only a CX version bump resolves it).
+      # `should_build=false` is a deliberate, successful no-op: no source release, or an identical
+      # release already published.
       - name: Resolve release inputs
         id: detect
         env:
           GH_TOKEN: ${{ github.token }}
-          REQUESTED_CODEX_VERSION: ${{ inputs.codex_version }}
-        run: bun scripts/prebuilt.ts detect --codex-version "$REQUESTED_CODEX_VERSION"
+          REQUESTED_CODEX_VERSION: ${{ inputs.codex_version || 'auto' }}
+        run: |
+          bun scripts/prebuilt.ts detect \
+            --codex-version "$REQUESTED_CODEX_VERSION" \
+            --event "$GITHUB_EVENT_NAME" \
+            --repo "$GITHUB_REPOSITORY"
 
   validate:
     needs: detect
+    if: needs.detect.outputs.should_build == 'true'
     runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64"]') || 'macos-15' }}
     timeout-minutes: 20
     steps:
+      # The frozen source commit, not the branch head: a scheduled run builds its source release.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+          ref: ${{ needs.detect.outputs.source_commit }}
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: "1.4.0"
@@ -89,6 +109,7 @@ jobs:
 
   native:
     needs: [detect, validate]
+    if: needs.detect.outputs.should_build == 'true'
     runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64"]') || 'macos-15' }}
     timeout-minutes: 180
     env:
@@ -99,6 +120,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+          ref: ${{ needs.detect.outputs.source_commit }}
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: "1.4.0"
@@ -183,3 +205,111 @@ jobs:
           path: provenance/
           if-no-files-found: error
           retention-days: 7
+
+  # The only job with release-write credentials, and the only one that talks to the Releases API
+  # in a writing way. It re-checks the release state immediately before uploading (a build takes
+  # 1-3 hours, so `detect`'s answer can be stale), resumes an existing draft by uploading only the
+  # missing assets, downloads all three back and re-verifies them against the manifest and
+  # SHA256SUMS, and only then flips the draft to published. No --clobber, no delete, no visibility
+  # change, ever. Exit 3 means blocked: the owner has to act and `report` files one issue.
+  publish:
+    needs: [detect, native]
+    if: needs.detect.outputs.should_build == 'true' && (github.event_name == 'schedule' || inputs.publish == true)
+    runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64"]') || 'macos-15' }}
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    concurrency:
+      group: prebuilt-publish-${{ needs.detect.outputs.tag }}
+      cancel-in-progress: false
+    outputs:
+      release_url: ${{ steps.publish.outputs.release_url }}
+      published: ${{ steps.publish.outputs.published }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          ref: ${{ needs.detect.outputs.source_commit }}
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.4.0"
+      - run: bun install --frozen-lockfile
+      # The exact bytes `native` verified: nothing is rebuilt and no timestamp is regenerated.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-${{ needs.detect.outputs.tag }}
+          path: release-assets
+      - name: Publish release
+        id: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.detect.outputs.tag }}
+          CODEX_VERSION: ${{ needs.detect.outputs.codex_version }}
+          CX_VERSION: ${{ needs.detect.outputs.cx_version }}
+          SOURCE_COMMIT: ${{ needs.detect.outputs.source_commit }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          bun scripts/prebuilt.ts publish \
+            --tag "$TAG" \
+            --dir "$GITHUB_WORKSPACE/release-assets" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-url "$RUN_URL" \
+            --source-commit "$SOURCE_COMMIT" \
+            --codex-version "$CODEX_VERSION" \
+            --cx-version "$CX_VERSION" \
+            --event "$GITHUB_EVENT_NAME"
+
+  # Always runs, so no failure is silent. Upserts exactly one open issue per release identity by
+  # title *and* body marker, closes the issue that a success actually clears, and fails the job if
+  # the GitHub API call it needed did not succeed - it never claims issue state it did not observe.
+  report:
+    needs: [detect, validate, native, publish]
+    if: always()
+    runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64"]') || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.4.0"
+      - run: bun install --frozen-lockfile
+      - name: Report run outcome
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DETECT_RESULT: ${{ needs.detect.result }}
+          VALIDATE_RESULT: ${{ needs.validate.result }}
+          NATIVE_RESULT: ${{ needs.native.result }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
+          CODEX_VERSION: ${{ needs.detect.outputs.codex_version }}
+          CX_VERSION: ${{ needs.detect.outputs.cx_version }}
+          TAG: ${{ needs.detect.outputs.tag }}
+          UPSTREAM_TAG: ${{ needs.detect.outputs.upstream_tag }}
+          PATCH_SHA256: ${{ needs.detect.outputs.patch_sha256 }}
+          SOURCE_COMMIT: ${{ needs.detect.outputs.source_commit }}
+          SHOULD_BUILD: ${{ needs.detect.outputs.should_build }}
+          PUBLISH_REQUESTED: ${{ github.event_name == 'schedule' || inputs.publish == true }}
+          RELEASE_URL: ${{ needs.publish.outputs.release_url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          bun scripts/prebuilt.ts report \
+            --detect "$DETECT_RESULT" \
+            --validate "$VALIDATE_RESULT" \
+            --native "$NATIVE_RESULT" \
+            --publish "$PUBLISH_RESULT" \
+            --codex-version "$CODEX_VERSION" \
+            --cx-version "$CX_VERSION" \
+            --tag "$TAG" \
+            --upstream-tag "$UPSTREAM_TAG" \
+            --patch-sha256 "$PATCH_SHA256" \
+            --source-commit "$SOURCE_COMMIT" \
+            --should-build "$SHOULD_BUILD" \
+            --publish-requested "$PUBLISH_REQUESTED" \
+            --release-url "$RELEASE_URL" \
+            --run-url "$RUN_URL" \
+            --repo "$GITHUB_REPOSITORY" \
+            --event "$GITHUB_EVENT_NAME"

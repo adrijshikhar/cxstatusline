@@ -49,7 +49,11 @@ written. Pack with explicit file arguments, never with `.`.
 
 `Prebuilt release` is the release pipeline, separate from the smoke workflow above, which
 stays in place as the proven build baseline. Its job graph is
-`detect -> validate -> native`, and it currently ends by saving one workflow artifact.
+`detect -> validate -> native -> publish -> report(always)`.
+
+Permissions are least-privilege per job: the workflow is `contents: read` at the top level,
+`publish` alone adds `contents: write`, and `report` alone adds `issues: write`. No job that runs
+build steps holds release-write or issue-write credentials.
 
 - **Scope: arm64 only.** The native matrix has exactly one entry, `darwin-arm64` /
   `aarch64-apple-darwin`. Nothing is cross-compiled and no universal binary is produced, so a
@@ -94,12 +98,121 @@ stays in place as the proven build baseline. Its job graph is
   and digest, runner OS/CPU, `rustc --version` and the raw `vtool`/`otool` output. Workflow
   artifacts are private to the run - they are not a release.
 
-### Not yet wired
+### `publish`
 
-The `publish` dispatch input is defined but no job consumes it yet, and there is no `schedule`
-trigger. When the cron is added it will do nothing until an owner-published `v<CX>` **source**
-release exists, because scheduled runs resolve their CX input from that release rather than from
-whatever is on `main`. Nothing in this workflow creates a tag or a release today.
+`publish` (`needs: [detect, native]`) is the only job granted `contents: write`, and it runs only
+when `detect` said there is something to build **and** the run was asked to publish - a cron run
+always is, a manual dispatch only with `publish=true`. It is serialized per release tag
+(`concurrency: prebuilt-publish-<tag>`, `cancel-in-progress: false`) so two runs can never race
+the same release.
+
+It downloads the `release-<tag>` artifact - the exact bytes `native` verified, never a rebuild -
+and runs:
+
+```
+bun scripts/prebuilt.ts publish --tag <tag> --dir <artifact dir> --run-id <id> --run-url <url> \
+  --source-commit <sha> --codex-version <v> --cx-version <v> [--event <name>]
+```
+
+In order:
+
+1. **Re-verify the set.** Exactly three files; `manifest.json` accepted by the installer's own
+   `validateManifest`; the archive's sha256/size equal to the manifest's; `SHA256SUMS` agreeing
+   with both the archive and `manifest.json`'s own bytes.
+2. **Re-check the release.** `detect`'s answer is 1-3 hours old by now, so the state is read again
+   immediately before anything is uploaded.
+3. **Create or resume a draft.** No release → `gh release create --draft --target <source commit>`
+   with generated notes. An existing draft → its hidden provenance marker
+   `<!-- cxstatusline-prebuilt-build run=<id> manifest_sha=<sha> -->` must record *this* build's
+   manifest digest; if it does not, the run reports **blocked** and touches nothing.
+4. **Upload only what is missing.** An asset already attached with the same size is skipped; a
+   different size is blocked, never overwritten. `--clobber` appears nowhere in this pipeline.
+5. **Download all three back and re-verify** their sha256 against the manifest and `SHA256SUMS`.
+   A mismatch fails the run and leaves the release a **draft**: nothing is published.
+6. **`gh release edit --draft=false --latest=false`**, then the release URL to the step summary.
+
+Repository visibility is never read or changed, and no draft is ever deleted automatically.
+
+### Resume and restart semantics
+
+- **Interrupted upload** (the runner died after one asset). Re-run. The draft's provenance marker
+  matches, so the run uploads only the assets that are missing, from the same artifact. No rebuild,
+  no new timestamps, no new workflow URL, no version bump.
+- **Draft holding different bytes** (a conflicting build set, or an expired original artifact).
+  **Blocked**, exit 3, nothing deleted. Two owner options, both deliberate and manual: delete the
+  unpublished draft in the GitHub Releases UI and re-run, or bump the cxstatusline version so the
+  build publishes under a new tag.
+- **Already published, identical** (same `sourceCommit` and `patchSha256`). Success, skipped, with
+  nothing uploaded. `detect` catches this first and skips the build entirely.
+- **Already published, different.** **Blocked**, exit 3. Published releases, including private
+  ones, are immutable: their assets are never replaced. Only a cxstatusline version bump - a new
+  tag - can publish different bytes.
+
+Retry URLs live in the run log and the tracking issue. Original build provenance is never
+rewritten.
+
+### `report`
+
+`report` (`if: always()`, `needs: [detect, validate, native, publish]`) is the only job granted
+`issues: write`, and it holds no release credentials.
+
+```
+bun scripts/prebuilt.ts report --detect <result> --validate <result> --native <result> \
+  --publish <result> --codex-version <v> --cx-version <v> --tag <tag> --upstream-tag <tag> \
+  --patch-sha256 <sha> --source-commit <sha> --should-build <bool> --publish-requested <bool> \
+  --release-url <url> --run-url <url> --repo <owner/name> --event <name> [--error-file <path>]
+```
+
+- **Failing stage** is the first of `detect → validate → native → publish` that did not succeed. A
+  *deliberately* skipped job is not a failure: a skipped `publish` on a manual run without
+  `publish=true`, and every skipped build job on a `should_build=false` run.
+- **One issue per identity.** Title is `Prebuilt blocked: Codex <version>`, or
+  `Prebuilt blocked: upstream detection` when the version never resolved. Issues are matched on
+  the exact title **and** the body marker `<!-- cxstatusline-prebuilt -->`, from a single
+  `gh api --paginate repos/<owner>/<repo>/issues?state=open&per_page=100` read - so a hand-written
+  issue with the same title is never touched, and a second page can never hide the real one.
+  A repeated failure edits that issue; it never opens a second.
+- **Body** carries the CX and Codex versions, upstream identity when known, the failing stage,
+  `darwin-arm64`, the source commit, the patch sha256, the trigger, all four job results, the run
+  URL, a bounded (≤ 20 line) sanitized excerpt from `--error-file`, and the exact manual retry.
+  Structured fields only: never a raw log, an environment dump, a token or a presigned URL.
+- **Closure.** A successful publish comments the release link on the version issue and closes it.
+  A successful detection closes only the detection issue - it never closes a version build
+  failure. A successful arm64 build that was not published comments "build succeeded, not
+  published" and leaves the issue open.
+- **Redaction** strips `ghp_`/`github_pat_`/`ghs_`-style tokens, whole `Authorization:` lines and
+  the query string of any URL (that is where presigned signatures live) from every excerpt and
+  every step summary.
+- **Reporter API failure** fails the job and writes a sanitized summary. It never claims an issue
+  was created, updated or closed without the API having said so; the next run examines this one
+  and reports again.
+
+### Owner runbook
+
+**Build and publish now (the normal path).** Actions → *Prebuilt release* → *Run workflow*:
+
+- `self_hosted` = **true** (hosted macOS minutes are billing-blocked)
+- `codex_version` = `auto`, or an exact supported version
+- `publish` = **true**
+
+That builds `github.sha` and publishes `cxstatusline-v<CX>-codex-v<CODEX>` as a private release.
+With `publish=false` it builds and verifies only, and `report` says "build succeeded, not
+published".
+
+**Enable the cron.** The `17 3 * * *` schedule does nothing until an owner-published stable
+`v<CX>` **source release** exists in this repository: scheduled runs resolve their CX input from
+the highest such release and build the commit its tag points at, never whatever is on the default
+branch. Publish a `v<CX>` release (not a draft, not a prerelease) to arm it. Until then a
+scheduled run writes "no v<CX> source release published; nothing to build" and skips.
+
+**When a run reports blocked.** Read the issue. An uncovered upstream version needs a new tested
+patch. A published-but-different release needs a cxstatusline version bump. A conflicting draft
+needs the draft deleted by hand, or a version bump. The pipeline never resolves any of these for
+you, and never deletes a draft on its own.
+
+**Releases are private and immutable.** They live in this private repository and nothing in this
+pipeline reads or changes repository visibility. Once published, a release's assets are never
+replaced - differing bytes always mean a new CX version and therefore a new tag.
 
 ### Known acceptance gap
 
@@ -113,4 +226,5 @@ The Rust dependency-license audit of the two binaries (`codex`, `codex-code-mode
 not yet been performed. `THIRD_PARTY_NOTICES.md` covers this repository's own JS dependencies, but
 no equivalent inventory exists yet for the Rust crate graph the patched upstream build pulls in.
 This is deferred to the public-launch checklist, same as the macOS 14 gap above; neither release
-notes nor this document should imply it has been done until it has.
+notes nor this document should imply it has been done until it has. Both gaps are repeated verbatim
+in the generated release notes ("Known gaps"), so a person reading only the release still sees them.
