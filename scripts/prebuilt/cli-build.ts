@@ -61,6 +61,10 @@ export async function runPackage(flags: Record<string, string>): Promise<void> {
     required(flags, "cx-version"),
   );
   const upstream = resolve(required(flags, "upstream"));
+  // Required, not derived: the frozen commit `detect` resolved is the only correct answer on a
+  // scheduled run, and a manifest stamped with anything else is unpublishable. Resolved before any
+  // file is staged, so a missing flag fails the step instead of a copy half-way through.
+  const frozenCommit = sourceCommit(required(flags, "source-commit"));
   const stagingDir = resolve(required(flags, "staging"));
   const outDir = resolve(required(flags, "out"));
   const platform = platformFor(process.platform, process.arch);
@@ -81,7 +85,7 @@ export async function runPackage(flags: Record<string, string>): Promise<void> {
     platform,
     upstreamCommit: upstreamCommit(upstream),
     patchSha256: (await sha256File(join(patchesDir(), detection.patchFile))).sha256,
-    sourceCommit: sourceCommit(),
+    sourceCommit: frozenCommit,
     workflowUrl,
     createdAt: new Date().toISOString(),
     archive,

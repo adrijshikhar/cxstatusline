@@ -13,7 +13,7 @@ export interface ManifestInput {
   /** `git rev-parse HEAD` of the patched upstream checkout. */
   readonly upstreamCommit: string;
   readonly patchSha256: string;
-  /** `GITHUB_SHA`, or `git rev-parse HEAD` for a local run. */
+  /** The frozen commit the build was checked out at - never `GITHUB_SHA`. See `sourceCommit`. */
   readonly sourceCommit: string;
   readonly workflowUrl: string;
   readonly createdAt: string;

@@ -13,7 +13,8 @@ import { runPublish, runReportCommand } from "./prebuilt/cli-publish";
 import { parseFlags } from "./prebuilt/env";
 
 export * from "./prebuilt/api";
-export { resetDirectory } from "./prebuilt/env";
+export { runPackage } from "./prebuilt/cli-build";
+export { resetDirectory, sourceCommit } from "./prebuilt/env";
 
 // ---- CLI ----
 
@@ -22,7 +23,8 @@ const USAGE = [
   "  detect  [--codex-version auto|X.Y.Z] [--event NAME] [--repo OWNER/NAME] [--platform P]",
   "          [--releases-file FILE] [--source-releases-file FILE]",
   "  build   --codex-version X.Y.Z --upstream DIR",
-  "  package --codex-version X.Y.Z --cx-version X.Y.Z --upstream DIR --staging DIR --out DIR [--workflow-url URL]",
+  "  package --codex-version X.Y.Z --cx-version X.Y.Z --source-commit SHA --upstream DIR --staging DIR",
+  "          --out DIR [--workflow-url URL]",
   "  verify  --out DIR --codex-version X.Y.Z --cx-version X.Y.Z [--skip-macho]",
   "  publish --tag TAG --dir DIR --run-id ID --run-url URL --source-commit SHA",
   "          --codex-version X.Y.Z --cx-version X.Y.Z [--event NAME] [--platform P]",

@@ -85,8 +85,17 @@ export function patchesDir(): string {
   return join(root, "patches");
 }
 
-export function sourceCommit(): string {
-  const commit = process.env.GITHUB_SHA ?? git(["-C", root, "rev-parse", "HEAD"]);
+/**
+ * The commit the release is built from.
+ *
+ * `GITHUB_SHA` is deliberately NOT consulted: on a scheduled run it stays at the default-branch
+ * head while `validate`/`native`/`publish` check out `needs.detect.outputs.source_commit`, so
+ * trusting it would stamp a manifest with a commit the build never used - and `publish` would then
+ * refuse its own artifact set forever. Callers that already know the frozen commit pass it in;
+ * everyone else gets the checkout's own `HEAD`, which is the commit actually being built.
+ */
+export function sourceCommit(explicit?: string | null): string {
+  const commit = explicit ?? git(["-C", root, "rev-parse", "HEAD"]);
   if (!HEX40.test(commit)) throw new Error(`source commit ${JSON.stringify(commit)} is not a 40-hex commit`);
   return commit;
 }

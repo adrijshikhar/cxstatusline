@@ -25,7 +25,9 @@ import {
   packArchive,
   resetDirectory,
   resolveDetection,
+  runPackage,
   selectStableVersion,
+  sourceCommit,
   UncoveredUpstreamError,
   validateMinos,
   verifyOutput,
@@ -239,6 +241,79 @@ describe("buildManifest", () => {
     expect(parsed.artifacts[0]!.filename).toBe(`cxstatusline-codex-${CODEX}-darwin-arm64.tar.gz`);
     expect(parsed.upstreamTag).toBe(`rust-v${CODEX}`);
     expect(parsed.patchFile).toBe(`codex-${CODEX}.patch`);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The source commit stamped into the manifest. `GITHUB_SHA` is never it: on a scheduled run it
+// stays at the default-branch head while the build is checked out at the frozen source commit.
+// ---------------------------------------------------------------------------
+
+/** An upstream checkout shaped exactly like the one `native` hands to `package`. */
+function upstreamCheckout(): string {
+  const dir = tmp("upstream");
+  const release = join(dir, "codex-rs", "target", "release");
+  mkdirSync(release, { recursive: true });
+  writeFileSync(join(release, "codex"), `#!/bin/sh\necho "codex-cli ${CODEX}"\n`);
+  writeFileSync(join(release, "codex-code-mode-host"), '#!/bin/sh\necho "usage: --listen <addr>"\n');
+  writeFileSync(join(dir, "LICENSE"), "upstream LICENSE\n");
+  writeFileSync(join(dir, "NOTICE"), "upstream NOTICE\n");
+  const git = (...args: string[]) => execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+  git("init", "-q");
+  git("add", "-A");
+  git("-c", "user.email=t@example.invalid", "-c", "user.name=t", "commit", "-q", "-m", "upstream");
+  return dir;
+}
+
+describe("sourceCommit", () => {
+  test("returns an explicit 40-hex commit and ignores GITHUB_SHA", () => {
+    const previous = process.env.GITHUB_SHA;
+    process.env.GITHUB_SHA = "f".repeat(40);
+    try {
+      expect(sourceCommit("e".repeat(40))).toBe("e".repeat(40));
+      expect(sourceCommit()).not.toBe("f".repeat(40));
+    } finally {
+      if (previous === undefined) delete process.env.GITHUB_SHA;
+      else process.env.GITHUB_SHA = previous;
+    }
+  });
+
+  test("refuses anything that is not a 40-hex commit", () => {
+    expect(() => sourceCommit("HEAD")).toThrow(/not a 40-hex commit/);
+  });
+});
+
+describe("runPackage", () => {
+  const frozen = "e".repeat(40);
+  const packageFlags = (upstream: string, out: string): Record<string, string> => ({
+    "codex-version": CODEX,
+    "cx-version": CX,
+    "source-commit": frozen,
+    upstream,
+    staging: join(tmp("staging-run"), "staged"),
+    out,
+    "workflow-url": RUN_URL,
+  });
+
+  // Derives the platform from the running machine, so it only means anything on macOS.
+  test.skipIf(process.platform !== "darwin")("stamps the explicit source commit, not GITHUB_SHA", async () => {
+    const out = tmp("out-run");
+    const previous = process.env.GITHUB_SHA;
+    process.env.GITHUB_SHA = "f".repeat(40);
+    try {
+      await runPackage(packageFlags(upstreamCheckout(), out));
+    } finally {
+      if (previous === undefined) delete process.env.GITHUB_SHA;
+      else process.env.GITHUB_SHA = previous;
+    }
+    const manifest = JSON.parse(readFileSync(join(out, "manifest.json"), "utf8")) as { sourceCommit: string };
+    expect(manifest.sourceCommit).toBe(frozen);
+  });
+
+  test("refuses to package without an explicit source commit", async () => {
+    const flags = packageFlags(tmp("upstream-unused"), tmp("out-unused"));
+    delete flags["source-commit"];
+    await expect(runPackage(flags)).rejects.toThrow(/--source-commit is required/);
   });
 });
 
