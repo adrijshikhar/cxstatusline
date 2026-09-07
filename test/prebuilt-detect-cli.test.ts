@@ -6,11 +6,12 @@
  * `gh` call is reachable on these paths, so nothing touches the network.
  */
 import { describe, expect, test } from "bun:test";
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { selectSourceRelease } from "../scripts/prebuilt";
+import { commitPatches, selectSourceRelease, sha256File, workingTreePatches } from "../scripts/prebuilt";
+import { loadManifest } from "../src/patch/manifest";
 
 const root = join(import.meta.dir, "..");
 
@@ -71,5 +72,100 @@ describe("detect on a schedule", () => {
     const run = runDetect(["--event", "workflow_dispatch", "--platform", "linux-x64"], []);
     expect(run.status).toBe(1);
     expect(run.stderr).toMatch(/--platform must be one of darwin-arm64, darwin-x64/);
+  });
+});
+
+describe("detect on a manual dispatch", () => {
+  /**
+   * Fix round 1, finding #1: both exit-3 paths used to `process.exit(3)` without emitting
+   * anything, so `needs.detect.outputs.codex_version` was empty and `report` filed every block -
+   * including one that knows its version exactly - under the "upstream detection" title.
+   */
+  test("a blocked uncovered upstream still emits the identity the reporter needs", () => {
+    const run = runDetect(["--event", "workflow_dispatch", "--codex-version", "9.9.9"], []);
+    expect(run.status).toBe(3);
+    expect(run.outputs["codex_version"]).toBe("9.9.9");
+    expect(run.outputs["cx_version"]).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(run.outputs["release_state"]).toBe("unknown");
+    expect(run.outputs["should_build"]).toBe("false");
+    expect(run.outputs["blocked_reason"]).toContain("not covered by patches/manifest.json");
+    // Single-line: $GITHUB_OUTPUT is a key=value file.
+    expect(run.outputs["blocked_reason"]).not.toContain("\n");
+    expect(run.stderr).toContain("Prebuilt blocked: Codex 9.9.9");
+  });
+});
+
+/**
+ * Fix round 1, finding #3: a scheduled run resolves an older source commit while `detect` is
+ * checked out at the default branch, so `patches/` has to be read out of that commit. Hashing the
+ * working tree's patch would publish a `patchSha256` that never belonged to the build.
+ */
+describe("patches at the frozen commit", () => {
+  const git = (dir: string, args: readonly string[]) =>
+    execFileSync("git", ["-C", dir, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+
+  const manifest = (candidate: string) => JSON.stringify({
+    version: 1,
+    tag_prefix: "rust-v",
+    candidate,
+    patches: [{ min: candidate, max: candidate, file: `codex-${candidate}.patch` }],
+  });
+
+  /** A repo whose HEAD carries a different `patches/` tree than its tagged release commit. */
+  function fixtureRepo(): { dir: string; tagged: string } {
+    const dir = mkdtempSync(join(tmpdir(), "cxsl-frozen-"));
+    git(dir, ["init", "--quiet", "-b", "main"]);
+    git(dir, ["config", "user.email", "test@example.invalid"]);
+    git(dir, ["config", "user.name", "Test"]);
+    mkdirSync(join(dir, "patches"), { recursive: true });
+    writeFileSync(join(dir, "patches", "manifest.json"), manifest("0.153.0"));
+    writeFileSync(join(dir, "patches", "codex-0.153.0.patch"), "TAGGED patch bytes\n");
+    git(dir, ["add", "."]);
+    git(dir, ["commit", "--quiet", "-m", "release v0.1.0"]);
+    const tagged = git(dir, ["rev-parse", "HEAD"]).trim();
+    git(dir, ["tag", "v0.1.0"]);
+    // main moves on: same file name, different bytes, and a different manifest candidate.
+    writeFileSync(join(dir, "patches", "manifest.json"), manifest("0.154.0"));
+    writeFileSync(join(dir, "patches", "codex-0.154.0.patch"), "HEAD patch bytes, much longer\n");
+    writeFileSync(join(dir, "patches", "codex-0.153.0.patch"), "HEAD rewrote the old patch too\n");
+    git(dir, ["add", "."]);
+    git(dir, ["commit", "--quiet", "-m", "next"]);
+    return { dir, tagged };
+  }
+
+  test("hashes the tagged commit's patch bytes, not HEAD's", async () => {
+    const { dir, tagged } = fixtureRepo();
+    const dest = mkdtempSync(join(tmpdir(), "cxsl-frozen-dest-"));
+    const frozen = commitPatches(tagged, dest, dir);
+    const head = workingTreePatches(join(dir, "patches"));
+
+    expect(readFileSync(frozen.patchPath("codex-0.153.0.patch"), "utf8")).toBe("TAGGED patch bytes\n");
+    const frozenSha = (await sha256File(frozen.patchPath("codex-0.153.0.patch"))).sha256;
+    const headSha = (await sha256File(head.patchPath("codex-0.153.0.patch"))).sha256;
+    expect(frozenSha).not.toBe(headSha);
+    expect(frozen.describe).toBe(`commit ${tagged}`);
+  });
+
+  test("loads the tagged commit's manifest, not HEAD's", () => {
+    const { dir, tagged } = fixtureRepo();
+    const dest = mkdtempSync(join(tmpdir(), "cxsl-frozen-dest-"));
+    expect(loadManifest(commitPatches(tagged, dest, dir).manifestDir).candidate).toBe("0.153.0");
+    expect(loadManifest(join(dir, "patches")).candidate).toBe("0.154.0");
+  });
+
+  test("refuses a commit the checkout does not have, naming the fetch-depth fix", () => {
+    const { dir } = fixtureRepo();
+    const dest = mkdtempSync(join(tmpdir(), "cxsl-frozen-dest-"));
+    expect(() => commitPatches("b".repeat(40), dest, dir)).toThrow(/fetch-depth: 0/);
+  });
+
+  test("refuses a patch name that is not a plain file inside patches/", () => {
+    const { dir, tagged } = fixtureRepo();
+    const dest = mkdtempSync(join(tmpdir(), "cxsl-frozen-dest-"));
+    const frozen = commitPatches(tagged, dest, dir);
+    expect(() => frozen.patchPath("../../etc/passwd")).toThrow(/unusable patch file name/);
+    expect(() => workingTreePatches(join(dir, "patches")).patchPath("sub/dir.patch")).toThrow(
+      /unusable patch file name/,
+    );
   });
 });

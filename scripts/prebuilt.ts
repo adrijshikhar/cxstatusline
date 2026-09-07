@@ -29,7 +29,7 @@ const USAGE = [
   "  report  --detect R --validate R --native R --publish R --codex-version V --tag TAG --run-url URL",
   "          --source-commit SHA --patch-sha256 SHA --event NAME [--cx-version V] [--upstream-tag TAG]",
   "          [--repo OWNER/NAME] [--should-build true|false] [--publish-requested true|false]",
-  "          [--release-url URL] [--error-file PATH]",
+  "          [--release-url URL] [--error-file PATH] [--log-dir DIR] [--blocked-reason TEXT]",
 ].join("\n");
 
 if (import.meta.main) {

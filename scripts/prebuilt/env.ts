@@ -122,7 +122,20 @@ export function runnerTmp(name: string): string {
 
 // ---- CI channels ----
 
+/**
+ * A single-line rendering of a message, so it can be carried as a step output. `$GITHUB_OUTPUT`
+ * is a `key=value` file: a newline inside a value would be read as the start of another output.
+ */
+export function oneLine(text: string, max = 500): string {
+  const collapsed = text.replace(/\s+/g, " ").trim();
+  return collapsed.length <= max ? collapsed : `${collapsed.slice(0, max - 1)}\u2026`;
+}
+
 export function emit(values: Record<string, string>): void {
+  for (const [k, v] of Object.entries(values)) {
+    // Refused rather than truncated: a multi-line value silently corrupts every later output.
+    if (/[\r\n]/.test(v)) throw new Error(`output ${k} contains a newline; pass it through oneLine()`);
+  }
   const body = Object.entries(values).map(([k, v]) => `${k}=${v}\n`).join("");
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, body);
   process.stdout.write(body);

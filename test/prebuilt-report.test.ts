@@ -6,7 +6,9 @@
  * silent about issue state whenever the API did not actually answer.
  */
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   blockedIssueTitle,
   errorExcerpt,
@@ -15,6 +17,7 @@ import {
   REPORT_MARKER,
   reportBody,
   runReport,
+  stageLogExcerpt,
   type JobResults,
   type ReportInput,
 } from "../scripts/prebuilt";
@@ -46,6 +49,8 @@ const reportInput = (over: Partial<ReportInput> = {}): ReportInput => ({
   publishRequested: true,
   releaseUrl: null,
   errorExcerpt: null,
+  logDir: null,
+  blockedReason: null,
   ...over,
 });
 
@@ -116,8 +121,20 @@ describe("reportBody", () => {
     expect(fenced.trim().split("\n")).toHaveLength(20);
   });
 
-  test("omits the excerpt section entirely when there is no error output", () => {
-    expect(reportBody(reportInput(), "publish")).not.toContain("```");
+  test("says so, rather than omitting the section, when no log was captured", () => {
+    const body = reportBody(reportInput(), "publish");
+    expect(body).toContain("### Error excerpt");
+    expect(body).toContain("no error excerpt captured");
+  });
+
+  test("carries detect's blocked reason when the run was blocked rather than broken", () => {
+    const reason = "upstream Codex 0.154.0 is not covered by patches/manifest.json";
+    const body = reportBody(reportInput({ blockedReason: reason }), "detect");
+    expect(body).toContain(`Blocked reason: ${reason}`);
+  });
+
+  test("no blocked-reason line when the run simply failed", () => {
+    expect(reportBody(reportInput(), "native")).not.toContain("Blocked reason:");
   });
 });
 
@@ -282,5 +299,64 @@ describe("runReport", () => {
     });
     expect(code).toBe(1);
     expect(fake.calls).toHaveLength(0);
+  });
+});
+
+describe("stage log excerpting", () => {
+  const logDir = () => mkdtempSync(join(tmpdir(), "cxsl-logs-"));
+
+  test("excerpts the tail of the failing stage's captured log", () => {
+    const dir = logDir();
+    writeFileSync(join(dir, "prebuilt-native.log"), [...Array(40).keys()].map((n) => `line ${n}`).join("\n"));
+    const excerpt = stageLogExcerpt(dir, "native")!;
+    expect(excerpt.split("\n")).toHaveLength(20);
+    expect(excerpt).toContain("line 39");
+    expect(excerpt).not.toContain("line 19");
+  });
+
+  test("redacts tokens in a captured log", () => {
+    const dir = logDir();
+    writeFileSync(join(dir, "prebuilt-publish.log"), `gh failed ghp_${"A".repeat(36)}\n`);
+    expect(stageLogExcerpt(dir, "publish")).not.toContain("ghp_");
+  });
+
+  test("a missing or empty log is null, and a null log dir makes no filesystem claim", () => {
+    const dir = logDir();
+    writeFileSync(join(dir, "prebuilt-validate.log"), "\n \n");
+    expect(stageLogExcerpt(dir, "validate")).toBeNull();
+    expect(stageLogExcerpt(dir, "native")).toBeNull();
+    expect(stageLogExcerpt(null, "native")).toBeNull();
+  });
+
+  test("runReport reaches for the failing stage's log when no --error-file was given", async () => {
+    const dir = logDir();
+    writeFileSync(join(dir, "prebuilt-native.log"), "error: linker failed on codex-tui\n");
+    writeFileSync(join(dir, "prebuilt-publish.log"), "unrelated publish chatter\n");
+    const bodies: string[] = [];
+    const fake = fakeGh({
+      [LOOKUP]: () => ok("[]"),
+      "issue create": (a) => {
+        bodies.push(readFileSync(a[a.indexOf("--body-file") + 1]!, "utf8"));
+        return ok();
+      },
+    });
+    const input = reportInput({ results: results({ native: "failure", publish: "skipped" }), logDir: dir });
+    expect(await runReport({ run: fake.run, input, summary: () => {} })).toBe(1);
+    expect(bodies[0]).toContain("linker failed on codex-tui");
+    expect(bodies[0]).not.toContain("unrelated publish chatter");
+  });
+
+  test("an uncaptured log is reported as such, not omitted", async () => {
+    const bodies: string[] = [];
+    const fake = fakeGh({
+      [LOOKUP]: () => ok("[]"),
+      "issue create": (a) => {
+        bodies.push(readFileSync(a[a.indexOf("--body-file") + 1]!, "utf8"));
+        return ok();
+      },
+    });
+    const input = reportInput({ results: results({ native: "failure" }), logDir: logDir() });
+    await runReport({ run: fake.run, input, summary: () => {} });
+    expect(bodies[0]).toContain("no error excerpt captured");
   });
 });

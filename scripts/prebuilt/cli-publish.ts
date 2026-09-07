@@ -71,6 +71,8 @@ export async function runReportCommand(flags: Record<string, string>): Promise<v
     publishRequested: flags["publish-requested"] === "true",
     releaseUrl: optional(flags, "release-url"),
     errorExcerpt: excerptFromFile(flags["error-file"]),
+    logDir: optional(flags, "log-dir"),
+    blockedReason: optional(flags, "blocked-reason"),
   };
   const code = await runReport({ run: execGh, input, summary, tmpRoot: runnerTmp("prebuilt-report") });
   if (code !== 0) process.exit(code);

@@ -4,10 +4,9 @@
  * Two questions no later job re-asks: which cxstatusline commit and Codex version this run is
  * about, and what release already exists for the tag they imply.
  */
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import type { Platform } from "../../src/distribution";
-import { loadManifest } from "../../src/patch/manifest";
+import { loadManifest, type Manifest } from "../../src/patch/manifest";
 import {
   blockedIssueTitle,
   resolveDetection,
@@ -19,7 +18,7 @@ import {
 import {
   cxVersion,
   emit,
-  patchesDir,
+  oneLine,
   releasePlatform,
   repoSlug,
   runnerTmp,
@@ -28,6 +27,7 @@ import {
 } from "./env";
 import { execGh, type GhRunner } from "./gh";
 import { archiveFilename, sha256File } from "./pack";
+import { commitPatches, workingTreePatches, type PatchTree } from "./patch-tree";
 import { checkExistingRelease, immutabilityMessage, type ReleaseState } from "./release";
 import { listSourceReleases, resolveTagCommit, selectSourceRelease } from "./source";
 
@@ -50,6 +50,11 @@ interface SourceSelection {
   readonly cxVersion: string;
   readonly sourceCommit: string;
   readonly sourceTag: string | null;
+  /**
+   * True when `sourceCommit` is an older commit than the one this job is checked out at, so
+   * `patches/` must be read out of that commit rather than out of the working tree.
+   */
+  readonly frozen: boolean;
 }
 
 /**
@@ -59,7 +64,7 @@ interface SourceSelection {
  */
 function resolveSource(flags: Record<string, string>, run: GhRunner, event: string): SourceSelection | null {
   if (event !== "schedule") {
-    return { cxVersion: cxVersion(), sourceCommit: sourceCommit(), sourceTag: null };
+    return { cxVersion: cxVersion(), sourceCommit: sourceCommit(), sourceTag: null, frozen: false };
   }
   const repo = repoSlug(flags);
   const payload = flags["source-releases-file"] !== undefined
@@ -71,6 +76,7 @@ function resolveSource(flags: Record<string, string>, run: GhRunner, event: stri
     cxVersion: selected.version,
     sourceCommit: resolveTagCommit(run, repo, selected.tag),
     sourceTag: selected.tag,
+    frozen: true,
   };
 }
 
@@ -102,14 +108,112 @@ async function releaseState(
 }
 
 /**
+ * The `patches/` tree this run must hash: the frozen source commit's for a scheduled run, the
+ * working tree's for a manual dispatch (whose checkout *is* `github.sha`).
+ */
+function patchTreeFor(source: SourceSelection): PatchTree {
+  return source.frozen
+    ? commitPatches(source.sourceCommit, runnerTmp("prebuilt-patches"))
+    : workingTreePatches();
+}
+
+/** The upstream version this run is about: pinned by `--codex-version`, or the highest stable. */
+async function resolveCodexVersion(flags: Record<string, string>): Promise<{ version: string; pinned: boolean }> {
+  const requested = flags["codex-version"];
+  const pinned = requested !== undefined && requested !== "auto" && requested !== "true";
+  if (pinned) return { version: requested!, pinned: true };
+  const releases = flags["releases-file"] !== undefined
+    ? (JSON.parse(readFileSync(flags["releases-file"], "utf8")) as unknown)
+    : await fetchUpstreamReleases();
+  return { version: selectStableVersion(releases), pinned: false };
+}
+
+/**
+ * Exit 3 - blocked, not broken - with the outputs the `report` job needs to file the issue against
+ * the right identity. Without them `needs.detect.outputs.codex_version` is empty and every block,
+ * including an immutability block that knows its version exactly, is misfiled under the
+ * "upstream detection" title.
+ */
+function blockedExit(outputs: Record<string, string>, title: string, message: string): never {
+  emit({ ...outputs, should_build: "false", blocked_reason: oneLine(message) });
+  summary([`## ${title}`, "", message]);
+  process.exit(UNCOVERED_EXIT_CODE);
+}
+
+/** The deliberate, successful no-op: a cron run with no `v<CX>` source release to build. */
+function skipNoSource(): void {
+  summary([
+    "## Prebuilt release: nothing to build",
+    "",
+    "no v<CX> source release published; nothing to build",
+    "",
+    "Scheduled runs build the highest stable owner-published `v<CX>` source release. Publish one,",
+    "or dispatch this workflow manually to build a specific commit.",
+  ]);
+  emit({ should_build: "false", release_state: "absent", skip_reason: "no-source-release" });
+}
+
+/** Resolve the release identity, or exit 3 attributed to the version that is not covered. */
+function resolveOrBlock(manifest: Manifest, codexVersion: string, source: SourceSelection): Detection {
+  try {
+    return resolveDetection(manifest, codexVersion, source.cxVersion);
+  } catch (e) {
+    if (!(e instanceof UncoveredUpstreamError)) throw e;
+    // The version *is* known here, so the issue belongs to it, not to "upstream detection".
+    blockedExit(
+      { codex_version: codexVersion, cx_version: source.cxVersion, tag: "", patch_sha256: "", release_state: "unknown" },
+      blockedIssueTitle(codexVersion),
+      e.message,
+    );
+  }
+}
+
+interface Resolved {
+  readonly patchSha256: string;
+  readonly pinned: boolean;
+  readonly patchesFrom: string;
+}
+
+/** Freeze every release input as a step output - or exit 3 when the tag is taken by other bytes. */
+function finish(
+  detection: Detection,
+  source: SourceSelection,
+  existing: { state: ReleaseState; identical: boolean; detail: string; url: string },
+  resolved: Resolved,
+): void {
+  const frozen = {
+    codex_version: detection.codexVersion,
+    cx_version: detection.cxVersion,
+    tag: detection.tag,
+    upstream_tag: detection.upstreamTag,
+    patch_file: detection.patchFile,
+    patch_sha256: resolved.patchSha256,
+    source: resolved.pinned ? "dispatch" : "auto",
+    source_commit: source.sourceCommit,
+    source_tag: source.sourceTag ?? "",
+    release_state: existing.state,
+    release_url: existing.url,
+  };
+  if (existing.state === "published" && !existing.identical) {
+    // Immutability: the tag is taken by different bytes. Only a CX version bump resolves it.
+    blockedExit(frozen, blockedIssueTitle(detection.codexVersion), immutabilityMessage(detection.tag, existing.detail));
+  }
+  const shouldBuild = !(existing.state === "published" && existing.identical);
+  if (!shouldBuild) {
+    summary([`## Prebuilt ${detection.tag}`, "", `already published, identical: ${existing.url}`, "", "Nothing to do."]);
+  }
+  emit({ ...frozen, patches_from: resolved.patchesFrom, should_build: shouldBuild ? "true" : "false" });
+}
+
+/**
  * Resolve the release inputs. `--codex-version` (anything but `auto`) pins the version; otherwise
  * the highest stable upstream release is chosen and must be covered by `patches/manifest.json`.
  *
  * Exit codes are deliberately narrow: only an uncovered upstream or a release already published
  * from different inputs is "blocked, not broken" (`UNCOVERED_EXIT_CODE` with the blocked-issue
- * summary the `report` job keys its issue upsert on). A malformed `patches/manifest.json` or a
- * non-stable `--codex-version` is a plain infrastructure/input error: exit 1, no blocked summary,
- * so it is never mistaken for upstream-uncovered.
+ * summary *and* the frozen outputs the `report` job keys its issue upsert on). A malformed
+ * `patches/manifest.json` or a non-stable `--codex-version` is a plain infrastructure/input error:
+ * exit 1, no blocked summary, so it is never mistaken for upstream-uncovered.
  */
 export async function runDetect(flags: Record<string, string>): Promise<void> {
   const event = flags["event"] ?? process.env.GITHUB_EVENT_NAME ?? "workflow_dispatch";
@@ -117,73 +221,14 @@ export async function runDetect(flags: Record<string, string>): Promise<void> {
   const platform = releasePlatform(flags);
   const source = resolveSource(flags, execGh, event);
   if (source === null) {
-    summary([
-      "## Prebuilt release: nothing to build",
-      "",
-      "no v<CX> source release published; nothing to build",
-      "",
-      "Scheduled runs build the highest stable owner-published `v<CX>` source release. Publish one,",
-      "or dispatch this workflow manually to build a specific commit.",
-    ]);
-    emit({ should_build: "false", release_state: "absent", skip_reason: "no-source-release" });
+    skipNoSource();
     return;
   }
-
-  const requested = flags["codex-version"];
-  const pinned = requested !== undefined && requested !== "auto" && requested !== "true";
-  const releases = flags["releases-file"] !== undefined
-    ? (JSON.parse(readFileSync(flags["releases-file"], "utf8")) as unknown)
-    : null;
-  const codexVersion = pinned ? requested! : selectStableVersion(releases ?? (await fetchUpstreamReleases()));
-  const manifest = loadManifest(patchesDir());
-  let detection: Detection;
-  try {
-    detection = resolveDetection(manifest, codexVersion, source.cxVersion);
-  } catch (e) {
-    if (!(e instanceof UncoveredUpstreamError)) throw e;
-    summary([`## ${blockedIssueTitle(codexVersion)}`, "", e.message]);
-    process.exit(UNCOVERED_EXIT_CODE);
-  }
-  const patch = join(patchesDir(), detection.patchFile);
-  if (!existsSync(patch)) {
-    throw new Error(`patches/${detection.patchFile} is referenced by the manifest but missing from the checkout`);
-  }
-  const patchSha256 = (await sha256File(patch)).sha256;
-
-  const existing = await releaseState(execGh, detection, { sourceCommit: source.sourceCommit, patchSha256 }, platform);
-  if (existing.state === "published" && !existing.identical) {
-    // Immutability: the tag is taken by different bytes. Only a CX version bump resolves it.
-    summary([
-      `## ${blockedIssueTitle(detection.codexVersion)}`,
-      "",
-      immutabilityMessage(detection.tag, existing.detail),
-    ]);
-    process.exit(UNCOVERED_EXIT_CODE);
-  }
-  const shouldBuild = !(existing.state === "published" && existing.identical);
-  if (!shouldBuild) {
-    summary([
-      `## Prebuilt ${detection.tag}`,
-      "",
-      `already published, identical: ${existing.url}`,
-      "",
-      "Nothing to do.",
-    ]);
-  }
-
-  emit({
-    codex_version: detection.codexVersion,
-    cx_version: detection.cxVersion,
-    tag: detection.tag,
-    upstream_tag: detection.upstreamTag,
-    patch_file: detection.patchFile,
-    patch_sha256: patchSha256,
-    source: pinned ? "dispatch" : "auto",
-    source_commit: source.sourceCommit,
-    source_tag: source.sourceTag ?? "",
-    release_state: existing.state,
-    release_url: existing.url,
-    should_build: shouldBuild ? "true" : "false",
-  });
+  const { version: codexVersion, pinned } = await resolveCodexVersion(flags);
+  const patches = patchTreeFor(source);
+  const detection = resolveOrBlock(loadManifest(patches.manifestDir), codexVersion, source);
+  const patchSha256 = (await sha256File(patches.patchPath(detection.patchFile))).sha256;
+  const expected = { sourceCommit: source.sourceCommit, patchSha256 };
+  const existing = await releaseState(execGh, detection, expected, platform);
+  finish(detection, source, existing, { patchSha256, pinned, patchesFrom: patches.describe });
 }
-

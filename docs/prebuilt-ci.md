@@ -71,7 +71,21 @@ build steps holds release-write or issue-write credentials.
   version explicitly. If upstream has moved past every supported patch, `detect` exits 3 and
   names both the uncovered upstream version and `patches/manifest.json`'s `candidate`. That
   field is informational only: it never widens `resolvePatch`, which stays exact-match.
-  The job outputs `codex_version`, `cx_version`, `tag`, `upstream_tag` and `patch_file`.
+  The job outputs `codex_version`, `cx_version`, `tag`, `upstream_tag`, `patch_file`,
+  `patch_sha256`, `source_commit`, `source_tag`, `release_state`, `release_url`, `patches_from`
+  and `should_build`.
+  **Every exit-3 path emits those outputs before exiting**, so `report` files the issue against
+  the identity that is actually known - an immutability block is titled
+  `Prebuilt blocked: Codex <v>`, not `Prebuilt blocked: upstream detection` - and passes the
+  single-line `blocked_reason` output into the issue body. Only a genuinely unresolved detection
+  (no version at all) keeps the null title.
+- **`patches/` is read from the frozen commit.** A scheduled run resolves an *older* `v<CX>`
+  source commit while `detect` itself is checked out at the default branch, so
+  `patches/manifest.json` and the patch bytes are read out of that commit
+  (`git show <sha>:patches/...`, materialized under `RUNNER_TEMP`), never out of the working
+  tree - otherwise the published `patchSha256` would be the digest of a patch the build never
+  applied. That is why the `detect` job checks out with `fetch-depth: 0`. A manual dispatch keeps
+  reading the working tree, which *is* `github.sha`. The `patches_from` output records which.
 - **`validate`** installs frozen dependencies, typechecks, runs `bun test`, builds with
   `CXSTATUSLINE_RELEASE_BUILD=1` (which refuses a dirty or commit-less checkout) and asserts
   the bundle prints the detected `cx_version`.
@@ -160,7 +174,8 @@ rewritten.
 bun scripts/prebuilt.ts report --detect <result> --validate <result> --native <result> \
   --publish <result> --codex-version <v> --cx-version <v> --tag <tag> --upstream-tag <tag> \
   --patch-sha256 <sha> --source-commit <sha> --should-build <bool> --publish-requested <bool> \
-  --release-url <url> --run-url <url> --repo <owner/name> --event <name> [--error-file <path>]
+  --release-url <url> --run-url <url> --repo <owner/name> --event <name> \
+  [--blocked-reason <text>] [--log-dir <dir>] [--error-file <path>]
 ```
 
 - **Failing stage** is the first of `detect → validate → native → publish` that did not succeed. A
@@ -174,8 +189,18 @@ bun scripts/prebuilt.ts report --detect <result> --validate <result> --native <r
   A repeated failure edits that issue; it never opens a second.
 - **Body** carries the CX and Codex versions, upstream identity when known, the failing stage,
   `darwin-arm64`, the source commit, the patch sha256, the trigger, all four job results, the run
-  URL, a bounded (≤ 20 line) sanitized excerpt from `--error-file`, and the exact manual retry.
+  URL, `detect`'s `blocked_reason` when the run was blocked rather than broken, a bounded
+  (≤ 20 line) sanitized excerpt of the failing stage's log, and the exact manual retry.
   Structured fields only: never a raw log, an environment dump, a token or a presigned URL.
+- **Failure evidence.** Every failing-capable step in `detect`/`validate`/`native`/`publish` runs
+  under `set -o pipefail` and tees its combined output into `$RUNNER_TEMP/prebuilt-<job>.log`,
+  which each job uploads as `logs-<job>-<run_id>` with `if: always()` (one name per job, because
+  v4 artifacts are immutable). `report` downloads them with
+  `pattern: logs-*-<run_id>`/`merge-multiple: true` (`continue-on-error`, so an expired or missing
+  artifact cannot stop the report) and passes `--log-dir`; the script picks
+  `prebuilt-<failing stage>.log`, takes its last 20 lines and redacts them. `--error-file` still
+  overrides that with an explicit file. When no log was captured the body says **"no error excerpt
+  captured"** - the section is never silently omitted.
 - **Closure.** A successful publish comments the release link on the version issue and closes it.
   A successful detection closes only the detection issue - it never closes a version build
   failure. A successful arm64 build that was not published comments "build succeeded, not

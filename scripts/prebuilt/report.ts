@@ -6,7 +6,7 @@
  * matter: a deliberately skipped job is not a failure; nothing is ever claimed to exist unless the
  * GitHub API said so; and no excerpt reaches an issue body without going through `redact`.
  */
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { blockedIssueTitle } from "./detect";
@@ -76,6 +76,13 @@ export interface ReportInput {
   readonly releaseUrl: string | null;
   /** Already-bounded, already-redacted text from `--error-file`, or null. */
   readonly errorExcerpt: string | null;
+  /**
+   * Directory holding the per-job `prebuilt-<stage>.log` files the workflow captured with `tee`
+   * and uploaded as artifacts. Used only when `errorExcerpt` was not supplied explicitly.
+   */
+  readonly logDir: string | null;
+  /** `detect`'s single-line `blocked_reason`, when the run was blocked rather than broken. */
+  readonly blockedReason: string | null;
 }
 
 /**
@@ -102,9 +109,13 @@ export function reportBody(i: ReportInput, stage: Stage): string {
     `- Workflow run: ${i.runUrl}`,
     "",
   ];
-  if (i.errorExcerpt !== null && i.errorExcerpt !== "") {
-    lines.push(`### Error excerpt (last ${MAX_EXCERPT_LINES} lines, sanitized)`, "", "```", i.errorExcerpt, "```", "");
+  if (i.blockedReason !== null && i.blockedReason !== "") {
+    lines.push(`Blocked reason: ${i.blockedReason}`, "");
   }
+  // Always rendered: "no excerpt was captured" is itself information, and silently omitting the
+  // section makes a lost log indistinguishable from a stage that failed without output.
+  const excerpt = i.errorExcerpt !== null && i.errorExcerpt !== "" ? i.errorExcerpt : "no error excerpt captured";
+  lines.push(`### Error excerpt (last ${MAX_EXCERPT_LINES} lines, sanitized)`, "", "```", excerpt, "```", "");
   lines.push(
     "### Retry",
     "",
@@ -192,58 +203,94 @@ function commentAndClose(o: RunReportOptions, issue: OpenIssue, body: string, tm
 }
 
 /**
+ * The issues a success clears: a successful detection closes the detection issue, and a published
+ * release closes the version issue with its link. A build that was not published only comments.
+ */
+function closeOnSuccess(o: RunReportOptions, issues: readonly OpenIssue[], tmpRoot: string): readonly string[] {
+  const i = o.input;
+  const done: string[] = [];
+  const detection = findIssue(issues, blockedIssueTitle(null));
+  if (detection !== null) {
+    done.push(commentAndClose(o, detection, `Upstream detection succeeded in ${i.runUrl}; closing.`, tmpRoot, true));
+  }
+  const version = i.codexVersion === null ? null : findIssue(issues, blockedIssueTitle(i.codexVersion));
+  if (version !== null) {
+    const published = i.results.publish === "success" && i.releaseUrl !== null;
+    const body = published
+      ? `Published ${i.tag ?? "the release"}: ${i.releaseUrl}\n\nBuilt by ${i.runUrl}. Closing.`
+      : `Build succeeded, not published (${ARCHITECTURE}) in ${i.runUrl}. `
+        + `Leaving this issue open until a publishing run closes it.`;
+    done.push(commentAndClose(o, version, body, tmpRoot, published));
+  }
+  return done;
+}
+
+/** The API itself failed: say so, sanitized, and claim nothing about issue state. */
+function reportApiFailure(o: RunReportOptions, error: unknown): void {
+  const detail = error instanceof GhError || error instanceof Error ? error.message : String(error);
+  o.summary([
+    "## Prebuilt reporting failed",
+    "",
+    "The GitHub API call the reporter needed did not succeed, so no claim is made about issue state.",
+    "The next run re-examines this one and reports again.",
+    "",
+    "```",
+    errorExcerpt(redact(detail), MAX_EXCERPT_LINES),
+    "```",
+    "",
+    `Run: ${o.input.runUrl}`,
+  ]);
+}
+
+/**
  * Report the outcome of a run. Returns the exit code the `report` job should take: 1 when the run
  * failed or the GitHub API did, 0 when there was nothing wrong to report.
  *
  * Never partial-credits: if the API call that would find or write an issue fails, the job fails
  * with a sanitized summary and claims nothing about issue state.
  */
-export async function runReport(o: RunReportOptions): Promise<number> {
-  const tmpRoot = o.tmpRoot ?? mkdtempSync(join(tmpdir(), "cxsl-report-"));
-  const i = o.input;
-  const stage = failingStage(i.results, { publishRequested: i.publishRequested, shouldBuild: i.shouldBuild });
-  const done: string[] = [];
+export async function runReport(options: RunReportOptions): Promise<number> {
+  const tmpRoot = options.tmpRoot ?? mkdtempSync(join(tmpdir(), "cxsl-report-"));
+  const first = options.input;
+  const stage = failingStage(first.results, {
+    publishRequested: first.publishRequested,
+    shouldBuild: first.shouldBuild,
+  });
+  // The failing stage names the log to excerpt, so the excerpt is resolved after classification.
+  const o: RunReportOptions = stage === null
+    ? options
+    : { ...options, input: { ...first, errorExcerpt: first.errorExcerpt ?? stageLogExcerpt(first.logDir, stage) } };
+  const runUrl = o.input.runUrl;
   try {
-    const issues = listOwnIssues(o.run, i.repo);
+    const issues = listOwnIssues(o.run, o.input.repo);
     if (stage !== null) {
-      done.push(upsertFailure(o, issues, stage, tmpRoot));
-      o.summary([`## Prebuilt run failed at ${stage}`, "", ...done.map((d) => `- ${d}`), "", `Run: ${i.runUrl}`]);
+      const done = upsertFailure(o, issues, stage, tmpRoot);
+      o.summary([`## Prebuilt run failed at ${stage}`, "", `- ${done}`, "", `Run: ${runUrl}`]);
       return 1;
     }
-
-    const detection = findIssue(issues, blockedIssueTitle(null));
-    if (detection !== null) {
-      done.push(
-        commentAndClose(o, detection, `Upstream detection succeeded in ${i.runUrl}; closing.`, tmpRoot, true),
-      );
-    }
-    const version = i.codexVersion === null ? null : findIssue(issues, blockedIssueTitle(i.codexVersion));
-    if (version !== null) {
-      const published = i.results.publish === "success" && i.releaseUrl !== null;
-      const body = published
-        ? `Published ${i.tag ?? "the release"}: ${i.releaseUrl}\n\nBuilt by ${i.runUrl}. Closing.`
-        : `Build succeeded, not published (${ARCHITECTURE}) in ${i.runUrl}. `
-          + `Leaving this issue open until a publishing run closes it.`;
-      done.push(commentAndClose(o, version, body, tmpRoot, published));
-    }
+    const done = closeOnSuccess(o, issues, tmpRoot);
     const outcome = done.length === 0 ? ["- No open tracking issue to update."] : done.map((d) => `- ${d}`);
-    o.summary(["## Prebuilt run succeeded", "", ...outcome, "", `Run: ${i.runUrl}`]);
+    o.summary(["## Prebuilt run succeeded", "", ...outcome, "", `Run: ${runUrl}`]);
     return 0;
   } catch (e) {
-    const detail = e instanceof GhError || e instanceof Error ? e.message : String(e);
-    o.summary([
-      "## Prebuilt reporting failed",
-      "",
-      "The GitHub API call the reporter needed did not succeed, so no claim is made about issue state.",
-      "The next run re-examines this one and reports again.",
-      "",
-      "```",
-      errorExcerpt(redact(detail), MAX_EXCERPT_LINES),
-      "```",
-      "",
-      `Run: ${i.runUrl}`,
-    ]);
+    reportApiFailure(o, e);
     return 1;
+  }
+}
+
+/**
+ * The tail of the failing job's captured log, or null when the workflow captured none (an expired
+ * or never-uploaded artifact). Null is rendered as "no error excerpt captured", never omitted.
+ */
+export function stageLogExcerpt(logDir: string | null, stage: Stage): string | null {
+  if (logDir === null || logDir === "") return null;
+  const file = join(logDir, `prebuilt-${stage}.log`);
+  if (!existsSync(file)) return null;
+  try {
+    const text = readFileSync(file, "utf8");
+    return text.trim() === "" ? null : errorExcerpt(text, MAX_EXCERPT_LINES);
+  } catch (e) {
+    return redact(`stage log ${file} could not be read: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 

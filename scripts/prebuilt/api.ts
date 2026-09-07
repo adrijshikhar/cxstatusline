@@ -57,6 +57,7 @@ export {
   reportBody,
   REPORT_MARKER,
   runReport,
+  stageLogExcerpt,
   type JobResults,
   type ReportInput,
   type RunReportOptions,
@@ -69,4 +70,5 @@ export {
   selectSourceRelease,
   type SourceRelease,
 } from "./source";
+export { commitPatches, workingTreePatches, type PatchTree } from "./patch-tree";
 export { validateMinos, verifyOutput } from "./verify";
