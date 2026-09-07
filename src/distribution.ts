@@ -1,11 +1,12 @@
 import { z } from "zod";
+import { ARTIFACT_FILES, type ArtifactFile } from "./distribution/files";
 import { parseSemver } from "./version";
 
 // ---- Shared types (plan-defined; used verbatim by later tasks) ----
 
 export type Platform = "darwin-arm64" | "darwin-x64";
 
-export type ArtifactFile = "codex" | "codex-code-mode-host" | "LICENSE" | "NOTICE" | "THIRD_PARTY_NOTICES.md";
+export type { ArtifactFile };
 
 export interface FileDigest {
   sha256: string;
@@ -61,14 +62,6 @@ export interface PreparedPair {
 
 const PLATFORMS: readonly Platform[] = ["darwin-arm64", "darwin-x64"];
 
-const ARTIFACT_FILE_KEYS: readonly ArtifactFile[] = [
-  "codex",
-  "codex-code-mode-host",
-  "LICENSE",
-  "NOTICE",
-  "THIRD_PARTY_NOTICES.md",
-];
-
 /** Spec archive name: `cxstatusline-codex-<codexVersion>-<platform>.tar.gz`. */
 const ARCHIVE_PREFIX = "cxstatusline-codex";
 
@@ -115,7 +108,7 @@ const FileDigestSchema = z
   })
   .strict();
 
-const filesShape = Object.fromEntries(ARTIFACT_FILE_KEYS.map((k) => [k, FileDigestSchema])) as Record<
+const filesShape = Object.fromEntries(ARTIFACT_FILES.map((k) => [k, FileDigestSchema])) as Record<
   ArtifactFile,
   typeof FileDigestSchema
 >;

@@ -17,7 +17,6 @@ import {
   activeGeneration,
   ensureWrapper,
   generationWrapperScript,
-  installPatchedBinary,
   installWrapper,
   isOurWrapper,
   readInstallation,
@@ -140,66 +139,6 @@ describe("wrapper", () => {
     writeFileSync(p.wrapperPath, "#!/bin/sh\nexec /opt/homebrew/bin/codex-real\n");
     expect(ensureWrapper(p, "/cx", true)).toMatchObject({ kind: "refused" });
     expect(readFileSync(p.wrapperPath, "utf8")).toContain("codex-real");
-  });
-  test("installPatchedBinary copies then renames into libexec", () => {
-    const { env, root } = tmpEnv();
-    const p = resolvePaths(env);
-    const built = join(root, "built-codex");
-    const upstream = join(root, "upstream", "codex");
-    writeFileSync(built, "ELF");
-    mkdirSync(join(upstream, ".."), { recursive: true });
-    writeFileSync(upstream, "UPSTREAM-ELF");
-    writeFileSync(join(upstream, "..", "codex-code-mode-host"), "HOST");
-    installPatchedBinary(built, upstream, p);
-    expect(readFileSync(p.patchedBin, "utf8")).toBe("ELF");
-    expect(readFileSync(p.patchedCodeModeHost, "utf8")).toBe("HOST");
-    expect(statSync(p.patchedBin).mode & 0o777).toBe(0o755);
-    expect(statSync(p.patchedCodeModeHost).mode & 0o777).toBe(0o755);
-    expect(readdirSync(p.libexecDir).sort()).toEqual(["codex", "codex-code-mode-host"]);
-    expect(existsSync(`${p.patchedBin}.tmp-${process.pid}`)).toBe(false);
-  });
-
-  test("installPatchedBinary leaves the existing pair untouched when upstream lacks the host", () => {
-    const { env, root } = tmpEnv();
-    const p = resolvePaths(env);
-    const built = join(root, "built-codex");
-    const upstream = join(root, "upstream", "codex");
-    mkdirSync(p.libexecDir, { recursive: true });
-    writeFileSync(p.patchedBin, "OLD-CODEX");
-    writeFileSync(p.patchedCodeModeHost, "OLD-HOST");
-    mkdirSync(join(upstream, ".."), { recursive: true });
-    writeFileSync(built, "NEW-CODEX");
-    writeFileSync(upstream, "UPSTREAM-CODEX");
-
-    expect(() => installPatchedBinary(built, upstream, p)).toThrow(/codex-code-mode-host/);
-    expect(readFileSync(p.patchedBin, "utf8")).toBe("OLD-CODEX");
-    expect(readFileSync(p.patchedCodeModeHost, "utf8")).toBe("OLD-HOST");
-  });
-
-  test("installPatchedBinary restores the old pair when the second activation rename fails", () => {
-    const { env, root } = tmpEnv();
-    const p = resolvePaths(env);
-    const built = join(root, "built-codex");
-    const upstream = join(root, "upstream", "codex");
-    mkdirSync(p.libexecDir, { recursive: true });
-    writeFileSync(p.patchedBin, "OLD-CODEX");
-    writeFileSync(p.patchedCodeModeHost, "OLD-HOST");
-    writeFileSync(built, "NEW-CODEX");
-    mkdirSync(join(upstream, ".."), { recursive: true });
-    writeFileSync(upstream, "UPSTREAM-CODEX");
-    writeFileSync(join(upstream, "..", "codex-code-mode-host"), "NEW-HOST");
-    const stagedCodex = `${p.patchedBin}.tmp-${process.pid}`;
-
-    expect(() => installPatchedBinary(built, upstream, p, {
-      rename(from, target) {
-        if (from === stagedCodex && target === p.patchedBin) throw new Error("second activation rename failed");
-        renameSync(from, target);
-      },
-    })).toThrow("second activation rename failed");
-
-    expect(readFileSync(p.patchedBin, "utf8")).toBe("OLD-CODEX");
-    expect(readFileSync(p.patchedCodeModeHost, "utf8")).toBe("OLD-HOST");
-    expect(readdirSync(p.libexecDir).sort()).toEqual(["codex", "codex-code-mode-host"]);
   });
 });
 

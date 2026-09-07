@@ -14,6 +14,7 @@ import {
 } from "../distribution";
 import { activeGeneration, readInstallation } from "../patch/generation";
 import { extractArchive } from "./archive";
+import { ARTIFACT_FILES } from "./files";
 import { ARCHIVE_MAX_BYTES, MANIFEST_MAX_BYTES, downloadAsset, sanitize, type TransportOptions } from "./transport";
 
 /** The release asset holding the manifest. The archive's name comes from the manifest itself. */
@@ -26,16 +27,6 @@ const PROBE_TIMEOUT_MS = 30_000;
 export type PrebuiltPreparation =
   | { kind: "staged"; pair: PreparedPair }
   | { kind: "unchanged"; pair: PreparedPair };
-
-// Spelled out rather than composed from generation.ts's constants: this module and that one import
-// each other, and a top-level value dependency would be read before initialisation.
-const ARTIFACT_FILES: readonly ArtifactFile[] = [
-  "codex",
-  "codex-code-mode-host",
-  "LICENSE",
-  "NOTICE",
-  "THIRD_PARTY_NOTICES.md",
-];
 
 function digestOf(file: string): FileDigest {
   const bytes = readFileSync(file);

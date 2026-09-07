@@ -3,17 +3,16 @@ import { createHash, randomBytes } from "node:crypto";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { z } from "zod";
 import { type FileDigest, type Platform, type PreparedPair, validateManifest } from "../distribution";
+import { GENERATION_EXECUTABLES, GENERATION_LEGAL_FILES } from "../distribution/files";
 import type { Paths } from "../paths";
 import { parseSemver } from "../version";
 
 /** The metadata file that makes a generation self-describing - and authoritative over state.json. */
 export const INSTALLATION_FILE = "installation.json";
 
-/** The two files that must always appear or disappear together. */
-export const GENERATION_EXECUTABLES = ["codex", "codex-code-mode-host"] as const;
-
-/** Shipped with prebuilt pairs; absent from locally compiled ones. */
-export const GENERATION_LEGAL_FILES = ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"] as const;
+// The allowlist itself lives in the leaf module `src/distribution/files.ts` (no imports, so no
+// cycle); re-exported here because a generation's layout *is* that allowlist.
+export { GENERATION_EXECUTABLES, GENERATION_LEGAL_FILES };
 
 /** A `PreparedPair` without its temporary staging directory - exactly what a generation records. */
 export type InstallationRecord = Omit<PreparedPair, "directory">;

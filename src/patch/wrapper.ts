@@ -1,6 +1,6 @@
-import { chmodSync, closeSync, copyFileSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { preserveLauncherRestore, resolveUpstream } from "../codex/upstream";
 import type { Context } from "../context";
 import type { PreparedPair } from "../distribution";
@@ -29,8 +29,6 @@ export const WRAPPER_MARKER_V2 = "# cxstatusline-wrapper v2";
  * launcher would look foreign and `revert` would refuse to take it back.
  */
 const WRAPPER_MARKERS: readonly string[] = [WRAPPER_MARKER, WRAPPER_MARKER_V2];
-
-const CODE_MODE_HOST = "codex-code-mode-host";
 
 /** The `~/.local/bin/codex` wrapper. Everything but `update` execs into the patched binary. */
 export function wrapperScript(patchedBin: string, cxBin: string): string {
@@ -128,65 +126,6 @@ function placeExecutable(target: string, write: (tmp: string) => void): void {
   renameSync(stageExecutable(target, write), target);
 }
 
-function stageExistingExecutable(target: string): string | undefined {
-  return existsSync(target)
-    ? stageExecutable(`${target}.previous`, (tmp) => copyFileSync(target, tmp))
-    : undefined;
-}
-
-/**
- * Install Codex and its required Code Mode host as one staged set.
- * The host comes from the upstream release because the patched build only produces `codex`.
- */
-export function installPatchedBinary(
-  from: string,
-  upstreamBin: string,
-  paths: Paths,
-  { rename = renameSync }: { readonly rename?: typeof renameSync } = {},
-): void {
-  const upstreamHost = join(dirname(upstreamBin), CODE_MODE_HOST);
-  if (!existsSync(upstreamHost)) throw new Error(`upstream companion ${upstreamHost} is missing`);
-  let codexTmp: string | undefined = stageExecutable(paths.patchedBin, (tmp) => copyFileSync(from, tmp));
-  let hostTmp: string | undefined;
-  let previousCodex: string | undefined;
-  let previousHost: string | undefined;
-  let hostActivated = false;
-  let codexActivated = false;
-  try {
-    hostTmp = stageExecutable(paths.patchedCodeModeHost, (tmp) => copyFileSync(upstreamHost, tmp));
-    previousCodex = stageExistingExecutable(paths.patchedBin);
-    previousHost = stageExistingExecutable(paths.patchedCodeModeHost);
-    // Commit the host first: the new Codex binary is never made available without its host.
-    rename(hostTmp, paths.patchedCodeModeHost);
-    hostTmp = undefined;
-    hostActivated = true;
-    rename(codexTmp, paths.patchedBin);
-    codexTmp = undefined;
-    codexActivated = true;
-  } catch (e) {
-    if (hostActivated || codexActivated) {
-      if (previousHost) {
-        rename(previousHost, paths.patchedCodeModeHost);
-        previousHost = undefined;
-      } else if (hostActivated) {
-        rmSync(paths.patchedCodeModeHost, { force: true });
-      }
-      if (previousCodex) {
-        rename(previousCodex, paths.patchedBin);
-        previousCodex = undefined;
-      } else if (codexActivated) {
-        rmSync(paths.patchedBin, { force: true });
-      }
-    }
-    if (codexTmp) rmSync(codexTmp, { force: true });
-    if (hostTmp) rmSync(hostTmp, { force: true });
-    throw e;
-  } finally {
-    if (previousCodex) rmSync(previousCodex, { force: true });
-    if (previousHost) rmSync(previousHost, { force: true });
-  }
-}
-
 /**
  * Place the wrapper, refusing to destroy a real binary that is not ours.
  * Why the guard: `resolveUpstream` already refuses a foreign regular file at this path, but the
@@ -216,6 +155,12 @@ function placeWrapperScript(paths: Paths, script: string): WrapperResult {
   return { kind: "replaced" };
 }
 
+/**
+ * The v1 (flat-layout) wrapper, written from scratch.
+ * Legacy fixture for tests only: production installs go through `ensureWrapper`/`activatePair`,
+ * which write the v2 generation-resolving wrapper. Kept because the v1 script is exactly what an
+ * owner who installed before generations still has on disk, and several suites need that state.
+ */
 export function installWrapper(paths: Paths, cxBin: string): WrapperResult {
   return placeWrapperScript(paths, wrapperScript(paths.patchedBin, cxBin));
 }

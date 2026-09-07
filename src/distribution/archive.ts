@@ -2,7 +2,7 @@ import { createReadStream, createWriteStream, type WriteStream } from "node:fs";
 import { join } from "node:path";
 import { createGunzip } from "node:zlib";
 import { Parser, type ReadEntry } from "tar";
-import type { ArtifactFile } from "../distribution";
+import { ARTIFACT_FILES, GENERATION_EXECUTABLES } from "./files";
 
 /**
  * Parse-only tar handling: `tar.Parser` hands us type, name, size and mode of every entry *before*
@@ -11,9 +11,7 @@ import type { ArtifactFile } from "../distribution";
  */
 
 /** Exactly what a release archive may contain - basenames only, regular files only. */
-const EXECUTABLES = ["codex", "codex-code-mode-host"] as const;
-const LEGAL_FILES = ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"] as const;
-const ALLOWED: readonly ArtifactFile[] = [...EXECUTABLES, ...LEGAL_FILES];
+const ALLOWED = ARTIFACT_FILES;
 
 /** Untrusted archive metadata is only ever compared against these; it never sets them. */
 export const EXTRACTED_TOTAL_LIMIT = 2 * 1024 * 1024 * 1024;
@@ -23,7 +21,7 @@ const EXECUTABLE_MODE = 0o755;
 const LEGAL_MODE = 0o644;
 
 function isExecutable(name: string): boolean {
-  return (EXECUTABLES as readonly string[]).includes(name);
+  return (GENERATION_EXECUTABLES as readonly string[]).includes(name);
 }
 
 /** Archive-controlled text must never reach a message unbounded or with control characters. */

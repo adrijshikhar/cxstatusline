@@ -9,17 +9,11 @@ import { chmodSync, copyFileSync, createReadStream, lstatSync, mkdirSync, writeF
 import { basename, dirname, join } from "node:path";
 import { create } from "tar";
 import type { ArtifactFile, FileDigest, Platform } from "../../src/distribution";
+import { ARTIFACT_FILES, GENERATION_EXECUTABLES } from "../../src/distribution/files";
 
 /** Fixed entry order. The installer's validator requires exactly these five basenames. */
-export const ARCHIVE_ENTRIES: readonly ArtifactFile[] = [
-  "codex",
-  "codex-code-mode-host",
-  "LICENSE",
-  "NOTICE",
-  "THIRD_PARTY_NOTICES.md",
-];
+export const ARCHIVE_ENTRIES: readonly ArtifactFile[] = ARTIFACT_FILES;
 
-const EXECUTABLES: readonly ArtifactFile[] = ["codex", "codex-code-mode-host"];
 const EXECUTABLE_MODE = 0o755;
 const LEGAL_MODE = 0o644;
 
@@ -48,7 +42,7 @@ export async function sha256File(file: string): Promise<FileDigest> {
 }
 
 function isExecutable(name: ArtifactFile): boolean {
-  return EXECUTABLES.includes(name);
+  return (GENERATION_EXECUTABLES as readonly string[]).includes(name);
 }
 
 /** Every member must exist as a non-empty regular file before anything is packed. */
