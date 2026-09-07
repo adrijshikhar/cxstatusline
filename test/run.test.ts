@@ -288,7 +288,7 @@ describe("runAcquisition (prebuilt)", () => {
       .toEqual({ at: "2026-09-02T12:00:00.000Z", ok: false, version: CODEX, reason: RELEASE_UNAVAILABLE });
   });
   test("gh auth failure is reported as an auth problem, not as a missing release", async () => {
-    const { c } = ctx({
+    const { c, paths } = ctx({
       upstreamVersion: CODEX,
       noRust: true,
       which: (cmd) => (cmd === "gh" ? "/usr/bin/gh" : null),
@@ -296,8 +296,38 @@ describe("runAcquisition (prebuilt)", () => {
     });
     await withServer({}, async (baseUrl) => {
       expect(await runAcquisition(c, { source: "prebuilt", force: true }, { baseUrl }))
-        .toMatchObject({ kind: "unavailable", reason: expect.stringMatching(/not logged in|auth/i) });
+        .toMatchObject({ kind: "failed", reason: expect.stringMatching(/not logged in|auth/i) });
     });
+    // Not the bounded-retry token: the hook must not apply the 24h "not published yet" backoff.
+    const attempt = readState(paths.stateFile).state.last_attempt;
+    expect(attempt?.reason).not.toBe(RELEASE_UNAVAILABLE);
+    expect(attempt?.reason).toMatch(/not logged in|auth/i);
+  });
+  test("a digest mismatch keeps the real reason, not 'release-unavailable'", async () => {
+    const badFixture = releaseFixture({ cxVersion: VERSION, codexVersion: CODEX, archiveSha: "b".repeat(64) });
+    const { c, paths } = ctx({ upstreamVersion: CODEX, noRust: true });
+    await withServer(routesFor(badFixture), async (baseUrl) => {
+      const outcome = await runAcquisition(c, { source: "prebuilt", force: true }, { baseUrl });
+      expect(outcome).toMatchObject({ kind: "failed", reason: expect.stringMatching(/sha256|digest/i) });
+      expect(describeOutcome(outcome)).not.toMatch(/published yet/i);
+    });
+    const attempt = readState(paths.stateFile).state.last_attempt;
+    expect(attempt?.reason).not.toBe(RELEASE_UNAVAILABLE);
+    expect(attempt?.reason).toMatch(/sha256|digest/i);
+  });
+  test("a real 404 (public miss, gh also reports not found) still yields release-unavailable and the backoff", async () => {
+    const { c, paths } = ctx({
+      upstreamVersion: CODEX,
+      noRust: true,
+      which: (cmd) => (cmd === "gh" ? "/usr/bin/gh" : null),
+      gh: () => ({ status: 1, stderr: "HTTP 404: Not Found" }),
+    });
+    await withServer({}, async (baseUrl) => {
+      expect(await runAcquisition(c, { source: "prebuilt", force: true }, { baseUrl }))
+        .toMatchObject({ kind: "unavailable" });
+    });
+    expect(readState(paths.stateFile).state.last_attempt)
+      .toEqual({ at: "2026-09-02T12:00:00.000Z", ok: false, version: CODEX, reason: RELEASE_UNAVAILABLE });
   });
   test("refused before any network when there is no room to stage", async () => {
     const { c, calls } = ctx({

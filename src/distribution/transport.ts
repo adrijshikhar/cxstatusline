@@ -34,6 +34,26 @@ export interface Downloaded {
 }
 
 /**
+ * The release/asset genuinely does not exist for this repo (public 404, and `gh` also reports
+ * not-found or access-denied). This is the ONLY error that may drive the hook's 24h backoff and
+ * "no prebuilt pair is published yet" wording - every other failure below is a real problem that
+ * a retry-tomorrow would only repeat.
+ */
+export class ReleaseUnavailableError extends Error {
+  readonly kind = "release-unavailable" as const;
+}
+
+/** `gh` is not on PATH. A tooling problem, not "unavailable". */
+export class GhMissingError extends Error {
+  readonly kind = "gh-missing" as const;
+}
+
+/** `gh` is installed but not authenticated. A tooling problem, not "unavailable". */
+export class GhAuthError extends Error {
+  readonly kind = "gh-auth" as const;
+}
+
+/**
  * Untrusted text (a server body, gh's stderr) reaches a message only through here: first line,
  * no control characters, no query-bearing URLs, 200 characters at most.
  */
@@ -152,17 +172,17 @@ async function ghDownload(
   maxBytes: number,
 ): Promise<Downloaded> {
   if (ctx.which("gh") === null) {
-    throw new Error(`${asset} is not public for release ${tag} and GitHub CLI (gh) is not installed`);
+    throw new GhMissingError(`${asset} is not public for release ${tag} and GitHub CLI (gh) is not installed`);
   }
   const result = ctx.run("gh", ["release", "download", tag, "--repo", REPO, "--pattern", asset, "--dir", dirname(dest)]);
   if (result.status !== 0) {
     const detail = sanitize(result.stderr || result.stdout);
     if (/auth|logged in|log in|login|credential/i.test(detail)) {
-      throw new Error(`gh is not logged in, so release ${tag} could not be read: ${detail}`);
+      throw new GhAuthError(`gh is not logged in, so release ${tag} could not be read: ${detail}`);
     }
-    throw new Error(`release ${tag} not found or access denied: ${detail}`);
+    throw new ReleaseUnavailableError(`release ${tag} not found or access denied: ${detail}`);
   }
-  if (!existsSync(dest)) throw new Error(`release ${tag} not found or access denied: gh downloaded no ${asset}`);
+  if (!existsSync(dest)) throw new ReleaseUnavailableError(`release ${tag} not found or access denied: gh downloaded no ${asset}`);
   return await hashFile(dest, maxBytes, asset);
 }
 

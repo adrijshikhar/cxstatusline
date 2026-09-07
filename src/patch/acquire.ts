@@ -3,7 +3,7 @@ import type { Context } from "../context";
 import { acquireLock } from "../lock";
 import { describeLookup, preserveLauncherRestore, readUpstreamVersion, resolveUpstream } from "../codex/upstream";
 import { platformFor, preparePrebuilt, type ExpectedRelease, type PreparedPair } from "../distribution";
-import type { TransportOptions } from "../distribution/transport";
+import { ReleaseUnavailableError, sanitize, type TransportOptions } from "../distribution/transport";
 import { readState, writeState, RELEASE_UNAVAILABLE, type State } from "../state";
 import { needsRepatch, parseSemver, type SemVer } from "../version";
 import { VERSION } from "../version-info";
@@ -219,7 +219,17 @@ async function prebuiltAcquisition(
   try {
     prepared = await preparePrebuilt(ctx, expected, transport);
   } catch (e) {
-    return unavailable(ctx, state, upstream, reasonOf(e));
+    // Only a genuine "no such release/asset" gets the "unavailable" treatment (24h backoff, "not
+    // published yet" wording). Everything else - a digest mismatch, a truncated download, an HTTP
+    // 5xx, gh missing or not logged in - is a real problem: keep the real reason in last_attempt
+    // and let the hook retry on the next drift check like any other failure.
+    if (e instanceof ReleaseUnavailableError) {
+      return unavailable(ctx, state, upstream, e.message);
+    }
+    const reason = sanitize(reasonOf(e));
+    ctx.log(`prebuilt acquisition for Codex ${upstream.raw} failed: ${reasonOf(e)}`);
+    recordFailure(ctx, state, upstream.raw, reason);
+    return { kind: "failed", reason };
   }
   if (prepared.kind === "unchanged") {
     // The active generation already *is* this pair; its directory is live and must not be removed.
