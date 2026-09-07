@@ -180,38 +180,69 @@ export interface RunReportOptions {
  * `--repo` is explicit on every issue write: the read above already names the repository, so a
  * write must not quietly fall back to whatever remote the runner's checkout happens to have.
  */
-function upsertFailure(o: RunReportOptions, issues: readonly OpenIssue[], stage: Stage, tmpRoot: string): string {
+function upsertFailure(
+  o: RunReportOptions,
+  issues: readonly OpenIssue[],
+  stage: Stage,
+  tmpRoot: string,
+  completed: string[],
+): string {
   const repo = o.input.repo;
   const title = blockedIssueTitle(o.input.codexVersion ?? null);
   const file = bodyFile(tmpRoot, "issue-body.md", reportBody(o.input, stage));
   const existing = findIssue(issues, title);
   if (existing !== null) {
     ghText(o.run, ["issue", "edit", String(existing.number), "--repo", repo, "--body-file", file]);
-    return `Updated issue #${existing.number}: ${title}`;
+    return record(completed, `Updated issue #${existing.number}: ${title}`);
   }
   ghText(o.run, ["issue", "create", "--repo", repo, "--title", title, "--body-file", file]);
-  return `Created issue: ${title}`;
+  return record(completed, `Created issue: ${title}`);
 }
 
-function commentAndClose(o: RunReportOptions, issue: OpenIssue, body: string, tmpRoot: string, close: boolean): string {
+/**
+ * Note an issue write that the API has already confirmed. Recorded per call, not per function, so
+ * a later failure can still say exactly what happened - a comment that landed before its `close`
+ * failed is a fact the owner needs.
+ */
+function record(completed: string[], action: string): string {
+  completed.push(action);
+  return action;
+}
+
+interface CloseRequest {
+  readonly issue: OpenIssue;
+  readonly body: string;
+  readonly tmpRoot: string;
+  readonly close: boolean;
+  readonly completed: string[];
+}
+
+function commentAndClose(o: RunReportOptions, r: CloseRequest): string {
   const repo = o.input.repo;
-  const file = bodyFile(tmpRoot, `comment-${issue.number}.md`, `${REPORT_MARKER}\n\n${body}`);
-  ghText(o.run, ["issue", "comment", String(issue.number), "--repo", repo, "--body-file", file]);
-  if (!close) return `Commented on issue #${issue.number}`;
-  ghText(o.run, ["issue", "close", String(issue.number), "--repo", repo]);
-  return `Closed issue #${issue.number}`;
+  const file = bodyFile(r.tmpRoot, `comment-${r.issue.number}.md`, `${REPORT_MARKER}\n\n${r.body}`);
+  ghText(o.run, ["issue", "comment", String(r.issue.number), "--repo", repo, "--body-file", file]);
+  const commented = record(r.completed, `Commented on issue #${r.issue.number}`);
+  if (!r.close) return commented;
+  ghText(o.run, ["issue", "close", String(r.issue.number), "--repo", repo]);
+  return record(r.completed, `Closed issue #${r.issue.number}`);
 }
 
 /**
  * The issues a success clears: a successful detection closes the detection issue, and a published
  * release closes the version issue with its link. A build that was not published only comments.
  */
-function closeOnSuccess(o: RunReportOptions, issues: readonly OpenIssue[], tmpRoot: string): readonly string[] {
+function closeOnSuccess(
+  o: RunReportOptions,
+  issues: readonly OpenIssue[],
+  tmpRoot: string,
+  completed: string[],
+): readonly string[] {
   const i = o.input;
   const done: string[] = [];
   const detection = findIssue(issues, blockedIssueTitle(null));
   if (detection !== null) {
-    done.push(commentAndClose(o, detection, `Upstream detection succeeded in ${i.runUrl}; closing.`, tmpRoot, true));
+    const body = `Upstream detection succeeded in ${i.runUrl}; closing.`;
+    done.push(commentAndClose(o, { issue: detection, body, tmpRoot, close: true, completed }));
   }
   const version = i.codexVersion === null ? null : findIssue(issues, blockedIssueTitle(i.codexVersion));
   if (version !== null) {
@@ -220,19 +251,27 @@ function closeOnSuccess(o: RunReportOptions, issues: readonly OpenIssue[], tmpRo
       ? `Published ${i.tag ?? "the release"}: ${i.releaseUrl}\n\nBuilt by ${i.runUrl}. Closing.`
       : `Build succeeded, not published (${ARCHITECTURE}) in ${i.runUrl}. `
         + `Leaving this issue open until a publishing run closes it.`;
-    done.push(commentAndClose(o, version, body, tmpRoot, published));
+    done.push(commentAndClose(o, { issue: version, body, tmpRoot, close: published, completed }));
   }
   return done;
 }
 
-/** The API itself failed: say so, sanitized, and claim nothing about issue state. */
-function reportApiFailure(o: RunReportOptions, error: unknown): void {
+/**
+ * The API itself failed: say so, sanitized, and claim nothing that the API did not confirm.
+ * `completed` is the writes it *did* acknowledge before the failure - reporting "nothing happened"
+ * when a comment already landed would send the owner looking for it in the wrong place.
+ */
+function reportApiFailure(o: RunReportOptions, error: unknown, completed: readonly string[]): void {
   const detail = error instanceof GhError || error instanceof Error ? error.message : String(error);
   o.summary([
     "## Prebuilt reporting failed",
     "",
-    "The GitHub API call the reporter needed did not succeed, so no claim is made about issue state.",
-    "The next run re-examines this one and reports again.",
+    "A GitHub API call the reporter needed did not succeed, so nothing beyond the actions listed",
+    "below is claimed about issue state. The next run re-examines this one and reports again.",
+    "",
+    ...(completed.length === 0
+      ? ["No issue was created, updated, commented on or closed before the failure."]
+      : ["Issue actions that did complete before the failure:", "", ...completed.map((a) => `- ${a}`)]),
     "",
     "```",
     errorExcerpt(redact(detail), MAX_EXCERPT_LINES),
@@ -261,19 +300,20 @@ export async function runReport(options: RunReportOptions): Promise<number> {
     ? options
     : { ...options, input: { ...first, errorExcerpt: first.errorExcerpt ?? stageLogExcerpt(first.logDir, stage) } };
   const runUrl = o.input.runUrl;
+  const completed: string[] = [];
   try {
     const issues = listOwnIssues(o.run, o.input.repo);
     if (stage !== null) {
-      const done = upsertFailure(o, issues, stage, tmpRoot);
+      const done = upsertFailure(o, issues, stage, tmpRoot, completed);
       o.summary([`## Prebuilt run failed at ${stage}`, "", `- ${done}`, "", `Run: ${runUrl}`]);
       return 1;
     }
-    const done = closeOnSuccess(o, issues, tmpRoot);
+    const done = closeOnSuccess(o, issues, tmpRoot, completed);
     const outcome = done.length === 0 ? ["- No open tracking issue to update."] : done.map((d) => `- ${d}`);
     o.summary(["## Prebuilt run succeeded", "", ...outcome, "", `Run: ${runUrl}`]);
     return 0;
   } catch (e) {
-    reportApiFailure(o, e);
+    reportApiFailure(o, e, completed);
     return 1;
   }
 }

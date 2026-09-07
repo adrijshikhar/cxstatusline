@@ -281,6 +281,34 @@ describe("runReport", () => {
     expect(fake.of("issue edit")).toHaveLength(0);
   });
 
+  test("a failure after a successful write lists the issue actions that did complete", async () => {
+    const detection = issue(3, blockedIssueTitle(null), `${REPORT_MARKER}\ndetect`);
+    const fake = fakeGh({
+      [LOOKUP]: () => listOut([detection]),
+      "issue comment": () => ok(),
+      "issue close": () => ({ status: 1, stdout: "", stderr: "gh: rate limited" }),
+    });
+    const lines: string[] = [];
+    const code = await runReport({
+      run: fake.run,
+      input: reportInput({ results: results({ publish: "skipped" }), publishRequested: false }),
+      summary: (l) => lines.push(...l),
+    });
+    expect(code).toBe(1);
+    const summary = lines.join("\n");
+    expect(summary).toContain("Issue actions that did complete before the failure:");
+    expect(summary).toContain("Commented on issue #3");
+    // The close is the call that failed, so it is never listed as done.
+    expect(summary).not.toContain("Closed issue #3");
+  });
+
+  test("claims nothing when the failure came before any write", async () => {
+    const fake = fakeGh({ [LOOKUP]: () => ({ status: 1, stdout: "", stderr: "gh: rate limited" }) });
+    const lines: string[] = [];
+    await runReport({ run: fake.run, input: failed(), summary: (l) => lines.push(...l) });
+    expect(lines.join("\n")).toContain("No issue was created, updated, commented on or closed before the failure.");
+  });
+
   test("sanitizes a gh failure summary", async () => {
     const fake = fakeGh({
       [LOOKUP]: () => ({ status: 1, stdout: "", stderr: `gh failed: Authorization: Bearer ghp_${"A".repeat(36)}` }),
