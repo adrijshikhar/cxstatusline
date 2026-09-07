@@ -59,6 +59,16 @@ build steps holds release-write or issue-write credentials.
   `aarch64-apple-darwin`. Nothing is cross-compiled and no universal binary is produced, so a
   release manifest carries exactly one artifact (the installer schema permits one or two).
   Intel support needs an Intel runner and its own dispatch; do not infer it from an arm64 run.
+- **Private repository only.** `detect` and `publish` both carry
+  `github.event.repository.private == true` (the same guard `prebuilt-smoke.yml` uses). Guarding
+  `detect` also stops `validate` and `native`, which need it. This pipeline publishes private
+  releases and files private issues; it must never run against a fork or a repository that has been
+  made public.
+- **Runner prerequisites.** The self-hosted runner must have `gh` on `PATH`, authenticated for this
+  repository: `publish` and `report` each begin with a `command -v gh` preflight that fails the job
+  with `::error::gh CLI is required on this runner` rather than letting the script fail later. It
+  also needs `git`, `rustup`/`cargo` with the toolchain upstream pins, `bun` (installed by
+  `setup-bun`), and `just`/`cargo-nextest` (installed with `brew` only when missing).
 - **Self-hosted dispatch.** `self_hosted=true` moves every job to
   `[self-hosted, macOS, ARM64]`; `false` uses `ubuntu-latest` / `macos-15`. Hosted macOS
   minutes are billing-blocked, so the owner dispatches with `self_hosted=true`. Steps work on
@@ -107,10 +117,18 @@ build steps holds release-write or issue-write credentials.
   `extractArchive` from `src/distribution/archive.ts` for the archive, then `SHA256SUMS`
   agreement, per-file digests, Mach-O architecture, system-only linkage, `vtool` `minos` at or
   below 14.0, staged `codex --version` and the companion's `--listen` help.
+- **The source commit is passed in, never inferred.** `package` requires
+  `--source-commit "${{ needs.detect.outputs.source_commit }}"`. `GITHUB_SHA` is deliberately not
+  consulted: on a scheduled run it stays at the default-branch head while `validate`/`native`/
+  `publish` are checked out at the frozen source commit, so a manifest stamped from it would name a
+  commit the build never used - and `publish` would then refuse its own artifact set forever.
 - **Outputs.** `release-<tag>` holds exactly the three release assets (archive,
-  `manifest.json`, `SHA256SUMS`) for 7 days; `provenance-<tag>` holds the `Cargo.lock` diff
-  and digest, runner OS/CPU, `rustc --version` and the raw `vtool`/`otool` output. Workflow
-  artifacts are private to the run - they are not a release.
+  `manifest.json`, `SHA256SUMS`) for 7 days; `provenance-<tag>` holds two `Cargo.lock` diffs, the
+  lockfile digest, runner OS/CPU, `rustc --version` and the raw `vtool`/`otool` output. The diffs
+  are separate on purpose: `Cargo.lock.patched.diff` is `git diff --cached` (the patch is applied
+  with `git apply --index`, so *its* lockfile change is staged and an unstaged diff would be empty),
+  and `Cargo.lock.build.diff` is the unstaged diff, which captures any rewrite cargo did during the
+  build. Workflow artifacts are private to the run - they are not a release.
 
 ### `publish`
 
@@ -120,8 +138,11 @@ always is, a manual dispatch only with `publish=true`. It is serialized per rele
 (`concurrency: prebuilt-publish-<tag>`, `cancel-in-progress: false`) so two runs can never race
 the same release.
 
-It downloads the `release-<tag>` artifact - the exact bytes `native` verified, never a rebuild -
-and runs:
+It downloads the `release-<tag>` artifact - the exact bytes `native` verified, never a rebuild - and
+runs. `bun install` is teed into `$RUNNER_TEMP/prebuilt-publish.log` like every other
+failing-capable step, and a download-artifact failure appends a line naming the artifact that could
+not be fetched, so the documented expired-artifact case reaches `report` as an excerpt instead of
+"no error excerpt captured":
 
 ```
 bun scripts/prebuilt.ts publish --tag <tag> --dir <artifact dir> --run-id <id> --run-url <url> \
@@ -209,10 +230,17 @@ bun scripts/prebuilt.ts report --detect <result> --validate <result> --native <r
   the query string of any URL (that is where presigned signatures live) from every excerpt and
   every step summary.
 - **Reporter API failure** fails the job and writes a sanitized summary. It never claims an issue
-  was created, updated or closed without the API having said so; the next run examines this one
+  was created, updated or closed without the API having said so - but it does list the issue writes
+  the API *did* acknowledge before the failure (a comment that landed before its `close` failed is
+  a fact the owner needs), and says explicitly when there were none. The next run examines this one
   and reports again.
 
 ### Owner runbook
+
+**Before the first dispatch.** On the self-hosted runner, check `gh --version` and
+`gh auth status`: `publish` and `report` refuse to start without `gh` on `PATH`, and every GitHub
+call they make goes through it. The workflow itself also refuses to run unless the repository is
+private.
 
 **Build and publish now (the normal path).** Actions → *Prebuilt release* → *Run workflow*:
 

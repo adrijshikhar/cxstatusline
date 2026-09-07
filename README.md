@@ -37,9 +37,11 @@ Independent project; not an official OpenAI product.
 
 ## Status and requirements
 
-v0.1.0 is the initial release baseline after private laptop soak. Source installation works; prebuilt binaries are
-under private CI testing and are **not yet available through the installer**. There is no
-public npm installation command to use yet.
+v0.1.0 is the initial release baseline after private laptop soak. `cxstatusline install` downloads a
+prebuilt Codex pair; `cxstatusline install --compile` builds one from source. Prebuilt pairs are
+served from **private GitHub Releases**, so while this repository is private the download needs an
+authenticated `gh` with access to it — otherwise the installer says no pair is available and points
+at `--compile`. There is no public npm installation command to use yet.
 
 Initial support is macOS. Apple Silicon has local acceptance evidence; Intel native CI is being
 validated. Linux and Windows are not release-validated. Current supported Codex versions are
@@ -61,12 +63,13 @@ cd cxstatusline
 bun install --frozen-lockfile
 bun run link:local
 export PATH="$HOME/.local/bin:$PATH"
-cxstatusline install
+cxstatusline install --compile
 cxstatusline doctor
 ```
 
-While the repo is private, cloning requires repository access. Persist the PATH entry in your
-shell configuration. `link:local` builds and links the renderer from this checkout; keep the
+`--compile` is what makes this the source path: plain `cxstatusline install` downloads the prebuilt
+pair instead. While the repo is private, cloning requires repository access. Persist the PATH entry
+in your shell configuration. `link:local` builds and links the renderer from this checkout; keep the
 checkout in place. The first Codex source build can take tens of minutes.
 
 Start Codex, accept its cxstatusline hook trust prompt, and open a new session after installation.
@@ -93,9 +96,12 @@ codex update
 cxstatusline doctor
 ```
 
-The wrapper runs Codex's updater, then attempts a source rebuild. The SessionStart hook can
-also start background rebuilds on version drift according to the update policy. It does not
-hot-swap your running session or guess patches for unsupported versions.
+The wrapper runs Codex's updater, then downloads the prebuilt pair matching whatever version it
+landed on. It never compiles: if no prebuilt pair is published for that version, the working pair is
+left exactly where it is and the command says so. Compiling is only ever explicit, via
+`cxstatusline install --compile` or `cxstatusline patch`. The SessionStart hook can also start
+background installs on version drift according to the update policy. It does not hot-swap your
+running session or guess patches for unsupported versions.
 
 ```sh
 cxstatusline revert
