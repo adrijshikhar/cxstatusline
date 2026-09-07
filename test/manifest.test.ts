@@ -63,3 +63,27 @@ describe("loadManifest", () => {
     expect(() => loadManifest(manifestDir("{ nope"))).toThrow(ManifestError);
   });
 });
+
+describe("candidate metadata", () => {
+  test("the shipped manifest names the newest explicitly supported version and covers it", () => {
+    const shipped = loadManifest(join(import.meta.dir, "..", "patches"));
+    expect(shipped.candidate).toBe("0.153.0");
+    expect(resolvePatch(shipped, v(shipped.candidate!))?.file).toBe("codex-0.153.0.patch");
+  });
+  test("the field is optional and never widens resolution", () => {
+    const dir = manifestDir('{"version":1,"tag_prefix":"rust-v","patches":[{"min":"0.153.0","max":"0.153.0","file":"f.patch"}]}');
+    const loaded = loadManifest(dir);
+    expect(loaded.candidate).toBeUndefined();
+    const withCandidate = manifestDir(
+      '{"version":1,"tag_prefix":"rust-v","candidate":"0.160.0","patches":[{"min":"0.153.0","max":"0.153.0","file":"f.patch"}]}',
+    );
+    expect(resolvePatch(loadManifest(withCandidate), v("0.160.0"))).toBeNull();
+  });
+  test("a non-stable or non-string candidate is a malformed manifest", () => {
+    const bad = '{"version":1,"tag_prefix":"rust-v","candidate":"0.153.0-rc.1","patches":[]}';
+    expect(() => loadManifest(manifestDir(bad))).toThrow(ManifestError);
+    expect(() => loadManifest(manifestDir('{"version":1,"tag_prefix":"rust-v","candidate":7,"patches":[]}'))).toThrow(
+      ManifestError,
+    );
+  });
+});

@@ -11,6 +11,12 @@ export interface PatchRange {
 export interface Manifest {
   readonly version: 1;
   readonly tag_prefix: string;
+  /**
+   * The newest explicitly supported Codex version, named so release CI can say which version it
+   * would have built when upstream has moved ahead. Optional and purely informational: it never
+   * widens `patches`, and `resolvePatch` ignores it.
+   */
+  readonly candidate?: string;
   readonly patches: readonly PatchRange[];
 }
 
@@ -25,6 +31,14 @@ const isRange = (p: unknown): p is PatchRange => {
   return typeof r.min === "string" && parseSemver(r.min) !== null
     && typeof r.max === "string" && parseSemver(r.max) !== null
     && typeof r.file === "string" && r.file.length > 0;
+};
+
+/** Absent, or an exact stable version. A prerelease or garbage candidate is a malformed manifest. */
+const isCandidate = (c: unknown): boolean => {
+  if (c === undefined) return true;
+  if (typeof c !== "string") return false;
+  const parsed = parseSemver(c);
+  return parsed !== null && parsed.pre === null;
 };
 
 /**
@@ -42,7 +56,8 @@ export function loadManifest(patchesDir: string): Manifest {
       && m.version === 1
       && typeof m.tag_prefix === "string"
       && Array.isArray(m.patches)
-      && m.patches.every(isRange);
+      && m.patches.every(isRange)
+      && isCandidate(m.candidate);
     if (!ok) throw new ManifestError(`${file}: manifest is malformed`);
     return m as Manifest;
   } catch (e) {
