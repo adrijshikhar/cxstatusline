@@ -28,7 +28,7 @@ export function tmpEnv(prefix = "cxstatusline-test-"): { env: Env; root: string 
 export interface RecordedCall {
   cmd: string;
   args: readonly string[];
-  opts?: { cwd?: string; interactive?: boolean } | undefined;
+  opts?: { cwd?: string; interactive?: boolean; timeoutMs?: number } | undefined;
 }
 
 /** A Runner that replays canned results and records every call, including its options. */

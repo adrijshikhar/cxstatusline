@@ -19,6 +19,9 @@ import { ARCHIVE_MAX_BYTES, MANIFEST_MAX_BYTES, downloadAsset, sanitize, type Tr
 /** The release asset holding the manifest. The archive's name comes from the manifest itself. */
 const MANIFEST_ASSET = "manifest.json";
 
+/** The staged pair is the first freshly downloaded thing we execute; it does not get to hang. */
+const PROBE_TIMEOUT_MS = 30_000;
+
 /** Verified staged bytes, or the active generation when it already holds exactly this release. */
 export type PrebuiltPreparation =
   | { kind: "staged"; pair: PreparedPair }
@@ -113,7 +116,7 @@ function verifyStaged(staging: string, artifact: Artifact): Record<"codex" | "co
 
 /** The last gate: the staged binary must introduce itself as exactly the version we asked for. */
 function probeVersion(ctx: Context, staging: string, codexVersion: string): void {
-  const probe = ctx.run(join(staging, "codex"), ["--version"]);
+  const probe = ctx.run(join(staging, "codex"), ["--version"], { timeoutMs: PROBE_TIMEOUT_MS });
   const reported = sanitize((probe.stdout || probe.stderr).slice(0, 512));
   if (probe.status !== 0 || reported !== `codex-cli ${codexVersion}`) {
     throw new Error(`staged codex reported version "${reported}" instead of "codex-cli ${codexVersion}"`);

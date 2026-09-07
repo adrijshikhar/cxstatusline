@@ -12,7 +12,7 @@ import { preparePrebuilt } from "../src/distribution";
 import type { FetchLike } from "../src/distribution/transport";
 import { activeGeneration, createGeneration, swapPointer } from "../src/patch/generation";
 import { resolvePaths } from "../src/paths";
-import { fakeExec, tarStream, tmpEnv, type TarEntry } from "./helpers";
+import { fakeExec, tarStream, tmpEnv, type RecordedCall, type TarEntry } from "./helpers";
 
 const CX = "0.2.1";
 const CODEX = "0.153.0";
@@ -121,10 +121,10 @@ interface CtxOptions {
   version?: string;
 }
 
-function prebuiltCtx(over: CtxOptions = {}): { ctx: Context; root: string } {
+function prebuiltCtx(over: CtxOptions = {}): { ctx: Context; root: string; calls: RecordedCall[] } {
   const { env, root } = tmpEnv("cx prebuilt ");
   const paths = resolvePaths(env);
-  const { run } = fakeExec((cmd, args) => {
+  const { run, calls } = fakeExec((cmd, args) => {
     if (cmd === "cargo" || cmd === "rustup") throw new Error(`a prebuilt install must never run ${cmd}`);
     if (cmd === "gh") return over.gh ? over.gh(args) : { status: 1, stderr: "release not found" };
     if (args[0] === "--version") return { stdout: `codex-cli ${over.version ?? CODEX}\n` };
@@ -142,7 +142,7 @@ function prebuiltCtx(over: CtxOptions = {}): { ctx: Context; root: string } {
     log: () => {},
     say: () => {},
   };
-  return { ctx, root };
+  return { ctx, root, calls };
 }
 
 /** Everything preparePrebuilt is allowed to leave behind on failure: nothing. */
@@ -159,7 +159,7 @@ function libexecEntries(ctx: Context): string[] {
 test("stages a verified prebuilt pair from a release server", async () => {
   const fixture = release();
   const server = await releaseServer(routesFor(fixture));
-  const { ctx } = prebuiltCtx();
+  const { ctx, calls } = prebuiltCtx();
   try {
     const result = await preparePrebuilt(ctx, EXPECTED, { baseUrl: server.baseUrl });
     expect(result.kind).toBe("staged");
@@ -185,6 +185,11 @@ test("stages a verified prebuilt pair from a release server", async () => {
     expect(pair.provenance.release?.tag).toBe(TAG);
     expect(pair.provenance.release?.archiveSha256).toBe(fixture.manifest.artifacts[0]!.sha256);
     expect(pair.provenance.release?.manifest).toEqual(fixture.manifest);
+    // The version probe runs the staged binary, from the staging directory, under a timeout.
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.cmd).toBe(join(pair.directory, "codex"));
+    expect(calls[0]!.args).toEqual(["--version"]);
+    expect(calls[0]!.opts?.timeoutMs).toBeGreaterThan(0);
     // The download temp is gone; only the staging directory survives, for the caller to install.
     expect(libexecEntries(ctx)).toEqual([pair.directory.split("/").pop()!]);
   } finally {

@@ -40,6 +40,7 @@ export function realContext(env: Env, io: { say(line: string): void; log(line: s
       stdio: opts?.interactive ? "inherit" : "pipe",
       env: sccache && cmd === "cargo" ? { ...process.env, RUSTC_WRAPPER: sccache } : process.env,
       maxBuffer: 64 * 1024 * 1024,
+      ...(opts?.timeoutMs === undefined ? {} : { timeout: opts.timeoutMs, killSignal: "SIGKILL" as const }),
     });
     return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
   };
