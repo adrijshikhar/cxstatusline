@@ -4,10 +4,10 @@ import { VERSION } from "../version-info";
 import { describeLookup, readUpstreamVersion, resolveUpstream } from "../codex/upstream";
 import { isOurGroup, type HooksFile } from "../hook/install";
 import { lockHolder, pidAlive } from "../lock";
-import { preflight, REQUIRED_TOOLCHAIN } from "../patch/preflight";
 import { isOurWrapper } from "../patch/wrapper";
-import { readState } from "../state";
+import { RELEASE_UNAVAILABLE, readState, type State } from "../state";
 import { behindWithinMinor, needsRepatch, parseSemver } from "../version";
+import { bookkeepingLine, classifyGeneration, generationDetailLines, legacyLine, toolchainLine } from "./doctor-generation";
 
 export interface DoctorLine {
   readonly key: string;
@@ -15,7 +15,7 @@ export interface DoctorLine {
   readonly ok: boolean | null; // null = informational
 }
 
-const line = (key: string, value: string, ok: boolean | null = null): DoctorLine => ({ key, value, ok });
+export const line = (key: string, value: string, ok: boolean | null = null): DoctorLine => ({ key, value, ok });
 
 function wrapperLine(ctx: Context): DoctorLine {
   const p = ctx.paths.wrapperPath;
@@ -62,24 +62,42 @@ function lockLine(ctx: Context): DoctorLine {
     : line("lock", `stale pidfile for dead pid ${holder}; the next patch will steal it`);
 }
 
+/**
+ * Backoff visibility (spec: the hook silently retries an unavailable release, at most once a day).
+ * A plain `install` bypasses the window, so its message names the escape hatch explicitly.
+ */
+function lastAttemptLine(state: State): DoctorLine {
+  const a = state.last_attempt;
+  if (!a) return line("last_attempt", "none", null);
+  if (a.ok) return line("last_attempt", `ok ${a.version} at ${a.at}`, true);
+  const reasonPart = a.reason ? `: ${a.reason}` : "";
+  const backoff = a.reason === RELEASE_UNAVAILABLE ? " (hook retries after 24h; run cxstatusline install to retry now)" : "";
+  return line("last_attempt", `failed ${a.version} at ${a.at}${reasonPart}${backoff}`, false);
+}
+
 export function doctorReport(ctx: Context): DoctorLine[] {
   const { state, corrupt } = readState(ctx.paths.stateFile);
   const lookup = resolveUpstream(ctx.paths, ctx.env, isOurWrapper, state.upstream_bin);
   const upstreamBin = lookup.kind === "found" ? lookup.bin : null;
   const lookupNote = lookup.kind !== "found" ? describeLookup(lookup) : null;
   const upstream = upstreamBin ? readUpstreamVersion(upstreamBin, ctx.run) : null;
-  const patched = state.patched_from ? parseSemver(state.patched_from) : null;
+
+  // Read-only: reflects what is actually installed, not merely last-attempt bookkeeping.
+  const status = classifyGeneration(ctx.paths);
+  const source = status.record?.provenance.source ?? "none";
+
+  // Metadata wins over state.json's `patched_from` for drift (src/patch/generation.ts);
+  // `bookkeepingLine` below surfaces it separately when the two disagree.
+  const effectivePatchedFrom = status.record?.codexVersion ?? state.patched_from;
+  const patched = effectivePatchedFrom ? parseSemver(effectivePatchedFrom) : null;
   const drift = (): DoctorLine => {
     if (!upstream || !patched) return line("drift", "n/a");
     if (needsRepatch(upstream, patched, state.policy)) return line("drift", `install due: ${patched.raw} -> ${upstream.raw}`, false);
     if (behindWithinMinor(upstream, patched)) return line("drift", `behind within minor: ${patched.raw} < ${upstream.raw} (held by policy; \`patch --force\` to pick up)`);
     return line("drift", "none", true);
   };
-  const pf = preflight({ which: ctx.which, run: ctx.run, freeBytes: ctx.freeBytes }, ctx.paths.shareDir);
-  const patchedBinPresent = existsSync(ctx.paths.patchedBin);
-  const codeModeHostPresent = existsSync(ctx.paths.patchedCodeModeHost);
-  const companionOk = codeModeHostPresent ? true : state.patched_from === null ? null : false;
-  return [
+
+  const lines: (DoctorLine | null)[] = [
     line("renderer", `${ctx.cxBin} (${VERSION})`),
     line("settings", `${ctx.paths.settingsFile} ${existsSync(ctx.paths.settingsFile) ? "present" : "absent (written on first render)"}`),
     upstreamLine(ctx, upstreamBin, upstream?.raw ?? null, lookupNote),
@@ -87,14 +105,18 @@ export function doctorReport(ctx: Context): DoctorLine[] {
     line("patched_from", state.patched_from ?? "never"),
     line("policy", state.policy),
     drift(),
+    bookkeepingLine(state, status.record),
     wrapperLine(ctx),
-    line("patched_bin", patchedBinPresent ? ctx.paths.patchedBin : "absent", patchedBinPresent ? true : null),
-    line("code_mode_host", codeModeHostPresent ? ctx.paths.patchedCodeModeHost : "absent", companionOk),
+    status.activeLine,
+    status.generationLine,
+    ...generationDetailLines(ctx, status),
+    legacyLine(ctx.paths, status.record),
     hookLine(ctx),
-    line("last_attempt", state.last_attempt ? `${state.last_attempt.ok ? "ok" : "FAILED"} ${state.last_attempt.version} at ${state.last_attempt.at}${state.last_attempt.reason ? `: ${state.last_attempt.reason}` : ""}` : "none", state.last_attempt ? state.last_attempt.ok : null),
-    pf.ok ? line("toolchain", `git, cargo and Rust ${REQUIRED_TOOLCHAIN} present; disk ok`, true) : line("toolchain", `${pf.reason} - ${pf.fix}`, false),
+    lastAttemptLine(state),
+    toolchainLine(ctx, source),
     lockLine(ctx),
   ];
+  return lines.filter((l): l is DoctorLine => l !== null);
 }
 
 export function formatDoctor(lines: readonly DoctorLine[]): string {
