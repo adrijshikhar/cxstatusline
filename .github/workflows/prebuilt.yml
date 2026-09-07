@@ -355,7 +355,7 @@ jobs:
   # the GitHub API call it needed did not succeed - it never claims issue state it did not observe.
   report:
     needs: [detect, validate, native, publish]
-    if: always()
+    if: always() && github.event.repository.private == true
     runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64"]') || 'ubuntu-latest' }}
     timeout-minutes: 10
     permissions:
