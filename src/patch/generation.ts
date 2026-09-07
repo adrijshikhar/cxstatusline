@@ -35,17 +35,39 @@ function stamp(installedAt: string): string {
   return when.toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "");
 }
 
-/** True when `child` really lives under `parent`, comparing real paths (/var vs /private/var). */
-function contains(parent: string, child: string): boolean {
-  const real = (p: string): string => {
+/** Nearest existing ancestor of `p`, so a real path can be computed for a target that does not exist. */
+function nearestExisting(p: string): string {
+  let cur = p;
+  for (;;) {
     try {
-      return realpathSync(p);
+      statSync(cur);
+      return cur;
     } catch {
-      return resolve(p);
+      const parent = dirname(cur);
+      if (parent === cur) return cur;
+      cur = parent;
     }
-  };
-  const root = real(parent);
-  return real(child).startsWith(`${root}${sep}`);
+  }
+}
+
+/**
+ * `p` resolved through any real symlinks in its existing ancestors, keeping the (possibly
+ * nonexistent) tail verbatim - so e.g. macOS's `/tmp` -> `/private/tmp` is resolved consistently
+ * whether or not the leaf itself exists yet, which a bare `realpathSync` fallback to `resolve()`
+ * is not: a nonexistent path would compare against an unresolved prefix and look "outside" a root
+ * it is really inside.
+ */
+function realish(p: string): string {
+  const near = nearestExisting(p);
+  return realpathSync(near) + resolve(p).slice(resolve(near).length);
+}
+
+/**
+ * True when `candidate` really lives under `paths.generationsDir`, comparing real paths
+ * (e.g. macOS's `/tmp` vs `/private/tmp`) even when `candidate` itself does not exist.
+ */
+export function insideGenerationsRoot(paths: Paths, candidate: string): boolean {
+  return realish(candidate).startsWith(`${realish(paths.generationsDir)}${sep}`);
 }
 
 /**
@@ -188,7 +210,7 @@ export function activeGeneration(paths: Paths): string | null {
   const target = readPointer(paths);
   if (target === null) return null;
   const abs = isAbsolute(target) ? target : resolve(dirname(paths.currentGeneration), target);
-  if (!contains(paths.generationsDir, abs)) return null;
+  if (!insideGenerationsRoot(paths, abs)) return null;
   try {
     return statSync(abs).isDirectory() ? abs : null;
   } catch {

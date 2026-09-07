@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { Context } from "../context";
 import { platformFor } from "../distribution";
 import type { Paths } from "../paths";
 import {
   GENERATION_LEGAL_FILES,
   activeGeneration,
+  insideGenerationsRoot,
   isGenerationDir,
   readInstallation,
   readPointer,
@@ -28,38 +29,6 @@ export interface GenerationStatus {
   readonly dir: string | null;
   readonly activeLine: DoctorLine;
   readonly generationLine: DoctorLine;
-}
-
-/** Nearest existing ancestor of `p`, so a real path can be computed for a target that does not exist. */
-function nearestExisting(p: string): string {
-  let cur = p;
-  for (;;) {
-    try {
-      statSync(cur);
-      return cur;
-    } catch {
-      const parent = dirname(cur);
-      if (parent === cur) return cur;
-      cur = parent;
-    }
-  }
-}
-
-/**
- * `p` resolved through any real symlinks in its existing ancestors, keeping the (possibly
- * nonexistent) tail verbatim - so e.g. macOS's `/tmp` -> `/private/tmp` is resolved consistently
- * whether or not the leaf itself exists yet, which a bare `realpathSync` fallback to `resolve()`
- * is not: a nonexistent path would compare against an unresolved prefix and look "outside" a root
- * it is really inside.
- */
-function realish(p: string): string {
-  const near = nearestExisting(p);
-  return realpathSync(near) + resolve(p).slice(resolve(near).length);
-}
-
-/** True when `candidate` really lives under `paths.generationsDir` (comparing real paths). */
-function insideGenerationsRoot(paths: Paths, candidate: string): boolean {
-  return realish(candidate).startsWith(`${realish(paths.generationsDir)}${sep}`);
 }
 
 function resolvePointerTarget(paths: Paths, raw: string): string {
@@ -145,7 +114,12 @@ function digestLine(key: "codex" | "codex-code-mode-host", label: string, record
   if (!record || !dir) return line(label, NO_GENERATION, null);
   const file = join(dir, key);
   if (!existsSync(file)) return line(label, "missing", false);
-  const buf = readFileSync(file);
+  let buf: Buffer;
+  try {
+    buf = readFileSync(file);
+  } catch (e) {
+    return line(label, `unreadable: ${(e as Error).message.split("\n")[0]}`, false);
+  }
   const got = { sha256: createHash("sha256").update(buf).digest("hex"), size: buf.length };
   const want = record.provenance.executables[key];
   const verified = got.sha256 === want.sha256 && got.size === want.size;

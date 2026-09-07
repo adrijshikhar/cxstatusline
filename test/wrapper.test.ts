@@ -9,6 +9,7 @@ import type { Context } from "../src/context";
 import type { ArtifactFile, FileDigest, PreparedPair, ReleaseManifest } from "../src/distribution";
 import { resolveUpstream } from "../src/codex/upstream";
 import { resolvePaths } from "../src/paths";
+import { insideGenerationsRoot } from "../src/patch/generation";
 import {
   WRAPPER_MARKER,
   WRAPPER_MARKER_V2,
@@ -341,6 +342,25 @@ describe("generation activation", () => {
     // The caller still owns the staging directory.
     expect(existsSync(pair.directory)).toBe(true);
     expect(assertNeverMixed(paths)).toBe("generation");
+  });
+
+  test("insideGenerationsRoot (and activeGeneration) classify a dangling `current` correctly under a symlinked tmp root", () => {
+    // tmpEnv() roots HOME under os.tmpdir(), which on macOS is itself a symlink (/tmp ->
+    // /private/tmp) - exactly the case that once made a dangling target inside generationsDir
+    // get misclassified as "outside generations dir" (see src/patch/generation.ts).
+    const { env } = tmpEnv();
+    const paths = resolvePaths(env);
+    mkdirSync(paths.generationsDir, { recursive: true });
+
+    const danglingInside = join(paths.generationsDir, "nowhere");
+    expect(insideGenerationsRoot(paths, danglingInside)).toBe(true);
+    symlinkSync(danglingInside, paths.currentGeneration);
+    // Dangling but inside the root: activeGeneration must not treat it as foreign/outside.
+    expect(activeGeneration(paths)).toBeNull();
+    expect(existsSync(danglingInside)).toBe(false);
+
+    const outside = join(paths.generationsDir, "..", "..", "elsewhere", "nowhere");
+    expect(insideGenerationsRoot(paths, outside)).toBe(false);
   });
 
   test("installation.json is the PreparedPair without its temporary directory", () => {
