@@ -69,6 +69,9 @@ const ARTIFACT_FILE_KEYS: readonly ArtifactFile[] = [
   "THIRD_PARTY_NOTICES.md",
 ];
 
+/** Spec archive name: `cxstatusline-codex-<codexVersion>-<platform>.tar.gz`. */
+const ARCHIVE_PREFIX = "cxstatusline-codex";
+
 const HEX40 = /^[0-9a-f]{40}$/;
 const HEX64 = /^[0-9a-f]{64}$/;
 const ISO_8601 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
@@ -90,6 +93,11 @@ export function releaseTag(cxVersion: string, codexVersion: string): string {
   return `cxstatusline-v${cxVersion}-codex-v${codexVersion}`;
 }
 
+/**
+ * Platform selection follows Node's own `process.arch`, not the physical CPU: an x64 Node running
+ * under Rosetta on Apple Silicon reports `x64` and therefore selects the Intel asset. That is
+ * deliberate - the pair has to match the runtime that will execute it.
+ */
 export function platformFor(os: string, arch: string): Platform {
   if (os === "darwin" && arch === "arm64") return "darwin-arm64";
   if (os === "darwin" && arch === "x64") return "darwin-x64";
@@ -154,7 +162,7 @@ function checkArtifacts(m: ManifestShape, expected: ExpectedRelease): string | n
     if (artifact.filename.includes("/") || artifact.filename.includes("\\") || artifact.filename.includes("..")) {
       return "artifact filename contains illegal path characters";
     }
-    const expectedFilename = `codex-${m.codexVersion}-${artifact.platform}.tar.gz`;
+    const expectedFilename = `${ARCHIVE_PREFIX}-${m.codexVersion}-${artifact.platform}.tar.gz`;
     if (artifact.filename !== expectedFilename) return "artifact filename does not match expected pattern";
   }
   if (!seen.has(expected.platform)) return "no artifact for expected platform";
@@ -196,3 +204,7 @@ export function validateManifest(raw: unknown, expected: ExpectedRelease): Relea
 
   return structural.data as ReleaseManifest;
 }
+
+// ---- Prebuilt preparation (transport + archive live in ./distribution/*) ----
+
+export { preparePrebuilt, type PrebuiltPreparation } from "./distribution/prebuilt";

@@ -43,3 +43,57 @@ export function fakeExec(
   };
   return { run, calls };
 }
+
+/**
+ * One entry in a hand-built tar stream. `type` is the raw POSIX typeflag so tests can produce
+ * links, devices and metadata entries that no ordinary packer would emit.
+ */
+export interface TarEntry {
+  readonly name: string;
+  /** POSIX typeflag: "0" file, "1" hardlink, "2" symlink, "3" chardev, "5" dir, "x" pax, "S" sparse. */
+  readonly type?: string;
+  readonly mode?: number;
+  readonly data?: Buffer | string;
+  readonly linkname?: string;
+  /** Declared size, when it must differ from `data.length` (truncation / oversize fixtures). */
+  readonly size?: number;
+}
+
+function octalField(value: number, width: number): string {
+  return `${value.toString(8).padStart(width - 1, "0").slice(-(width - 1))}\0`;
+}
+
+function tarHeader(entry: TarEntry, size: number): Buffer {
+  const header = Buffer.alloc(512);
+  header.write(entry.name, 0, 100, "utf8");
+  header.write(octalField(entry.mode ?? 0o644, 8), 100, "utf8");
+  header.write(octalField(0, 8), 108, "utf8");
+  header.write(octalField(0, 8), 116, "utf8");
+  header.write(octalField(size, 12), 124, "utf8");
+  header.write(octalField(0, 12), 136, "utf8");
+  header.write("        ", 148, "utf8"); // checksum placeholder: eight spaces
+  header.write(entry.type ?? "0", 156, "utf8");
+  if (entry.linkname) header.write(entry.linkname, 157, 100, "utf8");
+  header.write("ustar\0", 257, "utf8");
+  header.write("00", 263, "utf8");
+  let sum = 0;
+  for (const byte of header) sum += byte;
+  header.write(`${sum.toString(8).padStart(6, "0")}\0 `, 148, "utf8");
+  return header;
+}
+
+/** A raw (uncompressed) tar stream built from `entries`, including the two-block end marker. */
+export function tarStream(entries: readonly TarEntry[]): Buffer {
+  const blocks: Buffer[] = [];
+  for (const entry of entries) {
+    const data = typeof entry.data === "string" ? Buffer.from(entry.data) : (entry.data ?? Buffer.alloc(0));
+    blocks.push(tarHeader(entry, entry.size ?? data.length));
+    if (data.length > 0) {
+      const padded = Buffer.alloc(Math.ceil(data.length / 512) * 512);
+      data.copy(padded);
+      blocks.push(padded);
+    }
+  }
+  blocks.push(Buffer.alloc(1024));
+  return Buffer.concat(blocks);
+}

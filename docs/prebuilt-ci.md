@@ -28,3 +28,19 @@ Local CI-helper checks:
 bun test test/ci-prebuilt.test.ts
 bun run typecheck
 ```
+
+## Installer-side notes
+
+Release asset names are fixed: `manifest.json`, `SHA256SUMS`, and one archive per
+platform named `cxstatusline-codex-<codexVersion>-<platform>.tar.gz`. The installer
+only reads `manifest.json` and the archive for its own platform.
+
+Platform selection follows Node's own `process.arch`, not the physical CPU. An x64
+Node running under Rosetta on Apple Silicon reports `x64` and therefore selects the
+Intel asset - deliberately, because the pair has to match the runtime that executes it.
+
+The archive must contain exactly five regular files as plain basenames: `codex`,
+`codex-code-mode-host`, `LICENSE`, `NOTICE` and `THIRD_PARTY_NOTICES.md`. Anything
+else - a leading `./` directory entry from `tar -C staging .`, a link, a device, a
+duplicate or an extra file - is rejected on the entry header, before any byte is
+written. Pack with explicit file arguments, never with `.`.

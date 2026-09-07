@@ -49,7 +49,7 @@ function filesFor(sha: string): Artifact["files"] {
 function artifactFor(platform: "darwin-arm64" | "darwin-x64", sha: string): Artifact {
   return {
     platform,
-    filename: `codex-${CODEX}-${platform}.tar.gz`,
+    filename: `cxstatusline-codex-${CODEX}-${platform}.tar.gz`,
     sha256: sha,
     size: 2048,
     files: filesFor(sha),
@@ -143,15 +143,19 @@ const cases: Array<{ name: string; mutate: Mutator }> = [
   },
   {
     name: "artifact filename with path traversal",
-    mutate: (m) => { m.artifacts[0]!.filename = `../codex-${CODEX}-darwin-arm64.tar.gz`; },
+    mutate: (m) => { m.artifacts[0]!.filename = `../cxstatusline-codex-${CODEX}-darwin-arm64.tar.gz`; },
   },
   {
     name: "artifact filename with backslash",
-    mutate: (m) => { m.artifacts[0]!.filename = `codex-${CODEX}-darwin-arm64.tar.gz\\evil`; },
+    mutate: (m) => { m.artifacts[0]!.filename = `cxstatusline-codex-${CODEX}-darwin-arm64.tar.gz\\evil`; },
   },
   {
     name: "artifact filename does not match platform/version",
-    mutate: (m) => { m.artifacts[0]!.filename = "codex-0.999.0-darwin-arm64.tar.gz"; },
+    mutate: (m) => { m.artifacts[0]!.filename = "cxstatusline-codex-0.999.0-darwin-arm64.tar.gz"; },
+  },
+  {
+    name: "artifact filename missing the cxstatusline prefix",
+    mutate: (m) => { m.artifacts[0]!.filename = `codex-${CODEX}-darwin-arm64.tar.gz`; },
   },
   {
     name: "artifact sha256 malformed",

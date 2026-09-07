@@ -497,7 +497,7 @@ describe("generation activation", () => {
       sourceCommit: "c".repeat(40),
       workflowUrl: "https://github.com/adrijshikhar/cxstatusline/actions/runs/123456789",
       createdAt: "2026-09-05T12:00:00Z",
-      artifacts: [{ platform: "darwin-arm64" as const, filename: "codex-0.152.1-darwin-arm64.tar.gz", sha256: "a".repeat(64), size: 100, files }],
+      artifacts: [{ platform: "darwin-arm64" as const, filename: "cxstatusline-codex-0.152.1-darwin-arm64.tar.gz", sha256: "a".repeat(64), size: 100, files }],
     };
     const release = { tag: "cxstatusline-v2.0.0-codex-v0.152.1", archiveSha256: "a".repeat(64), manifest };
     writeFileSync(metadata, JSON.stringify(withProvenance(whole, { release })));
