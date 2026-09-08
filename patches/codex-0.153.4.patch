@@ -1,0 +1,1482 @@
+diff --git a/codex-rs/tui/src/app/background_requests.rs b/codex-rs/tui/src/app/background_requests.rs
+index c39f5c6375..d3dca48255 100644
+--- a/codex-rs/tui/src/app/background_requests.rs
++++ b/codex-rs/tui/src/app/background_requests.rs
+@@ -100,7 +100,8 @@ impl App {
+             let result = match origin {
+                 RateLimitRefreshOrigin::Recovery
+                 | RateLimitRefreshOrigin::ResetConsume { .. }
+-                | RateLimitRefreshOrigin::ResetPicker { .. } => {
++                | RateLimitRefreshOrigin::ResetPicker { .. }
++                | RateLimitRefreshOrigin::CxStatusLine => {
+                     tokio::time::timeout(RATE_LIMIT_RESET_REQUEST_TIMEOUT, request)
+                         .await
+                         .map_err(|_| "account/rateLimits/read timed out in TUI".to_string())
+@@ -1351,7 +1352,75 @@ mod tests {
+     use codex_config::types::AuthCredentialsStoreMode;
+     use codex_protocol::mcp::Tool;
+     use codex_utils_absolute_path::AbsolutePathBuf;
++    use codex_utils_absolute_path::test_support::PathExt;
+     use pretty_assertions::assert_eq;
++    use tempfile::tempdir;
++    use wiremock::Mock;
++    use wiremock::MockServer;
++    use wiremock::ResponseTemplate;
++    use wiremock::matchers::method;
++    use wiremock::matchers::path;
++
++    #[tokio::test(flavor = "current_thread")]
++    async fn cxstatusline_rate_limit_request_times_out() -> Result<()> {
++        let mut app = make_test_app().await;
++        let server = MockServer::start().await;
++        let home = tempdir()?;
++        app.config.codex_home = home.path().to_path_buf().abs();
++        app.config.chatgpt_base_url = server.uri();
++        app.config.cli_auth_credentials_store_mode = AuthCredentialsStoreMode::File;
++        app.config.sqlite = codex_state::SqliteConfig::new_for_testing(home.path().abs());
++        write_chatgpt_auth(
++            home.path(),
++            ChatGptAuthFixture::new("chatgpt-token").account_id("account-123"),
++            AuthCredentialsStoreMode::File,
++        )
++        .expect("write ChatGPT authentication");
++        Mock::given(method("GET"))
++            .and(path("/api/codex/usage"))
++            .respond_with(ResponseTemplate::new(/*status_code*/ 200).set_delay(
++                RATE_LIMIT_RESET_REQUEST_TIMEOUT + std::time::Duration::from_secs(/*secs*/ 1),
++            ))
++            .expect(/*requests*/ 1)
++            .mount(&server)
++            .await;
++        let app_server = crate::start_embedded_app_server_for_picker(&app.config).await?;
++        let (app_event_tx, mut app_events) = tokio::sync::mpsc::unbounded_channel();
++        app.app_event_tx = AppEventSender::new(app_event_tx);
++
++        app.refresh_rate_limits(&app_server, RateLimitRefreshOrigin::CxStatusLine);
++        tokio::time::timeout(std::time::Duration::from_secs(/*secs*/ 5), async {
++            loop {
++                if server.received_requests().await.is_some_and(|requests| {
++                    requests
++                        .iter()
++                        .any(|request| request.url.path() == "/api/codex/usage")
++                }) {
++                    return;
++                }
++                tokio::time::sleep(std::time::Duration::from_millis(/*millis*/ 10)).await;
++            }
++        })
++        .await
++        .expect("cxstatusline request reaches the usage endpoint");
++
++        tokio::time::pause();
++        tokio::time::advance(RATE_LIMIT_RESET_REQUEST_TIMEOUT).await;
++        tokio::task::yield_now().await;
++
++        assert!(matches!(
++            app_events.try_recv(),
++            Ok(AppEvent::RateLimitsLoaded {
++                origin: RateLimitRefreshOrigin::CxStatusLine,
++                result: Err(ref error),
++                ..
++            }) if error == "account/rateLimits/read timed out in TUI"
++        ));
++
++        app_server.shutdown().await?;
++        server.verify().await;
++        Ok(())
++    }
+ 
+     #[tokio::test]
+     async fn fetch_thread_usage_uses_app_server_auth_after_persisted_account_changes() {
+diff --git a/codex-rs/tui/src/app/event_dispatch.rs b/codex-rs/tui/src/app/event_dispatch.rs
+index d2ea7c5204..c9453cf2d1 100644
+--- a/codex-rs/tui/src/app/event_dispatch.rs
++++ b/codex-rs/tui/src/app/event_dispatch.rs
+@@ -1355,6 +1355,13 @@ impl App {
+                                 }),
+                             );
+                         }
++                        RateLimitRefreshOrigin::CxStatusLine => {
++                            self.chat_widget.finish_cxstatusline_rate_limit_refresh();
++                            for snapshot in snapshots {
++                                self.chat_widget.on_rate_limit_snapshot(Some(snapshot));
++                            }
++                            tui.frame_requester().schedule_frame();
++                        }
+                     }
+                 }
+                 Err(err) => {
+@@ -1396,6 +1403,10 @@ impl App {
+                                 Err(err),
+                             );
+                         }
++                        RateLimitRefreshOrigin::CxStatusLine => {
++                            self.chat_widget.finish_cxstatusline_rate_limit_refresh();
++                            tui.frame_requester().schedule_frame();
++                        }
+                     }
+                 }
+                 }
+diff --git a/codex-rs/tui/src/app/tests/rate_limits.rs b/codex-rs/tui/src/app/tests/rate_limits.rs
+index 171c6d9eef..76069c9827 100644
+--- a/codex-rs/tui/src/app/tests/rate_limits.rs
++++ b/codex-rs/tui/src/app/tests/rate_limits.rs
+@@ -214,6 +214,7 @@ async fn stale_rate_limit_reads_preserve_newer_workspace_hard_stop_for_every_ori
+         "usage",
+         "reset-picker",
+         "reset-consume",
++        "cxstatusline",
+     ] {
+         let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+         set_chatgpt_auth(&mut app.chat_widget);
+@@ -262,6 +263,7 @@ async fn stale_rate_limit_reads_preserve_newer_workspace_hard_stop_for_every_ori
+             "reset-consume" => RateLimitRefreshOrigin::ResetConsume {
+                 request_id: app.chat_widget.show_rate_limit_reset_consuming_popup(),
+             },
++            "cxstatusline" => RateLimitRefreshOrigin::CxStatusLine,
+             _ => unreachable!("unknown refresh origin"),
+         };
+         let read_generation = app.rate_limit_hard_stop_generation;
+@@ -302,7 +304,7 @@ async fn stale_rate_limit_reads_preserve_newer_workspace_hard_stop_for_every_ori
+             "reset-consume" => {
+                 assert!(popup.contains("Usage reset. You have 0 usage limit resets left."));
+             }
+-            "startup" | "status" => {}
++            "startup" | "status" | "cxstatusline" => {}
+             _ => unreachable!("unknown refresh origin"),
+         }
+ 
+@@ -478,6 +480,97 @@ async fn failed_rate_limit_read_preserves_visible_backend_banner() -> Result<()>
+     Ok(())
+ }
+ 
++#[tokio::test]
++async fn cxstatusline_rate_limit_refresh_updates_snapshots_without_status_card() -> Result<()> {
++    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
++    set_chatgpt_auth(&mut app.chat_widget);
++    let mut tui = crate::tui::test_support::make_test_tui()?;
++    let mut app_server = Box::pin(crate::start_embedded_app_server_for_picker(
++        app.chat_widget.config_ref(),
++    ))
++    .await?;
++    let (request_id, hard_stop_generation) = app
++        .rate_limit_refresh_state
++        .start(
++            RateLimitRefreshOrigin::CxStatusLine,
++            &mut app.rate_limit_hard_stop_generation,
++        )
++        .expect("cxstatusline refresh starts");
++
++    app.handle_event(
++        &mut tui,
++        &mut app_server,
++        AppEvent::RateLimitsLoaded {
++            request_id,
++            origin: RateLimitRefreshOrigin::CxStatusLine,
++            hard_stop_generation,
++            result: Ok(account_rate_limits_response(rate_limit_snapshot(
++                /*used_percent*/ 89, /*rate_limit_reached_type*/ None,
++                /*spend_control_reached*/ None,
++            ))),
++        },
++    )
++    .await?;
++
++    assert!(
++        !std::iter::from_fn(|| app_event_rx.try_recv().ok())
++            .any(|event| matches!(event, AppEvent::InsertHistoryCell(_))),
++        "cxstatusline refresh must not create a status card"
++    );
++    let status = render_status_output(&mut app, &mut app_event_rx);
++    assert!(
++        status.contains("11% left"),
++        "expected cxstatusline refresh to update cached limits, got: {status}"
++    );
++
++    app_server.shutdown().await?;
++    Ok(())
++}
++
++#[tokio::test]
++async fn cxstatusline_rate_limit_refresh_failure_preserves_last_snapshot() -> Result<()> {
++    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
++    set_chatgpt_auth(&mut app.chat_widget);
++    app.chat_widget
++        .on_rate_limit_snapshot(Some(rate_limit_snapshot(
++            /*used_percent*/ 89, /*rate_limit_reached_type*/ None,
++            /*spend_control_reached*/ None,
++        )));
++    let mut tui = crate::tui::test_support::make_test_tui()?;
++    let mut app_server = Box::pin(crate::start_embedded_app_server_for_picker(
++        app.chat_widget.config_ref(),
++    ))
++    .await?;
++    let (request_id, hard_stop_generation) = app
++        .rate_limit_refresh_state
++        .start(
++            RateLimitRefreshOrigin::CxStatusLine,
++            &mut app.rate_limit_hard_stop_generation,
++        )
++        .expect("cxstatusline refresh starts");
++
++    app.handle_event(
++        &mut tui,
++        &mut app_server,
++        AppEvent::RateLimitsLoaded {
++            request_id,
++            origin: RateLimitRefreshOrigin::CxStatusLine,
++            hard_stop_generation,
++            result: Err("offline".to_string()),
++        },
++    )
++    .await?;
++
++    let status = render_status_output(&mut app, &mut app_event_rx);
++    assert!(
++        status.contains("11% left"),
++        "expected failed cxstatusline refresh to preserve cached limits, got: {status}"
++    );
++
++    app_server.shutdown().await?;
++    Ok(())
++}
++
+ #[tokio::test]
+ async fn backend_banner_reads_ignore_older_completions() -> Result<()> {
+     let (mut app, _events, _ops) = make_test_app_with_channels().await;
+diff --git a/codex-rs/tui/src/app_event.rs b/codex-rs/tui/src/app_event.rs
+index 1592aef9af..fff6668af4 100644
+--- a/codex-rs/tui/src/app_event.rs
++++ b/codex-rs/tui/src/app_event.rs
+@@ -160,6 +160,8 @@ pub(crate) struct PluginRemoteSectionError {
+ /// zero reset count so the disabled menu entry can become available without a
+ /// restart. A `ResetPicker` refreshes the rate limits and detailed reset-credit
+ /// rows before showing redemption choices.
++/// A `CxStatusLine` refresh updates the renderer payload without creating a
++/// status card or changing reset-credit state.
+ #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+ pub(crate) enum RateLimitRefreshOrigin {
+     /// Eagerly fetched after bootstrap for `/status` data and reset availability.
+@@ -175,6 +177,8 @@ pub(crate) enum RateLimitRefreshOrigin {
+     ResetConsume { request_id: u64 },
+     /// Refresh backend recovery after an inference limit error.
+     Recovery,
++    /// Periodically refresh the `CXSTATUSLINE_COMMAND` renderer payload.
++    CxStatusLine,
+ }
+ 
+ #[derive(Debug, Clone, PartialEq, Eq)]
+diff --git a/codex-rs/tui/src/bottom_pane/chat_composer.rs b/codex-rs/tui/src/bottom_pane/chat_composer.rs
+index 953f2e9263..a5390e8448 100644
+--- a/codex-rs/tui/src/bottom_pane/chat_composer.rs
++++ b/codex-rs/tui/src/bottom_pane/chat_composer.rs
+@@ -260,6 +260,7 @@ use super::footer::inset_footer_hint_area;
+ use super::footer::max_left_width_for_right;
+ use super::footer::passive_footer_status_line;
+ use super::footer::render_context_right;
++use super::footer::render_cxstatusline_block;
+ use super::footer::render_footer_from_props;
+ use super::footer::render_footer_hint_items;
+ use super::footer::render_footer_line;
+@@ -666,6 +667,7 @@ impl ChatComposer {
+                 status_line_value: None,
+                 status_line_hyperlink_url: None,
+                 status_line_enabled: false,
++                cxstatusline_block: Vec::new(),
+                 side_conversation_context_label: None,
+                 active_agent_label: None,
+                 external_editor_key: default_keymap
+@@ -1025,9 +1027,7 @@ impl ChatComposer {
+         textarea_right_reserve: u16,
+     ) -> [Rect; 4] {
+         let footer_props = self.footer_props();
+-        let footer_hint_height = self
+-            .custom_footer_height()
+-            .unwrap_or_else(|| footer_height(&footer_props));
++        let footer_hint_height = self.footer_hint_height(&footer_props);
+         let footer_spacing = Self::footer_spacing(footer_hint_height);
+         let footer_total_height = footer_hint_height + footer_spacing;
+         let popup_constraint = match &self.popups.active {
+@@ -3905,6 +3905,7 @@ impl ChatComposer {
+             is_wsl,
+             status_line_value: self.footer.status_line_value.clone(),
+             status_line_enabled: self.footer.status_line_enabled,
++            cxstatusline_block: self.footer.cxstatusline_block.clone(),
+             key_hints: FooterKeyHints {
+                 agents: self
+                     .agents_navigation_available()
+@@ -3967,6 +3968,12 @@ impl ChatComposer {
+             .map(|items| if items.is_empty() { 0 } else { 1 })
+     }
+ 
++    fn footer_hint_height(&self, props: &FooterProps) -> u16 {
++        self.custom_footer_height()
++            .map(|height| height.saturating_add(props.cxstatusline_block.len() as u16))
++            .unwrap_or_else(|| footer_height(props))
++    }
++
+     pub(crate) fn sync_popups(&mut self) {
+         self.sync_slash_command_elements();
+         if self.history_search.is_some() || self.draft.textarea.vim_query().is_some() {
+@@ -4461,6 +4468,14 @@ impl ChatComposer {
+         true
+     }
+ 
++    pub(crate) fn set_cxstatusline_block(&mut self, block: Vec<Line<'static>>) -> bool {
++        if self.footer.cxstatusline_block == block {
++            return false;
++        }
++        self.footer.cxstatusline_block = block;
++        true
++    }
++
+     pub(crate) fn set_side_conversation_context_label(&mut self, label: Option<String>) -> bool {
+         if self.footer.side_conversation_context_label == label {
+             return false;
+@@ -4629,9 +4644,7 @@ impl ChatComposer {
+         textarea_right_reserve: u16,
+     ) -> u16 {
+         let footer_props = self.footer_props();
+-        let footer_hint_height = self
+-            .custom_footer_height()
+-            .unwrap_or_else(|| footer_height(&footer_props));
++        let footer_hint_height = self.footer_hint_height(&footer_props);
+         let footer_spacing = Self::footer_spacing(footer_hint_height);
+         let footer_total_height = footer_hint_height + footer_spacing;
+         const COLS_WITH_MARGIN: u16 = LIVE_PREFIX_COLS + 1;
+@@ -4707,9 +4720,7 @@ impl ChatComposer {
+                     | FooterMode::ShortcutOverlay
+                     | FooterMode::EscHint => false,
+                 };
+-                let custom_height = self.custom_footer_height();
+-                let footer_hint_height =
+-                    custom_height.unwrap_or_else(|| footer_height(&footer_props));
++                let footer_hint_height = self.footer_hint_height(&footer_props);
+                 let footer_spacing = Self::footer_spacing(footer_hint_height);
+                 let hint_rect = if footer_spacing > 0 && footer_hint_height > 0 {
+                     let [_, hint_rect] = Layout::vertical([
+@@ -4721,6 +4732,26 @@ impl ChatComposer {
+                 } else {
+                     popup_rect
+                 };
++                let cxstatusline_height =
++                    (footer_props.cxstatusline_block.len() as u16).min(hint_rect.height);
++                if cxstatusline_height > 0 {
++                    render_cxstatusline_block(
++                        Rect::new(
++                            hint_rect.x,
++                            hint_rect.y,
++                            hint_rect.width,
++                            cxstatusline_height,
++                        ),
++                        buf,
++                        &footer_props.cxstatusline_block,
++                    );
++                }
++                let hint_rect = Rect::new(
++                    hint_rect.x,
++                    hint_rect.y.saturating_add(cxstatusline_height),
++                    hint_rect.width,
++                    hint_rect.height.saturating_sub(cxstatusline_height),
++                );
+                 if let Some(input) = self.draft.textarea.vim_query() {
+                     input.render(inset_footer_hint_area(hint_rect), buf);
+                 } else if let Some(line) = self.history_search_footer_line() {
+diff --git a/codex-rs/tui/src/bottom_pane/chat_composer/footer_state.rs b/codex-rs/tui/src/bottom_pane/chat_composer/footer_state.rs
+index 09ceb5fc68..f03c0dc814 100644
+--- a/codex-rs/tui/src/bottom_pane/chat_composer/footer_state.rs
++++ b/codex-rs/tui/src/bottom_pane/chat_composer/footer_state.rs
+@@ -29,6 +29,7 @@ pub(super) struct FooterState {
+     pub(super) status_line_value: Option<Line<'static>>,
+     pub(super) status_line_hyperlink_url: Option<String>,
+     pub(super) status_line_enabled: bool,
++    pub(super) cxstatusline_block: Vec<Line<'static>>,
+     pub(super) side_conversation_context_label: Option<String>,
+     pub(super) active_agent_label: Option<String>,
+     pub(super) external_editor_key: Option<ShortcutHint>,
+diff --git a/codex-rs/tui/src/bottom_pane/chat_composer/history_search.rs b/codex-rs/tui/src/bottom_pane/chat_composer/history_search.rs
+index 3f767d3ca9..308d5f6caf 100644
+--- a/codex-rs/tui/src/bottom_pane/chat_composer/history_search.rs
++++ b/codex-rs/tui/src/bottom_pane/chat_composer/history_search.rs
+@@ -33,7 +33,6 @@ use ratatui::text::Span;
+ 
+ use super::super::chat_composer_history::HistorySearchDirection;
+ use super::super::chat_composer_history::HistorySearchResult;
+-use super::super::footer::footer_height;
+ use super::super::footer::reset_mode_after_activity;
+ use super::super::textarea::VimPersistentState;
+ use super::ActivePopup;
+@@ -470,9 +469,7 @@ impl ChatComposer {
+         }
+ 
+         let footer_props = self.footer_props();
+-        let footer_hint_height = self
+-            .custom_footer_height()
+-            .unwrap_or_else(|| footer_height(&footer_props));
++        let footer_hint_height = self.footer_hint_height(&footer_props);
+         let footer_spacing = Self::footer_spacing(footer_hint_height);
+         let hint_rect = if footer_spacing > 0 && footer_hint_height > 0 {
+             let [_, hint_rect] = Layout::vertical([
+@@ -484,6 +481,16 @@ impl ChatComposer {
+         } else {
+             popup_rect
+         };
++        let hint_rect = Rect::new(
++            hint_rect.x,
++            hint_rect
++                .y
++                .saturating_add(footer_props.cxstatusline_block.len() as u16),
++            hint_rect.width,
++            hint_rect
++                .height
++                .saturating_sub(footer_props.cxstatusline_block.len() as u16),
++        );
+         if hint_rect.is_empty() {
+             return None;
+         }
+diff --git a/codex-rs/tui/src/bottom_pane/footer.rs b/codex-rs/tui/src/bottom_pane/footer.rs
+index ab4366e74a..1c06ef471d 100644
+--- a/codex-rs/tui/src/bottom_pane/footer.rs
++++ b/codex-rs/tui/src/bottom_pane/footer.rs
+@@ -78,6 +78,9 @@ pub(crate) struct FooterProps {
+     pub(crate) quit_shortcut_key: KeyBinding,
+     pub(crate) status_line_value: Option<Line<'static>>,
+     pub(crate) status_line_enabled: bool,
++    /// Complete renderer-owned rows kept separate from Codex's contextual status line so native
++    /// instructions (Esc, quit, safety) remain visible below them.
++    pub(crate) cxstatusline_block: Vec<Line<'static>>,
+     pub(crate) key_hints: FooterKeyHints,
+     /// Active thread label shown when the footer is rendering contextual information instead of an
+     /// instructional hint.
+@@ -237,14 +240,15 @@ pub(crate) fn footer_height(props: &FooterProps) -> u16 {
+         | FooterMode::ShortcutOverlay
+         | FooterMode::EscHint => false,
+     };
+-    footer_from_props_lines(
+-        props,
+-        /*collaboration_mode_indicator*/ None,
+-        /*show_cycle_hint*/ false,
+-        show_shortcuts_hint,
+-        show_queue_hint,
+-    )
+-    .len() as u16
++    props.cxstatusline_block.len() as u16
++        + footer_from_props_lines(
++            props,
++            /*collaboration_mode_indicator*/ None,
++            /*show_cycle_hint*/ false,
++            show_shortcuts_hint,
++            show_queue_hint,
++        )
++        .len() as u16
+ }
+ 
+ /// Render a single precomputed footer line.
+@@ -257,6 +261,16 @@ pub(crate) fn render_footer_line(area: Rect, buf: &mut Buffer, line: Line<'stati
+     .render(area, buf);
+ }
+ 
++/// Render renderer-owned rows above the native footer content.
++pub(crate) fn render_cxstatusline_block(area: Rect, buf: &mut Buffer, block: &[Line<'static>]) {
++    Paragraph::new(prefix_lines(
++        block.to_vec(),
++        " ".repeat(FOOTER_INDENT_COLS).into(),
++        " ".repeat(FOOTER_INDENT_COLS).into(),
++    ))
++    .render(area, buf);
++}
++
+ /// Render footer content directly from `FooterProps`.
+ ///
+ /// This is intentionally not part of the width-based collapse/fallback logic.
+@@ -1313,12 +1327,50 @@ mod tests {
+     use ratatui::backend::Backend;
+     use ratatui::backend::TestBackend;
+ 
++    fn props_with_status_block(rows: usize, mode: FooterMode) -> FooterProps {
++        FooterProps {
++            mode,
++            esc_backtrack_hint: false,
++            use_shift_enter_hint: false,
++            is_task_running: false,
++            queue_submissions: false,
++            collaboration_modes_enabled: false,
++            is_wsl: false,
++            quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
++            status_line_value: None,
++            status_line_enabled: false,
++            cxstatusline_block: (0..rows)
++                .map(|row| Line::from(format!("status-{row}")))
++                .collect(),
++            key_hints: FooterKeyHints::default_bindings(),
++            active_agent_label: None,
++        }
++    }
++
+     fn snapshot_footer(name: &str, props: FooterProps) {
+         snapshot_footer_with_mode_indicator(
+             name, /*width*/ 80, &props, /*collaboration_mode_indicator*/ None,
+         );
+     }
+ 
++    #[test]
++    fn cxstatusline_block_adds_rows_without_hiding_instruction_footer() {
++        let props = props_with_status_block(3, FooterMode::EscHint);
++        assert_eq!(footer_height(&props), 4);
++
++        let screen = render_footer_with_mode_indicator_and_context(
++            /*width*/ 80,
++            &props,
++            /*collaboration_mode_indicator*/ None,
++            context_window_line(/*percent*/ None, /*used_tokens*/ None),
++        );
++        let lines = screen.lines().map(str::trim).collect::<Vec<_>>();
++        assert_eq!(&lines[..3], ["status-0", "status-1", "status-2"]);
++        assert!(lines[3].contains("esc"));
++
++        snapshot_footer("cxstatusline_block_preserves_instruction_footer", props);
++    }
++
+     fn snapshot_footer_with_context(
+         name: &str,
+         props: FooterProps,
+@@ -1345,6 +1397,26 @@ mod tests {
+         terminal
+             .draw(|f| {
+                 let area = Rect::new(0, 0, f.area().width, height);
++                let cxstatusline_height = props.cxstatusline_block.len() as u16;
++                if cxstatusline_height > 0 {
++                    let cxstatusline_area = Rect::new(
++                        area.x,
++                        area.y,
++                        area.width,
++                        cxstatusline_height.min(area.height),
++                    );
++                    render_cxstatusline_block(
++                        cxstatusline_area,
++                        f.buffer_mut(),
++                        &props.cxstatusline_block,
++                    );
++                }
++                let area = Rect::new(
++                    area.x,
++                    area.y.saturating_add(cxstatusline_height),
++                    area.width,
++                    area.height.saturating_sub(cxstatusline_height),
++                );
+                 let show_cycle_hint = !props.is_task_running;
+                 let show_shortcuts_hint = match props.mode {
+                     FooterMode::ComposerEmpty => true,
+@@ -1594,6 +1666,7 @@ mod tests {
+                 quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
+                 status_line_value: None,
+                 status_line_enabled: false,
++                cxstatusline_block: Vec::new(),
+                 key_hints: FooterKeyHints::default_bindings(),
+                 active_agent_label: None,
+             },
+@@ -1612,6 +1685,7 @@ mod tests {
+                 quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
+                 status_line_value: None,
+                 status_line_enabled: false,
++                cxstatusline_block: Vec::new(),
+                 key_hints: FooterKeyHints {
+                     insert_newline: Some(key_hint::shift(KeyCode::Enter).into()),
+                     ..FooterKeyHints::default_bindings()
+@@ -1633,6 +1707,7 @@ mod tests {
+                 quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
+                 status_line_value: None,
+                 status_line_enabled: false,
++                cxstatusline_block: Vec::new(),
+                 key_hints: FooterKeyHints::default_bindings(),
+                 active_agent_label: None,
+             },
+@@ -1651,6 +1726,7 @@ mod tests {
+                 quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
+                 status_line_value: None,
+                 status_line_enabled: false,
++                cxstatusline_block: Vec::new(),
+                 key_hints: FooterKeyHints::default_bindings(),
+                 active_agent_label: None,
+             },
+@@ -1669,6 +1745,7 @@ mod tests {
+                 quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
+                 status_line_value: None,
+                 status_line_enabled: false,
++                cxstatusline_block: Vec::new(),
+                 key_hints: FooterKeyHints::default_bindings(),
+                 active_agent_label: None,
+             },
+@@ -1687,6 +1764,7 @@ mod tests {
+                 quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
+                 status_line_value: None,
+                 status_line_enabled: false,
++                cxstatusline_block: Vec::new(),
+                 key_hints: FooterKeyHints::default_bindings(),
+                 active_agent_label: None,
+             },
+@@ -1705,6 +1783,7 @@ mod tests {
+                 quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
+                 status_line_value: None,
+                 status_line_enabled: false,
++                cxstatusline_block: Vec::new(),
+                 key_hints: FooterKeyHints::default_bindings(),
+                 active_agent_label: None,
+             },
+@@ -1723,6 +1802,7 @@ mod tests {
+                 quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
+                 status_line_value: None,
+                 status_line_enabled: false,
++                cxstatusline_block: Vec::new(),
+                 key_hints: FooterKeyHints::default_bindings(),
+                 active_agent_label: None,
+             },
+@@ -1741,6 +1821,7 @@ mod tests {
+                 quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
+                 status_line_value: None,
+                 status_line_enabled: false,
++                cxstatusline_block: Vec::new(),
+                 key_hints: FooterKeyHints::default_bindings(),
+                 active_agent_label: None,
+             },
+@@ -1761,6 +1842,7 @@ mod tests {
+                 quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
+                 status_line_value: None,
+                 status_line_enabled: false,
++                cxstatusline_block: Vec::new(),
+                 key_hints: FooterKeyHints::default_bindings(),
+                 active_agent_label: None,
+             },
+@@ -1781,6 +1863,7 @@ mod tests {
+                 quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
+                 status_line_value: None,
+                 status_line_enabled: false,
++                cxstatusline_block: Vec::new(),
+                 key_hints: FooterKeyHints::default_bindings(),
+                 active_agent_label: None,
+             },
+@@ -1797,6 +1880,7 @@ mod tests {
+             quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
+             status_line_value: None,
+             status_line_enabled: false,
++            cxstatusline_block: Vec::new(),
+             key_hints: FooterKeyHints::default_bindings(),
+             active_agent_label: None,
+         };
+@@ -1826,6 +1910,7 @@ mod tests {
+             quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
+             status_line_value: None,
+             status_line_enabled: false,
++            cxstatusline_block: Vec::new(),
+             key_hints: FooterKeyHints::default_bindings(),
+             active_agent_label: None,
+         };
+@@ -1848,6 +1933,7 @@ mod tests {
+             quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
+             status_line_value: Some(Line::from("Status line content".to_string())),
+             status_line_enabled: true,
++            cxstatusline_block: Vec::new(),
+             key_hints: FooterKeyHints::default_bindings(),
+             active_agent_label: None,
+         };
+@@ -1865,6 +1951,7 @@ mod tests {
+             quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
+             status_line_value: Some(Line::from("Status line content".to_string())),
+             status_line_enabled: true,
++            cxstatusline_block: Vec::new(),
+             key_hints: FooterKeyHints::default_bindings(),
+             active_agent_label: None,
+         };
+@@ -1882,6 +1969,7 @@ mod tests {
+             quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
+             status_line_value: Some(Line::from("Status line content".to_string())),
+             status_line_enabled: true,
++            cxstatusline_block: Vec::new(),
+             key_hints: FooterKeyHints::default_bindings(),
+             active_agent_label: None,
+         };
+@@ -1899,6 +1987,7 @@ mod tests {
+             quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
+             status_line_value: None, // command timed out / empty
+             status_line_enabled: true,
++            cxstatusline_block: Vec::new(),
+             key_hints: FooterKeyHints::default_bindings(),
+             active_agent_label: None,
+         };
+@@ -1930,6 +2019,7 @@ mod tests {
+             quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
+             status_line_value: None,
+             status_line_enabled: false,
++            cxstatusline_block: Vec::new(),
+             key_hints: FooterKeyHints::default_bindings(),
+             active_agent_label: None,
+         };
+@@ -1953,6 +2043,7 @@ mod tests {
+             quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
+             status_line_value: None,
+             status_line_enabled: true,
++            cxstatusline_block: Vec::new(),
+             key_hints: FooterKeyHints::default_bindings(),
+             active_agent_label: None,
+         };
+@@ -1979,6 +2070,7 @@ mod tests {
+                 "Status line content that should truncate before the mode indicator".to_string(),
+             )),
+             status_line_enabled: true,
++            cxstatusline_block: Vec::new(),
+             key_hints: FooterKeyHints::default_bindings(),
+             active_agent_label: None,
+         };
+@@ -2002,6 +2094,7 @@ mod tests {
+             quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
+             status_line_value: None,
+             status_line_enabled: false,
++            cxstatusline_block: Vec::new(),
+             key_hints: FooterKeyHints::default_bindings(),
+             active_agent_label: Some("Robie [explorer]".to_string()),
+         };
+@@ -2019,6 +2112,7 @@ mod tests {
+             quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
+             status_line_value: Some(Line::from("Status line content".to_string())),
+             status_line_enabled: true,
++            cxstatusline_block: Vec::new(),
+             key_hints: FooterKeyHints::default_bindings(),
+             active_agent_label: Some("Robie [explorer]".to_string()),
+         };
+@@ -2042,6 +2136,7 @@ mod tests {
+                     .to_string(),
+             )),
+             status_line_enabled: true,
++            cxstatusline_block: Vec::new(),
+             key_hints: FooterKeyHints::default_bindings(),
+             active_agent_label: None,
+         };
+diff --git a/codex-rs/tui/src/bottom_pane/mod.rs b/codex-rs/tui/src/bottom_pane/mod.rs
+index f4caf92490..3278d7d9b1 100644
+--- a/codex-rs/tui/src/bottom_pane/mod.rs
++++ b/codex-rs/tui/src/bottom_pane/mod.rs
+@@ -1974,6 +1974,12 @@ impl BottomPane {
+         }
+     }
+ 
++    pub(crate) fn set_cxstatusline_block(&mut self, block: Vec<Line<'static>>) {
++        if self.composer.set_cxstatusline_block(block) {
++            self.request_redraw();
++        }
++    }
++
+     /// Updates the contextual footer label and requests a redraw only when it changed.
+     ///
+     /// This keeps the footer plumbing cheap during thread transitions where `App` may recompute
+diff --git a/codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__footer__tests__cxstatusline_block_preserves_instruction_footer.snap b/codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__footer__tests__cxstatusline_block_preserves_instruction_footer.snap
+new file mode 100644
+index 0000000000..abf66c5ec2
+--- /dev/null
++++ b/codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__footer__tests__cxstatusline_block_preserves_instruction_footer.snap
+@@ -0,0 +1,8 @@
++---
++source: tui/src/bottom_pane/footer.rs
++expression: terminal.backend()
++---
++"  status-0                                                                      "
++"  status-1                                                                      "
++"  status-2                                                                      "
++"  esc esc to edit previous message                                              "
+diff --git a/codex-rs/tui/src/chatwidget.rs b/codex-rs/tui/src/chatwidget.rs
+index 40eadfaf58..53234a596f 100644
+--- a/codex-rs/tui/src/chatwidget.rs
++++ b/codex-rs/tui/src/chatwidget.rs
+@@ -778,6 +778,24 @@ pub(crate) struct ChatWidget {
+     status_line_workspace_headline_last_requested_at: Option<Instant>,
+     // Set after the backend reports the workspace-message feature gate is disabled.
+     status_line_workspace_messages_disabled: bool,
++    // cxstatusline: argv of the external renderer from `CXSTATUSLINE_COMMAND`, if set.
++    cxstatusline_command: Option<Vec<String>>,
++    // cxstatusline: last successfully rendered complete block, shared with the render task.
++    cxstatusline_output: Arc<std::sync::Mutex<Option<Vec<Line<'static>>>>>,
++    // cxstatusline: true while a render task is in flight.
++    cxstatusline_pending: Arc<AtomicBool>,
++    // cxstatusline: set by the render task when new output landed - draw it, do not re-spawn.
++    cxstatusline_fresh: Arc<AtomicBool>,
++    // cxstatusline: a refresh arrived while throttled or pending - re-run once possible.
++    cxstatusline_dirty: bool,
++    // cxstatusline: last time a render task was spawned (throttle).
++    cxstatusline_last_spawn_at: Option<Instant>,
++    // cxstatusline: true while the periodic account/rateLimits/read is in flight.
++    cxstatusline_rate_limit_pending: bool,
++    // cxstatusline: last periodic account/rateLimits/read request time (throttle).
++    cxstatusline_rate_limit_last_requested_at: Option<Instant>,
++    // cxstatusline: captured once so renderer speed calculations cover this TUI session.
++    cxstatusline_started_at: chrono::DateTime<chrono::Utc>,
+     // Cached backend-estimated cost and bounded refresh state for the current thread.
+     thread_usage: thread_usage::ThreadUsageState,
+     // Current thread-goal status shown in the status line when plan mode is inactive.
+@@ -1218,6 +1236,7 @@ impl ChatWidget {
+             self.refresh_terminal_title();
+         }
+         self.refresh_status_line_if_workspace_headline_due();
++        self.cxstatusline_pre_draw_tick();
+         self.refresh_thread_usage_if_settlement_due();
+     }
+ 
+diff --git a/codex-rs/tui/src/chatwidget/constructor.rs b/codex-rs/tui/src/chatwidget/constructor.rs
+index a1079ac7c4..7788dc642c 100644
+--- a/codex-rs/tui/src/chatwidget/constructor.rs
++++ b/codex-rs/tui/src/chatwidget/constructor.rs
+@@ -253,6 +253,19 @@ impl ChatWidget {
+             next_status_line_workspace_headline_request_id: 0,
+             status_line_workspace_headline_last_requested_at: None,
+             status_line_workspace_messages_disabled: false,
++            cxstatusline_command: std::env::var("CXSTATUSLINE_COMMAND")
++                .ok()
++                .filter(|raw| !raw.trim().is_empty())
++                .and_then(|raw| shlex::split(&raw))
++                .filter(|argv| !argv.is_empty()),
++            cxstatusline_output: Arc::new(std::sync::Mutex::new(None)),
++            cxstatusline_pending: Arc::new(AtomicBool::new(false)),
++            cxstatusline_fresh: Arc::new(AtomicBool::new(false)),
++            cxstatusline_dirty: false,
++            cxstatusline_last_spawn_at: None,
++            cxstatusline_rate_limit_pending: false,
++            cxstatusline_rate_limit_last_requested_at: None,
++            cxstatusline_started_at: chrono::Utc::now(),
+             thread_usage: thread_usage::ThreadUsageState::default(),
+             current_goal_status_indicator: None,
+             current_goal_status: None,
+diff --git a/codex-rs/tui/src/chatwidget/status_surfaces.rs b/codex-rs/tui/src/chatwidget/status_surfaces.rs
+index e79c0d3ca6..053e2332ed 100644
+--- a/codex-rs/tui/src/chatwidget/status_surfaces.rs
++++ b/codex-rs/tui/src/chatwidget/status_surfaces.rs
+@@ -40,6 +40,16 @@ const TERMINAL_TITLE_ACTION_REQUIRED_INTERVAL: Duration = Duration::from_secs(1)
+ const TERMINAL_TITLE_ACTION_REQUIRED_PREFIX: &str = "[ ! ] Action Required";
+ const TERMINAL_TITLE_ACTION_REQUIRED_PREFIX_HIDDEN: &str = "[ . ] Action Required";
+ 
++/// cxstatusline: minimum spacing between renderer spawns. 18 refresh call sites; one process per
++/// call would be waste. Refreshes inside the window coalesce and run once it closes.
++const CXSTATUSLINE_MIN_INTERVAL: Duration = Duration::from_millis(200);
++
++/// cxstatusline: renderer wall-clock budget. Over budget -> killed, last good line kept.
++const CXSTATUSLINE_TIMEOUT: Duration = Duration::from_secs(1);
++
++/// cxstatusline: bounded account-rate-limit freshness for renderer payloads.
++const CXSTATUSLINE_RATE_LIMIT_REFRESH_INTERVAL: Duration = Duration::from_secs(/*secs*/ 60);
++
+ #[derive(Debug)]
+ /// Parsed status-surface configuration for one refresh pass.
+ ///
+@@ -157,7 +167,7 @@ impl ChatWidget {
+     }
+ 
+     fn sync_status_surface_shared_state(&mut self, selections: &StatusSurfaceSelections) {
+-        if !selections.uses_git_branch() {
++        if !selections.uses_git_branch() && self.cxstatusline_command.is_none() {
+             self.status_line_branch = None;
+             self.status_line_branch_pending = false;
+             self.status_line_branch_lookup_complete = false;
+@@ -169,7 +179,7 @@ impl ChatWidget {
+             }
+         }
+ 
+-        if !selections.uses_git_summary() {
++        if !selections.uses_git_summary() && self.cxstatusline_command.is_none() {
+             self.status_line_git_summary = None;
+             self.status_line_git_summary_pending = false;
+             self.status_line_git_summary_lookup_complete = false;
+@@ -198,6 +208,12 @@ impl ChatWidget {
+     }
+ 
+     fn refresh_status_line_from_selections(&mut self, selections: &StatusSurfaceSelections) {
++        if self.cxstatusline_command.is_some() {
++            self.cxstatusline_request_render();
++            if self.cxstatusline_draw_shared_cell() {
++                return;
++            }
++        }
+         let enabled = !selections.status_line_items.is_empty();
+         self.bottom_pane.set_status_line_enabled(enabled);
+         if !enabled {
+@@ -397,7 +413,7 @@ impl ChatWidget {
+ 
+     pub(super) fn request_status_line_branch_refresh(&mut self) {
+         let selections = self.status_surface_selections();
+-        if !selections.uses_git_branch() {
++        if !selections.uses_git_branch() && self.cxstatusline_command.is_none() {
+             return;
+         }
+         let cwd = self.status_line_cwd().to_path_buf();
+@@ -407,7 +423,7 @@ impl ChatWidget {
+ 
+     pub(super) fn request_status_line_git_summary_refresh(&mut self) {
+         let selections = self.status_surface_selections();
+-        if !selections.uses_git_summary() {
++        if !selections.uses_git_summary() && self.cxstatusline_command.is_none() {
+             return;
+         }
+         let cwd = self.status_line_cwd().to_path_buf();
+@@ -550,6 +566,189 @@ impl ChatWidget {
+     ///
+     /// The resulting `StatusLineBranchUpdated` event carries the lookup cwd so callers can reject
+     /// stale completions after directory changes.
++    /// cxstatusline: called from `pre_draw_tick`. Draws fresh renderer output without spawning,
++    /// and replays one coalesced refresh once the throttle window has closed.
++    pub(super) fn cxstatusline_pre_draw_tick(&mut self) {
++        if self.cxstatusline_command.is_none() {
++            return;
++        }
++        self.cxstatusline_rate_limit_tick(Instant::now());
++        if self.cxstatusline_fresh.swap(false, Ordering::AcqRel) {
++            self.cxstatusline_draw_shared_cell();
++        }
++        if !self.cxstatusline_dirty || self.cxstatusline_pending.load(Ordering::Acquire) {
++            return;
++        }
++        if let Some(remaining) = self.cxstatusline_throttle_remaining(Instant::now()) {
++            self.frame_requester.schedule_frame_in(remaining);
++            return;
++        }
++        self.cxstatusline_dirty = false;
++        self.refresh_status_line();
++    }
++
++    /// Requests fresh account limits for renderer payloads at most once per minute.
++    pub(super) fn cxstatusline_rate_limit_tick(&mut self, now: Instant) {
++        if self.cxstatusline_command.is_none()
++            || !self.should_prefetch_rate_limits()
++            || self.cxstatusline_rate_limit_pending
++        {
++            return;
++        }
++        if let Some(last_requested_at) = self.cxstatusline_rate_limit_last_requested_at {
++            let elapsed = now.saturating_duration_since(last_requested_at);
++            if elapsed < CXSTATUSLINE_RATE_LIMIT_REFRESH_INTERVAL {
++                self.frame_requester
++                    .schedule_frame_in(CXSTATUSLINE_RATE_LIMIT_REFRESH_INTERVAL - elapsed);
++                return;
++            }
++        }
++        self.cxstatusline_rate_limit_pending = true;
++        self.cxstatusline_rate_limit_last_requested_at = Some(now);
++        self.app_event_tx.send(AppEvent::RefreshRateLimits {
++            origin: crate::app_event::RateLimitRefreshOrigin::CxStatusLine,
++        });
++        self.frame_requester
++            .schedule_frame_in(CXSTATUSLINE_RATE_LIMIT_REFRESH_INTERVAL);
++    }
++
++    pub(crate) fn finish_cxstatusline_rate_limit_refresh(&mut self) {
++        self.cxstatusline_rate_limit_pending = false;
++        // The completed read changed the payload source; schedule one renderer run.
++        self.cxstatusline_dirty = true;
++    }
++
++    /// cxstatusline: draw the last complete shared block, if any. A poisoned lock leaves the
++    /// already-rendered block untouched, so callers do not replace it with partial/native output.
++    fn cxstatusline_draw_shared_cell(&mut self) -> bool {
++        let rendered = match self.cxstatusline_output.lock() {
++            Ok(guard) => guard.clone(),
++            Err(_) => return true,
++        };
++        let Some(rendered) = rendered else {
++            return false;
++        };
++        self.bottom_pane.set_cxstatusline_block(rendered);
++        self.bottom_pane.set_status_line_enabled(/*enabled*/ false);
++        self.set_status_line(/*status_line*/ None);
++        self.set_status_line_hyperlink(/*url*/ None);
++        true
++    }
++
++    fn cxstatusline_throttle_remaining(&self, now: Instant) -> Option<Duration> {
++        let last = self.cxstatusline_last_spawn_at?;
++        let elapsed = now.saturating_duration_since(last);
++        (elapsed < CXSTATUSLINE_MIN_INTERVAL).then(|| CXSTATUSLINE_MIN_INTERVAL - elapsed)
++    }
++
++    /// cxstatusline: spawn the renderer with a payload v1 snapshot, unless one is in flight or the
++    /// throttle window is open - then remember to run again. Mirrors `request_status_line_branch`.
++    fn cxstatusline_request_render(&mut self) {
++        let Some(argv) = self.cxstatusline_command.clone() else {
++            return;
++        };
++        let now = Instant::now();
++        if self.cxstatusline_pending.load(Ordering::Acquire)
++            || self.cxstatusline_throttle_remaining(now).is_some()
++        {
++            self.cxstatusline_dirty = true;
++            self.frame_requester
++                .schedule_frame_in(CXSTATUSLINE_MIN_INTERVAL);
++            return;
++        }
++        let payload = self.cxstatusline_payload_v1().to_string();
++        self.cxstatusline_pending.store(true, Ordering::Release);
++        self.cxstatusline_last_spawn_at = Some(now);
++        let output = self.cxstatusline_output.clone();
++        let pending = self.cxstatusline_pending.clone();
++        let fresh = self.cxstatusline_fresh.clone();
++        let frame_requester = self.frame_requester.clone();
++        tokio::spawn(async move {
++            if let Some(block) = cxstatusline_run(&argv, payload).await
++                && let Ok(mut guard) = output.lock()
++            {
++                *guard = Some(block);
++                fresh.store(true, Ordering::Release);
++            }
++            pending.store(false, Ordering::Release);
++            frame_requester.schedule_frame();
++        });
++    }
++
++    /// cxstatusline: typed snapshot of the git state behind the native git status-line items.
++    fn cxstatusline_git_v1(&self) -> serde_json::Value {
++        use serde_json::json;
++        let summary = self.status_line_git_summary.as_ref();
++        json!({
++            "branch": self.status_line_branch.as_deref(),
++            "changes": summary
++                .and_then(|summary| summary.branch_change_stats.as_ref())
++                .map(|stats| json!({ "additions": stats.additions, "deletions": stats.deletions })),
++            "pr": summary
++                .and_then(|summary| summary.pull_request.as_ref())
++                .map(|pull_request| pull_request.number),
++        })
++    }
++
++    /// cxstatusline: typed snapshot of the state behind every native status-line item.
++    /// `null` means "unavailable right now", same as an absent key. Enum-valued fields carry
++    /// Codex's own serde/strum identifiers (`on-request`, `workspace-write`), never display text.
++    fn cxstatusline_payload_v1(&self) -> serde_json::Value {
++        use serde_json::json;
++        let cwd = self.status_line_cwd().to_path_buf();
++        let project_root = self.status_line_project_root_for_cwd(&cwd);
++        let codex_limits = self.rate_limit_snapshots_by_limit_id.get("codex");
++        let window = |w: Option<(&RateLimitWindowDisplay, bool)>| {
++            w.map(|(window, _is_secondary)| {
++                json!({
++                    "used": window.used_percent / 100.0,
++                    "resets_at": window.resets_at_unix.and_then(cxstatusline_iso8601),
++                })
++            })
++        };
++        let used_tokens = {
++            let total = self.status_line_total_usage().blended_total();
++            (total > 0).then_some(total)
++        };
++        let usage = self.token_info.as_ref().map(|info| &info.total_token_usage);
++        let context_tokens = self
++            .token_info
++            .as_ref()
++            .map(|info| info.last_token_usage.tokens_in_context_window());
++        json!({
++            "payload_version": 1,
++            "model": {
++                "name": self.model_display_name(),
++                "reasoning": self.reasoning_display_name(),
++            },
++            "git": self.cxstatusline_git_v1(),
++            "usage": {
++                "context_used": self.status_line_context_used_percent().map(|p| p as f64 / 100.0),
++                "context_remaining": self.status_line_context_remaining_percent().map(|p| p as f64 / 100.0),
++                "context_tokens": context_tokens,
++                "context_window": self.status_line_context_window_size(),
++                "used_tokens": used_tokens,
++                "input_tokens": usage.map(|usage| usage.input_tokens),
++                "output_tokens": usage.map(|usage| usage.output_tokens),
++                "cached_input_tokens": usage.map(|usage| usage.cached_input_tokens),
++                "five_hour": window(codex_limits.and_then(five_hour_status_window)),
++                "weekly": window(codex_limits.and_then(weekly_status_window)),
++            },
++            "session": {
++                "id": self.thread_id.map(|id| id.to_string()),
++                "cwd": cwd.to_string_lossy(),
++                "project_root": project_root.map(|p| p.to_string_lossy().into_owned()),
++                "hostname": os_host_name(),
++                "approval_mode": self.config.permissions.approval_policy.value().to_string(),
++                "permissions": self.config.legacy_sandbox_policy().to_string(),
++                "run_state": self.run_state_status_text().to_lowercase(),
++                "codex_version": crate::version::CODEX_CLI_VERSION,
++                "started_at": self.cxstatusline_started_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, /*use_z*/ true),
++                "thread_title": self.thread_name.clone(),
++            },
++        })
++    }
++
+     fn request_status_line_branch(&mut self, cwd: PathBuf) {
+         if self.status_line_branch_pending {
+             return;
+@@ -1198,3 +1397,48 @@ where
+     }
+     (items, invalid)
+ }
++
++/// cxstatusline: seconds since the Unix epoch -> RFC 3339 UTC.
++fn cxstatusline_iso8601(seconds: i64) -> Option<String> {
++    chrono::DateTime::<chrono::Utc>::from_timestamp(seconds, 0)
++        .map(|dt| dt.to_rfc3339_opts(chrono::SecondsFormat::Secs, /*use_z*/ true))
++}
++
++/// cxstatusline: run the external renderer once. `None` on spawn failure, non-zero exit, timeout,
++/// malformed, blank, or oversized stdout - the caller keeps the previous complete block.
++async fn cxstatusline_run(argv: &[String], payload: String) -> Option<Vec<Line<'static>>> {
++    use tokio::io::AsyncWriteExt;
++    let (program, args) = argv.split_first()?;
++    let mut child = tokio::process::Command::new(program)
++        .args(args)
++        .stdin(std::process::Stdio::piped())
++        .stdout(std::process::Stdio::piped())
++        .stderr(std::process::Stdio::null())
++        .kill_on_drop(true)
++        .spawn()
++        .ok()?;
++    let mut stdin = child.stdin.take()?;
++    stdin.write_all(payload.as_bytes()).await.ok()?;
++    // Drop closes the pipe so the renderer sees EOF.
++    drop(stdin);
++    let output = tokio::time::timeout(CXSTATUSLINE_TIMEOUT, child.wait_with_output())
++        .await
++        .ok()?
++        .ok()?;
++    if !output.status.success() {
++        return None;
++    }
++    cxstatusline_parse_output(&String::from_utf8_lossy(&output.stdout))
++}
++
++/// Parse all renderer rows before exposing them to the shared block; a malformed block never
++/// replaces the last complete render.
++pub(super) fn cxstatusline_parse_output(text: &str) -> Option<Vec<Line<'static>>> {
++    let text = text.strip_suffix('\n').unwrap_or(text);
++    let rows: Vec<_> = text.split('\n').collect();
++    ((1..=3).contains(&rows.len()) && rows.iter().all(|line| !line.trim().is_empty())).then(|| {
++        rows.into_iter()
++            .map(codex_ansi_escape::ansi_escape_line)
++            .collect()
++    })
++}
+diff --git a/codex-rs/tui/src/chatwidget/tests/status_and_layout.rs b/codex-rs/tui/src/chatwidget/tests/status_and_layout.rs
+index 762e7019ba..f826939f9d 100644
+--- a/codex-rs/tui/src/chatwidget/tests/status_and_layout.rs
++++ b/codex-rs/tui/src/chatwidget/tests/status_and_layout.rs
+@@ -1,4 +1,8 @@
++use std::time::Duration;
++use std::time::Instant;
++
+ use super::*;
++use crate::app_event::RateLimitRefreshOrigin;
+ use crate::bottom_pane::goal_status_indicator_line;
+ use crate::chatwidget::ThreadUsageOutcome;
+ use crate::chatwidget::rate_limits::NUDGE_MODEL_SLUG;
+@@ -9,6 +13,245 @@ use pretty_assertions::assert_eq;
+ use ratatui::backend::TestBackend;
+ use serial_test::serial;
+ 
++struct CxLocalGitRunner;
++
++impl crate::workspace_command::WorkspaceCommandExecutor for CxLocalGitRunner {
++    fn run(
++        &self,
++        command: crate::workspace_command::WorkspaceCommand,
++    ) -> std::pin::Pin<
++        Box<
++            dyn std::future::Future<
++                    Output = Result<
++                        crate::workspace_command::WorkspaceCommandOutput,
++                        crate::workspace_command::WorkspaceCommandError,
++                    >,
++                > + Send
++                + '_,
++        >,
++    > {
++        Box::pin(async move {
++            // Only local Git runs: PR probes must never contact the owner's GitHub account.
++            if command.argv.first().map(String::as_str) != Some("git") {
++                return Ok(crate::workspace_command::WorkspaceCommandOutput {
++                    exit_code: 1,
++                    stdout: String::new(),
++                    stderr: String::new(),
++                });
++            }
++            let mut process = tokio::process::Command::new("git");
++            process.args(&command.argv[1..]).kill_on_drop(true);
++            if let Some(cwd) = command.cwd {
++                process.current_dir(cwd);
++            }
++            for (key, value) in command.env {
++                if let Some(value) = value {
++                    process.env(key, value);
++                } else {
++                    process.env_remove(key);
++                }
++            }
++            let output = tokio::time::timeout(command.timeout, process.output())
++                .await
++                .expect("git timeout")
++                .expect("git runs");
++            Ok(crate::workspace_command::WorkspaceCommandOutput {
++                exit_code: output.status.code().unwrap_or(1),
++                stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
++                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
++            })
++        })
++    }
++}
++
++#[tokio::test]
++async fn cxstatusline_git_values_change_after_a_turn() {
++    let repo = tempfile::tempdir().expect("temp repo");
++    let git = |args: &[&str]| {
++        let output = std::process::Command::new("git")
++            .args(args)
++            .current_dir(repo.path())
++            .output()
++            .expect("git runs");
++        assert!(
++            output.status.success(),
++            "{}",
++            String::from_utf8_lossy(&output.stderr)
++        );
++    };
++    git(&["init", "-b", "main"]);
++    git(&[
++        "-c",
++        "user.name=Test",
++        "-c",
++        "user.email=test@example.com",
++        "commit",
++        "--allow-empty",
++        "-m",
++        "base",
++    ]);
++    let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
++    chat.config.cwd = AbsolutePathBuf::try_from(repo.path().to_path_buf()).expect("absolute cwd");
++    chat.current_cwd = Some(repo.path().to_path_buf());
++    chat.config.tui_status_line = Some(vec![]);
++    chat.config.tui_terminal_title = Some(vec![]);
++    chat.cxstatusline_command = Some(vec!["unused-renderer".into()]);
++    // Exercise collection without launching a renderer during completion callbacks.
++    chat.cxstatusline_pending.store(true, Ordering::Release);
++    chat.workspace_command_runner = Some(std::sync::Arc::new(CxLocalGitRunner));
++    for (branch, changes) in [("main", "No changes"), ("feature", "+1 -0")] {
++        if branch == "feature" {
++            git(&["checkout", "-b", "feature"]);
++            std::fs::write(repo.path().join("file"), "one line\n").expect("write change");
++            git(&["add", "file"]);
++            git(&[
++                "-c",
++                "user.name=Test",
++                "-c",
++                "user.email=test@example.com",
++                "commit",
++                "-m",
++                "change",
++            ]);
++        }
++        handle_turn_completed(&mut chat, "turn-1", /*duration_ms*/ None);
++        assert!(chat.status_line_branch_pending && chat.status_line_git_summary_pending);
++        tokio::time::timeout(Duration::from_secs(/*secs*/ 10), async {
++            while chat.status_line_branch_pending || chat.status_line_git_summary_pending {
++                match rx.recv().await.expect("completion event") {
++                    AppEvent::StatusLineBranchUpdated { cwd, branch } => {
++                        chat.set_status_line_branch(cwd, branch)
++                    }
++                    AppEvent::StatusLineGitSummaryUpdated { cwd, summary } => {
++                        chat.set_status_line_git_summary(cwd, summary)
++                    }
++                    _ => {}
++                }
++            }
++        })
++        .await
++        .expect("Git refresh completes");
++        assert_eq!(chat.status_line_branch.as_deref(), Some(branch));
++        assert_eq!(
++            chat.status_line_value_for_item(crate::bottom_pane::StatusLineItem::BranchChanges),
++            Some(changes.into())
++        );
++    }
++}
++
++#[tokio::test]
++async fn cxstatusline_git_refresh_does_not_require_native_items() {
++    for mode in ["disabled", "cx", "native"] {
++        let (mut chat, _rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
++        install_noop_workspace_command_runner(&mut chat);
++        chat.config.tui_status_line = Some(if mode == "native" {
++            vec!["git-branch".into(), "branch-changes".into()]
++        } else {
++            vec![]
++        });
++        chat.config.tui_terminal_title = Some(vec![]);
++        chat.cxstatusline_command = (mode == "cx").then(|| vec!["unused-renderer".into()]);
++        let cwd = chat.config.cwd.to_path_buf();
++        chat.status_line_branch_cwd = Some(cwd.clone());
++        chat.status_line_git_summary_cwd = Some(cwd);
++        chat.status_line_branch_lookup_complete = true;
++        chat.status_line_git_summary_lookup_complete = true;
++        chat.request_status_line_branch_refresh();
++        chat.request_status_line_git_summary_refresh();
++        assert_eq!(
++            (
++                chat.status_line_branch_pending,
++                chat.status_line_git_summary_pending
++            ),
++            (mode != "disabled", mode != "disabled"),
++            "refresh mode {mode}"
++        );
++    }
++}
++
++#[test]
++fn cxstatusline_accepts_complete_rows_and_rejects_invalid_blocks() {
++    assert_eq!(
++        super::super::status_surfaces::cxstatusline_parse_output("one\ntwo\nthree\n")
++            .expect("three non-blank rows")
++            .len(),
++        3
++    );
++    assert!(super::super::status_surfaces::cxstatusline_parse_output("one\n\nthree\n").is_none());
++    assert!(super::super::status_surfaces::cxstatusline_parse_output("one\ntwo\n\n").is_none());
++    assert!(
++        super::super::status_surfaces::cxstatusline_parse_output("one\ntwo\nthree\nfour\n")
++            .is_none()
++    );
++}
++
++#[tokio::test]
++async fn cxstatusline_rate_limit_tick_requires_command_and_chatgpt_auth() {
++    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
++    let now = Instant::now();
++
++    chat.cxstatusline_rate_limit_tick(now);
++    assert!(matches!(
++        rx.try_recv(),
++        Err(tokio::sync::mpsc::error::TryRecvError::Empty)
++    ));
++
++    chat.cxstatusline_command = Some(vec!["renderer".to_string()]);
++    chat.cxstatusline_rate_limit_tick(now);
++    assert!(matches!(
++        rx.try_recv(),
++        Err(tokio::sync::mpsc::error::TryRecvError::Empty)
++    ));
++
++    set_chatgpt_auth(&mut chat);
++    chat.cxstatusline_rate_limit_tick(now);
++    assert!(matches!(
++        rx.try_recv(),
++        Ok(AppEvent::RefreshRateLimits {
++            origin: RateLimitRefreshOrigin::CxStatusLine,
++        })
++    ));
++}
++
++#[tokio::test]
++async fn cxstatusline_rate_limit_completion_releases_next_minute_tick() {
++    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
++    chat.cxstatusline_command = Some(vec!["renderer".to_string()]);
++    set_chatgpt_auth(&mut chat);
++    let now = Instant::now();
++
++    chat.cxstatusline_rate_limit_tick(now);
++    assert!(matches!(
++        rx.try_recv(),
++        Ok(AppEvent::RefreshRateLimits {
++            origin: RateLimitRefreshOrigin::CxStatusLine,
++        })
++    ));
++    assert!(chat.cxstatusline_rate_limit_pending);
++
++    chat.cxstatusline_rate_limit_tick(now + Duration::from_secs(/*secs*/ 59));
++    assert!(matches!(
++        rx.try_recv(),
++        Err(tokio::sync::mpsc::error::TryRecvError::Empty)
++    ));
++
++    chat.finish_cxstatusline_rate_limit_refresh();
++    assert!(!chat.cxstatusline_rate_limit_pending);
++    chat.cxstatusline_rate_limit_tick(now + Duration::from_secs(/*secs*/ 59));
++    assert!(matches!(
++        rx.try_recv(),
++        Err(tokio::sync::mpsc::error::TryRecvError::Empty)
++    ));
++
++    chat.cxstatusline_rate_limit_tick(now + Duration::from_secs(/*secs*/ 60));
++    assert!(matches!(
++        rx.try_recv(),
++        Ok(AppEvent::RefreshRateLimits {
++            origin: RateLimitRefreshOrigin::CxStatusLine,
++        })
++    ));
++}
++
+ fn enable_test_ambient_pet(chat: &mut ChatWidget) {
+     chat.set_pet_image_support_for_tests(crate::pets::PetImageSupport::Supported(
+         crate::pets::ImageProtocol::Kitty,
+diff --git a/codex-rs/tui/src/status/rate_limits.rs b/codex-rs/tui/src/status/rate_limits.rs
+index aaf54df448..15b37f85bd 100644
+--- a/codex-rs/tui/src/status/rate_limits.rs
++++ b/codex-rs/tui/src/status/rate_limits.rs
+@@ -71,6 +71,8 @@ pub(crate) struct RateLimitWindowDisplay {
+     pub used_percent: f64,
+     /// Human-readable local reset time.
+     pub resets_at: Option<String>,
++    /// cxstatusline: raw reset time, seconds since the Unix epoch, when the server provided one.
++    pub resets_at_unix: Option<i64>,
+     /// Window length in minutes when provided by the server.
+     pub window_minutes: Option<i64>,
+ }
+@@ -86,6 +88,7 @@ impl RateLimitWindowDisplay {
+         Self {
+             used_percent: f64::from(window.used_percent),
+             resets_at,
++            resets_at_unix: window.resets_at,
+             window_minutes: window.window_duration_mins,
+         }
+     }
+@@ -429,6 +432,7 @@ mod tests {
+         RateLimitWindowDisplay {
+             used_percent,
+             resets_at: Some("soon".to_string()),
++            resets_at_unix: None,
+             window_minutes: Some(300),
+         }
+     }
+@@ -488,11 +492,13 @@ mod tests {
+             primary: Some(RateLimitWindowDisplay {
+                 used_percent: 20.0,
+                 resets_at: Some("soon".to_string()),
++                resets_at_unix: None,
+                 window_minutes: Some(60),
+             }),
+             secondary: Some(RateLimitWindowDisplay {
+                 used_percent: 40.0,
+                 resets_at: Some("later".to_string()),
++                resets_at_unix: None,
+                 window_minutes: Some(2 * 60),
+             }),
+             credits: None,
+diff --git a/codex-rs/tui/src/status/tests.rs b/codex-rs/tui/src/status/tests.rs
+index 161bbf4c74..ae69fe4848 100644
+--- a/codex-rs/tui/src/status/tests.rs
++++ b/codex-rs/tui/src/status/tests.rs
+@@ -68,6 +68,7 @@ fn stale_monthly_limit_marks_fresh_rolling_snapshot_stale() {
+         primary: Some(RateLimitWindowDisplay {
+             used_percent: 20.0,
+             resets_at: Some("soon".to_string()),
++            resets_at_unix: None,
+             window_minutes: Some(300),
+         }),
+         secondary: None,
+@@ -1781,11 +1782,13 @@ async fn transcript_overlay_remeasures_status_after_rate_limit_refresh() {
+             primary: Some(RateLimitWindowDisplay {
+                 used_percent: 45.0,
+                 resets_at: Some("soon".to_string()),
++                resets_at_unix: None,
+                 window_minutes: Some(300),
+             }),
+             secondary: Some(RateLimitWindowDisplay {
+                 used_percent: 30.0,
+                 resets_at: Some("later".to_string()),
++                resets_at_unix: None,
+                 window_minutes: Some(10_080),
+             }),
+             credits: None,
