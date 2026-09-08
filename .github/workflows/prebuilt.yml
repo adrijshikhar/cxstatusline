@@ -18,7 +18,7 @@ on:
       codex_version:
         description: Codex version to build (auto = highest stable upstream release that this repo patches)
         type: choice
-        options: ["auto", "0.153.0", "0.152.1"]
+        options: ["auto", "0.153.4", "0.153.0", "0.152.1"]
         default: "auto"
       self_hosted:
         description: Run on the owner's self-hosted Apple Silicon runner (arm64 only; no hosted minutes)
