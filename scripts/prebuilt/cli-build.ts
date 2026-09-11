@@ -2,8 +2,9 @@
  * `build`, `package` and `verify`: the three steps that turn an upstream tag plus a patch into the
  * three verified release assets, entirely on the runner and without touching GitHub.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { platformFor, validateManifest } from "../../src/distribution";
 import { loadManifest } from "../../src/patch/manifest";
 import { resolveDetection } from "./detect";
@@ -29,6 +30,7 @@ import {
   sha256File,
   writeChecksums,
 } from "./pack";
+import { auditRustLicenses, generateRustNotices, type Runner } from "./rust-licenses";
 import { verifyOutput } from "./verify";
 
 /**
@@ -73,8 +75,14 @@ export async function runPackage(flags: Record<string, string>): Promise<void> {
     throw new Error("no workflow run URL: pass --workflow-url or run inside GitHub Actions");
   }
 
+  const rustNoticesPath = flags["rust-notices"];
+  if (rustNoticesPath === undefined || rustNoticesPath === "true") {
+    throw new Error("--rust-notices <file> is required; run `bun scripts/prebuilt.ts rust-notices` first");
+  }
+  const rustNotices = readFileSync(resolve(rustNoticesPath), "utf8");
+
   resetDirectory(stagingDir, (entries) => entries.every((e) => (ARCHIVE_ENTRIES as readonly string[]).includes(e)));
-  assembleStaging({ upstreamDir: upstream, repoRoot: root, stagingDir });
+  assembleStaging({ upstreamDir: upstream, repoRoot: root, stagingDir, rustNotices });
   mkdirSync(outDir, { recursive: true });
   const filename = archiveFilename(detection.codexVersion, platform);
   const archive = await packArchive(stagingDir, join(outDir, filename));
@@ -118,5 +126,19 @@ export async function runVerify(flags: Record<string, string>): Promise<void> {
     "Known acceptance gap: no clean macOS 14 machine or VM was used; the deployment target is",
     "evidence of intent, not proof of macOS 14 behaviour.",
   ]);
+}
+
+const defaultRunner: Runner = (cmd, args, opts) => {
+  const res = spawnSync(cmd, args, { cwd: opts?.cwd, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+  return { status: res.status, stdout: res.stdout ?? "", stderr: res.stderr ?? "" };
+};
+
+export async function runRustNotices(flags: Record<string, string>): Promise<void> {
+  const upstream = resolve(required(flags, "upstream"));
+  const outFile = resolve(required(flags, "out"));
+  auditRustLicenses(upstream, defaultRunner);
+  const notices = generateRustNotices(upstream, defaultRunner);
+  mkdirSync(dirname(outFile), { recursive: true });
+  writeFileSync(outFile, notices);
 }
 

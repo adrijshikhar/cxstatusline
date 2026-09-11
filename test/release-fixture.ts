@@ -16,7 +16,11 @@ export function releaseEntries(): TarEntry[] {
     { name: "codex-code-mode-host", mode: 0o755, data: "HOST-BINARY" },
     { name: "LICENSE", mode: 0o644, data: "MIT" },
     { name: "NOTICE", mode: 0o644, data: "NOTICE TEXT" },
-    { name: "THIRD_PARTY_NOTICES.md", mode: 0o644, data: "# Third party" },
+    {
+      name: "THIRD_PARTY_NOTICES.md",
+      mode: 0o644,
+      data: "# Third party\n\n## Rust dependency licenses (generated)\n\n- crate-a 1.0.0 (MIT)\n",
+    },
   ];
 }
 

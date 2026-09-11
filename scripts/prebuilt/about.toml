@@ -1,0 +1,25 @@
+# cargo-about configuration for the two redistributed Codex binaries.
+# `accepted` mirrors upstream codex-rs/deny.toml [licenses].allow; a license outside this list fails
+# `cargo about generate`, which fails the native job. Review upstream's list whenever it changes.
+# Reconciled against upstream tag rust-v0.153.4.
+accepted = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "BSL-1.0",
+  "CC0-1.0",
+  "CDLA-Permissive-2.0",
+  "ISC",
+  "MIT",
+  "MIT-0",
+  "MPL-2.0",
+  "OpenSSL",
+  "Unicode-3.0",
+  "Unlicense",
+  "Zlib",
+]
+# Only what ends up in the two shipped binaries.
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin"]
+ignore-build-dependencies = true
+ignore-dev-dependencies = true

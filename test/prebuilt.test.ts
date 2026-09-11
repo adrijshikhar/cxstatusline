@@ -34,6 +34,7 @@ import {
   writeChecksums,
   type ManifestInput,
 } from "../scripts/prebuilt";
+import { RUST_NOTICES_MARKER } from "../scripts/prebuilt/rust-licenses";
 import { extractArchive } from "../src/distribution/archive";
 import { validateManifest, type ArtifactFile, type FileDigest } from "../src/distribution";
 import type { Manifest } from "../src/patch/manifest";
@@ -69,7 +70,10 @@ function staging(body = "#!/bin/sh\necho stub\n"): string {
   const dir = tmp("staging");
   for (const name of ARCHIVE_ENTRIES) {
     const executable = name === "codex" || name === "codex-code-mode-host";
-    writeFileSync(join(dir, name), executable ? body : `${name} text\n`);
+    const text = name === "THIRD_PARTY_NOTICES.md"
+      ? `THIRD_PARTY_NOTICES.md text\n\n${RUST_NOTICES_MARKER}\n\n- crate-a 1.0.0 (MIT)\n`
+      : `${name} text\n`;
+    writeFileSync(join(dir, name), executable ? body : text);
     chmodSync(join(dir, name), executable ? 0o755 : 0o644);
   }
   return dir;
@@ -82,10 +86,15 @@ function smokeStaging(version = CODEX): string {
   writeFileSync(join(dir, "codex-code-mode-host"), '#!/bin/sh\necho "usage: --listen <addr>"\n');
   chmodSync(join(dir, "codex"), 0o755);
   chmodSync(join(dir, "codex-code-mode-host"), 0o755);
-  for (const name of ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"]) {
+  for (const name of ["LICENSE", "NOTICE"]) {
     writeFileSync(join(dir, name), `${name} text\n`);
     chmodSync(join(dir, name), 0o644);
   }
+  writeFileSync(
+    join(dir, "THIRD_PARTY_NOTICES.md"),
+    `THIRD_PARTY_NOTICES.md text\n\n${RUST_NOTICES_MARKER}\n\n- crate-a 1.0.0 (MIT)\n`,
+  );
+  chmodSync(join(dir, "THIRD_PARTY_NOTICES.md"), 0o644);
   return dir;
 }
 
@@ -285,10 +294,13 @@ describe("sourceCommit", () => {
 
 describe("runPackage", () => {
   const frozen = "e".repeat(40);
+  const noticesFile = join(tmp("notices"), "rust-notices.md");
+  writeFileSync(noticesFile, "## crate-a 1.0.0 (MIT)\n\nMIT text\n");
   const packageFlags = (upstream: string, out: string): Record<string, string> => ({
     "codex-version": CODEX,
     "cx-version": CX,
     "source-commit": frozen,
+    "rust-notices": noticesFile,
     upstream,
     staging: join(tmp("staging-run"), "staged"),
     out,
@@ -314,6 +326,12 @@ describe("runPackage", () => {
     const flags = packageFlags(tmp("upstream-unused"), tmp("out-unused"));
     delete flags["source-commit"];
     await expect(runPackage(flags)).rejects.toThrow(/--source-commit is required/);
+  });
+
+  test("refuses to package without --rust-notices", async () => {
+    const flags = packageFlags(tmp("upstream-unused"), tmp("out-unused"));
+    delete flags["rust-notices"];
+    await expect(runPackage(flags)).rejects.toThrow(/--rust-notices <file> is required/);
   });
 });
 

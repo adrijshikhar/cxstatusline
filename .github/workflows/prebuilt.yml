@@ -198,7 +198,9 @@ jobs:
         run: |
           set -o pipefail
           {
-            if ! command -v just >/dev/null || ! command -v cargo-nextest >/dev/null; then brew install just cargo-nextest; fi
+            if ! command -v just >/dev/null || ! command -v cargo-nextest >/dev/null || ! command -v cargo-about >/dev/null || ! command -v cargo-deny >/dev/null; then
+              brew install just cargo-nextest cargo-about cargo-deny
+            fi
             cd upstream/codex-rs
             rustup show active-toolchain
           } 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
@@ -213,6 +215,11 @@ jobs:
           set -o pipefail
           cargo build --release -p codex-cli --bin codex \
             -p codex-code-mode-host --bin codex-code-mode-host 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
+      - name: Audit Rust dependency licenses and generate notices
+        run: |
+          set -o pipefail
+          bun scripts/prebuilt.ts rust-notices --upstream "$GITHUB_WORKSPACE/upstream" \
+            --out "$RUNNER_TEMP/rust-notices.md" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
       # `out/` ends up holding exactly the three release assets; nothing else may be added to it.
       - name: Package release assets
         run: |
@@ -223,6 +230,7 @@ jobs:
             --source-commit "$SOURCE_COMMIT" \
             --upstream "$GITHUB_WORKSPACE/upstream" \
             --staging "$RUNNER_TEMP/staging" \
+            --rust-notices "$RUNNER_TEMP/rust-notices.md" \
             --out "$GITHUB_WORKSPACE/out" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
       - name: Verify release assets
         run: |
@@ -234,6 +242,7 @@ jobs:
           UPSTREAM_COMMIT: ${{ steps.build.outputs.upstream_commit }}
         run: |
           mkdir -p provenance
+          cp "$RUNNER_TEMP/rust-notices.md" provenance/
           # The patch was applied with `git apply --index`, so its Cargo.lock change is staged:
           # an unstaged diff would be empty and record no provenance at all. The unstaged diff is
           # kept as a second file because cargo can rewrite the lockfile during the build.
