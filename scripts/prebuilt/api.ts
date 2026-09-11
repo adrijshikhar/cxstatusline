@@ -12,8 +12,10 @@ export {
   UNCOVERED_EXIT_CODE,
   type Detection,
 } from "./detect";
+export { buildMatrix, type MatrixEntry } from "./cli-detect";
 export { execGh, ghJson, ghText, GhError, type GhResult, type GhRunner } from "./gh";
 export { buildManifest, workflowUrlFromEnv, type ManifestInput } from "./manifest";
+export { mergeManifests } from "./merge";
 export {
   parseProvenance,
   provenanceMarker,

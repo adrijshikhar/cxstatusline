@@ -9,6 +9,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Platform } from "../../src/distribution";
 import { blockedIssueTitle } from "./detect";
 import { GhError, ghJson, ghText, type GhRunner } from "./gh";
 import { errorExcerpt, redact } from "./redact";
@@ -20,15 +21,16 @@ export const REPORT_MARKER = "<!-- cxstatusline-prebuilt -->";
 const ARCHITECTURE = "darwin-arm64";
 const MAX_EXCERPT_LINES = 20;
 
-export type Stage = "detect" | "validate" | "native" | "publish";
+export type Stage = "detect" | "validate" | "native" | "merge" | "publish";
 
-const STAGES: readonly Stage[] = ["detect", "validate", "native", "publish"];
+const STAGES: readonly Stage[] = ["detect", "validate", "native", "merge", "publish"];
 
 /** `needs.<job>.result` verbatim: `success` | `failure` | `cancelled` | `skipped`. */
 export interface JobResults {
   readonly detect: string;
   readonly validate: string;
   readonly native: string;
+  readonly merge?: string;
   readonly publish: string;
 }
 
@@ -52,6 +54,7 @@ function skipWasDeliberate(stage: Stage, c: StageContext): boolean {
  */
 export function failingStage(results: JobResults, c: StageContext): Stage | null {
   for (const stage of STAGES) {
+    if (stage === "merge" && results.merge === undefined) continue;
     const result = results[stage];
     if (result === "success") continue;
     if (result === "skipped" && skipWasDeliberate(stage, c)) continue;
@@ -74,6 +77,7 @@ export interface ReportInput {
   readonly shouldBuild: boolean;
   readonly publishRequested: boolean;
   readonly releaseUrl: string | null;
+  readonly platforms?: readonly Platform[];
   /** Already-bounded, already-redacted text from `--error-file`, or null. */
   readonly errorExcerpt: string | null;
   /**
@@ -90,6 +94,11 @@ export interface ReportInput {
  * a presigned URL - plus a bounded, redacted excerpt and the exact retry the owner would run.
  */
 export function reportBody(i: ReportInput, stage: Stage): string {
+  const platforms = i.platforms && i.platforms.length > 0 ? i.platforms : [ARCHITECTURE as Platform];
+  const archLine = platforms.length === 1 && platforms[0] === "darwin-arm64"
+    ? `${ARCHITECTURE} (Apple Silicon only)`
+    : platforms.join(", ");
+  const mergePart = i.results.merge !== undefined ? ` merge=${i.results.merge}` : "";
   const lines = [
     REPORT_MARKER,
     "",
@@ -100,12 +109,12 @@ export function reportBody(i: ReportInput, stage: Stage): string {
     `- Upstream tag: ${i.upstreamTag ?? "unresolved"}`,
     `- Release tag: ${i.tag ?? "unresolved"}`,
     `- Failing stage: ${stage}`,
-    `- Architecture: ${ARCHITECTURE} (Apple Silicon only)`,
+    `- Architecture: ${archLine}`,
     `- Source commit: ${i.sourceCommit}`,
     `- Patch sha256: ${i.patchSha256 ?? "unresolved"}`,
     `- Trigger: ${i.event}`,
     `- Job results: detect=${i.results.detect} validate=${i.results.validate} `
-      + `native=${i.results.native} publish=${i.results.publish}`,
+      + `native=${i.results.native}${mergePart} publish=${i.results.publish}`,
     `- Workflow run: ${i.runUrl}`,
     "",
   ];
@@ -247,9 +256,10 @@ function closeOnSuccess(
   const version = i.codexVersion === null ? null : findIssue(issues, blockedIssueTitle(i.codexVersion));
   if (version !== null) {
     const published = i.results.publish === "success" && i.releaseUrl !== null;
+    const archLabel = i.platforms && i.platforms.length > 0 ? i.platforms.join(", ") : ARCHITECTURE;
     const body = published
       ? `Published ${i.tag ?? "the release"}: ${i.releaseUrl}\n\nBuilt by ${i.runUrl}. Closing.`
-      : `Build succeeded, not published (${ARCHITECTURE}) in ${i.runUrl}. `
+      : `Build succeeded, not published (${archLabel}) in ${i.runUrl}. `
         + `Leaving this issue open until a publishing run closes it.`;
     done.push(commentAndClose(o, { issue: version, body, tmpRoot, close: published, completed }));
   }

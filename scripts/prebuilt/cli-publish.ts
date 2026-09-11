@@ -5,7 +5,7 @@
  * is granted. `report` only ever touches issues, and only through `issues: write`.
  */
 import { resolve } from "node:path";
-import { emit, optional, releasePlatform, repoSlug, required, runnerTmp, summary } from "./env";
+import { emit, optional, releasePlatforms, repoSlug, required, runnerTmp, summary } from "./env";
 import { execGh } from "./gh";
 import { publishRelease, type PublishOptions } from "./publish";
 import { BlockedError } from "./release";
@@ -17,6 +17,7 @@ import { excerptFromFile, runReport, type JobResults, type ReportInput } from ".
  * through the top-level catch as 1, leaving any draft untouched and unpublished.
  */
 export async function runPublish(flags: Record<string, string>): Promise<void> {
+  const platforms = releasePlatforms(flags);
   const options: PublishOptions = {
     run: execGh,
     tag: required(flags, "tag"),
@@ -26,7 +27,8 @@ export async function runPublish(flags: Record<string, string>): Promise<void> {
     sourceCommit: required(flags, "source-commit"),
     codexVersion: required(flags, "codex-version"),
     cxVersion: required(flags, "cx-version"),
-    platform: releasePlatform(flags),
+    platform: platforms[0],
+    platforms,
     event: flags["event"] ?? process.env.GITHUB_EVENT_NAME ?? "workflow_dispatch",
     tmpRoot: runnerTmp("prebuilt-publish"),
     summary,
@@ -54,6 +56,7 @@ export async function runReportCommand(flags: Record<string, string>): Promise<v
     detect: jobResult(flags, "detect"),
     validate: jobResult(flags, "validate"),
     native: jobResult(flags, "native"),
+    merge: flags["merge"] && flags["merge"] !== "true" ? flags["merge"] : undefined,
     publish: jobResult(flags, "publish"),
   };
   const input: ReportInput = {
@@ -70,6 +73,7 @@ export async function runReportCommand(flags: Record<string, string>): Promise<v
     shouldBuild: flags["should-build"] !== "false",
     publishRequested: flags["publish-requested"] === "true",
     releaseUrl: optional(flags, "release-url"),
+    platforms: releasePlatforms(flags),
     errorExcerpt: excerptFromFile(flags["error-file"]),
     logDir: optional(flags, "log-dir"),
     blockedReason: optional(flags, "blocked-reason"),

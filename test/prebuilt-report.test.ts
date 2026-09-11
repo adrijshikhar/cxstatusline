@@ -61,6 +61,7 @@ describe("failingStage", () => {
     expect(failingStage(results({ detect: "failure" }), opts)).toBe("detect");
     expect(failingStage(results({ validate: "failure", native: "skipped" }), opts)).toBe("validate");
     expect(failingStage(results({ native: "failure", publish: "skipped" }), opts)).toBe("native");
+    expect(failingStage(results({ merge: "failure", publish: "skipped" }), opts)).toBe("merge");
     expect(failingStage(results({ publish: "failure" }), opts)).toBe("publish");
   });
 
@@ -94,17 +95,22 @@ describe("reportBody", () => {
   test("carries every required field", () => {
     const body = reportBody(reportInput(), "native");
     expect(body.startsWith(REPORT_MARKER)).toBe(true);
-    expect(body).toContain(`cxstatusline version: ${CX}`);
-    expect(body).toContain(`Codex version: ${CODEX}`);
-    expect(body).toContain(`rust-v${CODEX}`);
-    expect(body).toContain("Failing stage: native");
-    expect(body).toContain("Architecture: darwin-arm64");
-    expect(body).toContain(RUN_URL);
-    expect(body).toContain(PATCH_SHA);
-    expect(body).toContain(SOURCE);
-    expect(body).toContain("workflow_dispatch");
-    expect(body).toContain("self_hosted=true");
-    expect(body).toContain("publish=true");
+    const required = [
+      `cxstatusline version: ${CX}`, `Codex version: ${CODEX}`, `rust-v${CODEX}`,
+      "Failing stage: native", "Architecture: darwin-arm64", RUN_URL, PATCH_SHA,
+      SOURCE, "workflow_dispatch", "self_hosted=true", "publish=true",
+    ];
+    for (const r of required) expect(body).toContain(r);
+  });
+
+  test("formats multiple architectures when provided", () => {
+    const body = reportBody(reportInput({ platforms: ["darwin-arm64", "darwin-x64"] }), "native");
+    expect(body).toContain("Architecture: darwin-arm64, darwin-x64");
+  });
+
+  test("includes merge in Job results when present", () => {
+    const body = reportBody(reportInput({ results: results({ merge: "success" }) }), "publish");
+    expect(body).toContain("native=success merge=success publish=success");
   });
 
   test("says so when upstream identity is unknown", () => {

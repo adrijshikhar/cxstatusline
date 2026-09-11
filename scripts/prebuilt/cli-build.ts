@@ -3,11 +3,13 @@
  * three verified release assets, entirely on the runner and without touching GitHub.
  */
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import type { ReleaseManifest } from "../../src/distribution";
 import { platformFor, validateManifest } from "../../src/distribution";
 import { loadManifest } from "../../src/patch/manifest";
 import { resolveDetection } from "./detect";
+import { mergeManifests } from "./merge";
 import {
   cxVersion,
   emit,
@@ -140,5 +142,66 @@ export async function runRustNotices(flags: Record<string, string>): Promise<voi
   const notices = generateRustNotices(upstream, defaultRunner);
   mkdirSync(dirname(outFile), { recursive: true });
   writeFileSync(outFile, notices);
+}
+
+/**
+ * Merge single-platform build outputs into a multi-archive release directory.
+ * Reads each <input>/manifest.json, merges manifests, copies archives, writes
+ * unified manifest.json and SHA256SUMS.
+ */
+export async function runMerge(flags: Record<string, string>): Promise<void> {
+  const inputsArg = required(flags, "inputs");
+  let inputDirs = inputsArg.split(",").map((s) => resolve(s.trim())).filter((s) => s.length > 0);
+  if (inputDirs.length === 1 && existsSync(inputDirs[0]!) && !existsSync(join(inputDirs[0]!, "manifest.json"))) {
+    const subdirs = readdirSync(inputDirs[0]!, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => join(inputDirs[0]!, d.name))
+      .filter((d) => existsSync(join(d, "manifest.json")));
+    if (subdirs.length > 0) inputDirs = subdirs;
+  }
+  const outDir = resolve(required(flags, "out"));
+  const expectedPlatforms = required(flags, "platforms").split(",").map((s) => s.trim()).sort();
+
+  if (existsSync(outDir) && readdirSync(outDir).length > 0) {
+    throw new Error(`--out directory ${outDir} must be empty or absent`);
+  }
+  mkdirSync(outDir, { recursive: true });
+
+  const manifests: ReleaseManifest[] = [];
+  for (const dir of inputDirs) {
+    const manifestPath = join(dir, "manifest.json");
+    if (!existsSync(manifestPath)) throw new Error(`manifest.json not found in ${dir}`);
+    manifests.push(JSON.parse(readFileSync(manifestPath, "utf8")) as ReleaseManifest);
+  }
+
+  const merged = mergeManifests(manifests);
+  const foundPlatforms = merged.artifacts.map((a) => a.platform).sort();
+  if (foundPlatforms.join(",") !== expectedPlatforms.join(",")) {
+    throw new Error(`expected platforms ${expectedPlatforms.join(",")} but found ${foundPlatforms.join(",")}`);
+  }
+
+  const archives: string[] = [];
+  for (const artifact of merged.artifacts) {
+    let copied = false;
+    for (const dir of inputDirs) {
+      const src = join(dir, artifact.filename);
+      if (existsSync(src)) {
+        copyFileSync(src, join(outDir, artifact.filename));
+        archives.push(artifact.filename);
+        copied = true;
+        break;
+      }
+    }
+    if (!copied) throw new Error(`archive ${artifact.filename} not found in any input directory`);
+  }
+
+  writeFileSync(join(outDir, "manifest.json"), `${JSON.stringify(merged, null, 2)}\n`);
+  await writeChecksums(outDir, [...archives, "manifest.json"]);
+  const manifestDigest = await sha256File(join(outDir, "manifest.json"));
+
+  emit({
+    platforms: foundPlatforms.join(","),
+    manifest_sha256: manifestDigest.sha256,
+  });
 }
 

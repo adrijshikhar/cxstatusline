@@ -5,7 +5,7 @@ verifies and publishes prebuilt Codex binaries for cxstatusline.
 Its job graph is:
 
 ```
-detect -> validate -> native -> publish -> report(always)
+detect -> validate -> native (matrix) -> merge -> publish -> report(always)
 ```
 
 Permissions are least-privilege per job: the workflow is `contents: read` at the top level,
@@ -41,22 +41,22 @@ Permissions are least-privilege per job: the workflow is `contents: read` at the
 `publish` alone adds `contents: write`, and `report` alone adds `issues: write`. No job that runs
 build steps holds release-write or issue-write credentials.
 
-- **Scope: arm64 only.** The native matrix has exactly one entry, `darwin-arm64` /
-  `aarch64-apple-darwin`. Nothing is cross-compiled and no universal binary is produced, so a
-  release manifest carries exactly one artifact (the installer schema permits one or two).
-  Intel support needs an Intel runner and its own dispatch; do not infer it from an arm64 run.
+- **Scope: arm64 and x64.** Hosted runners build both `darwin-arm64` (on `macos-15`) and
+  `darwin-x64` (on `macos-15-intel`), producing two release archives per release. Self-hosted
+  runs are pinned to `darwin-arm64` (Apple Silicon only; selecting `x64` on a self-hosted run
+  fails fast in `detect`).
 - **Repository identity guard.** `detect` and `publish` both carry
-  `github.repository == 'adrijshikhar/cxstatusline'`. Guarding `detect` also stops `validate` and
-  `native`, which need it. This pipeline keeps forks from running a release pipeline against their
-  own repository.
+  `github.repository == 'adrijshikhar/cxstatusline'`. Guarding `detect` also stops `validate`,
+  `native`, and `merge`, which need it. This pipeline keeps forks from running a release pipeline
+  against their own repository.
 - **Runner prerequisites.** The self-hosted runner must have `gh` on `PATH`, authenticated for this
   repository: `publish` and `report` each begin with a `command -v gh` preflight that fails the job
   with `::error::gh CLI is required on this runner` rather than letting the script fail later. It
   also needs `git`, `rustup`/`cargo` with the toolchain upstream pins, `bun` (installed by
   `setup-bun`), and `just`/`cargo-nextest` (installed with `brew` only when missing).
-- **Self-hosted dispatch.** `self_hosted=true` moves every job to
-  `[self-hosted, macOS, ARM64]`; `false` uses `ubuntu-latest` / `macos-15`. Hosted macOS
-  minutes are billing-blocked, so the owner dispatches with `self_hosted=true`. Steps work on
+- **Self-hosted dispatch.** `self_hosted=true` moves jobs to
+  `[self-hosted, macOS, ARM64]`; `false` uses `ubuntu-latest` / `macos-15` / `macos-15-intel`.
+  Hosted macOS minutes on public repositories are unmetered. Steps work on
   both: `brew install` is skipped when `just`/`cargo-nextest` already exist, and only
   `RUNNER_TEMP`/`GITHUB_WORKSPACE`/`GITHUB_OUTPUT` are assumed.
 - **`detect`** runs `bun scripts/prebuilt.ts detect`. With `codex_version=auto` it lists
@@ -84,12 +84,13 @@ build steps holds release-write or issue-write credentials.
 - **`validate`** installs frozen dependencies, typechecks, runs `bun test`, builds with
   `CXSTATUSLINE_RELEASE_BUILD=1` (which refuses a dirty or commit-less checkout) and asserts
   the bundle prints the detected `cx_version`.
-- **`native`** clones the exact upstream tag, applies the exact patch with
+- **`native`** runs as a matrix across the detected platforms (`needs.detect.outputs.matrix`).
+  Each job clones the exact upstream tag, applies the exact patch with
   `git apply --index --check` before `git apply --index`, restores a Cargo build cache
   (`upstream/codex-rs/target`, `~/.cargo/registry`, `~/.cargo/git`) keyed on
   runner OS/arch, the upstream tag, the upstream `rust-toolchain.toml` hash, the `Cargo.lock`
-  hash and the applied patch's sha256, prepares the Codex V8 archive, runs
-  the focused patched Rust tests, builds the executable pair, then packages and verifies. The
+  hash and the applied patch's sha256, prepares the Codex V8 archive for its target architecture,
+  runs the focused patched Rust tests, builds the executable pair, then packages and verifies. The
   upstream checkout itself is still reset and re-cloned every run - only compiled artifacts and
   downloaded crates are cached.
   Packaging is deterministic: an explicit five-file list in fixed order (never `.`, which
@@ -97,6 +98,7 @@ build steps holds release-write or issue-write credentials.
   fixed archive mtime, modes forced to 0755/0644, and gzip whose header carries no timestamp.
   Identical staged inputs therefore produce identical archive bytes - which is *not* a claim
   that the Rust build itself is bit-reproducible.
+  Each native job uploads `release-<tag>-<platform>` and `provenance-<tag>-<platform>`.
 - **Verification** re-derives every published claim from the bytes on disk using the
   installer's own code: `validateManifest` from `src/distribution.ts` for the manifest,
   `extractArchive` from `src/distribution/archive.ts` for the archive, then `SHA256SUMS`
@@ -107,23 +109,26 @@ build steps holds release-write or issue-write credentials.
   consulted: on a scheduled run it stays at the default-branch head while `validate`/`native`/
   `publish` are checked out at the frozen source commit, so a manifest stamped from it would name a
   commit the build never used - and `publish` would then refuse its own artifact set forever.
-- **Outputs.** `release-<tag>` holds exactly the three release assets (archive,
-  `manifest.json`, `SHA256SUMS`) for 7 days; `provenance-<tag>` holds two `Cargo.lock` diffs, the
-  lockfile digest, runner OS/CPU, `rustc --version` and the raw `vtool`/`otool` output. The diffs
-  are separate on purpose: `Cargo.lock.patched.diff` is `git diff --cached` (the patch is applied
-  with `git apply --index`, so *its* lockfile change is staged and an unstaged diff would be empty),
-  and `Cargo.lock.build.diff` is the unstaged diff, which captures any rewrite cargo did during the
-  build. Workflow artifacts are private to the run - they are not a release.
+- **Outputs.** Each native job uploads `release-<tag>-<platform>` (holding the platform archive,
+  manifest and checksums) and `provenance-<tag>-<platform>`. The `merge` job unifies them.
+
+### `merge`
+
+`merge` (`needs: [detect, native]`) runs when `should_build == 'true'`. It downloads all
+`release-<tag>-*` artifacts, merges the individual manifests using `mergeManifests` (which verifies
+that upstream tag, commit, patch SHA, and source commit all agree across parts), copies every
+archive, and writes a unified `manifest.json` and `SHA256SUMS`. It uploads the final
+`release-<tag>` workflow artifact containing all archives and the unified manifest.
 
 ### `publish`
 
-`publish` (`needs: [detect, native]`) is the only job granted `contents: write`, and it runs only
+`publish` (`needs: [detect, merge]`) is the only job granted `contents: write`, and it runs only
 when `detect` said there is something to build **and** the run was asked to publish - a cron run
 always is, a manual dispatch only with `publish=true`. It is serialized per release tag
 (`concurrency: prebuilt-publish-<tag>`, `cancel-in-progress: false`) so two runs can never race
 the same release.
 
-It downloads the `release-<tag>` artifact - the exact bytes `native` verified, never a rebuild - and
+It downloads the merged `release-<tag>` artifact - the exact bytes verified across the matrix - and
 runs. `bun install` is teed into `$RUNNER_TEMP/prebuilt-publish.log` like every other
 failing-capable step, and a download-artifact failure appends a line naming the artifact that could
 not be fetched, so the documented expired-artifact case reaches `report` as an excerpt instead of
@@ -131,23 +136,23 @@ not be fetched, so the documented expired-artifact case reaches `report` as an e
 
 ```
 bun scripts/prebuilt.ts publish --tag <tag> --dir <artifact dir> --run-id <id> --run-url <url> \
-  --source-commit <sha> --codex-version <v> --cx-version <v> [--event <name>]
+  --source-commit <sha> --codex-version <v> --cx-version <v> --platforms <platforms> [--event <name>]
 ```
 
 In order:
 
-1. **Re-verify the set.** Exactly three files; `manifest.json` accepted by the installer's own
-   `validateManifest`; the archive's sha256/size equal to the manifest's; `SHA256SUMS` agreeing
-   with both the archive and `manifest.json`'s own bytes.
+1. **Re-verify the set.** All archives present; `manifest.json` accepted by the installer's own
+   `validateManifest` for each configured platform; each archive's sha256/size equal to the manifest's;
+   `SHA256SUMS` agreeing with all archives and `manifest.json`'s own bytes.
 2. **Re-check the release.** `detect`'s answer is 1-3 hours old by now, so the state is read again
    immediately before anything is uploaded.
 3. **Create or resume a draft.** No release → `gh release create --draft --target <source commit>`
-   with generated notes. An existing draft → its hidden provenance marker
+   with generated notes listing all architectures. An existing draft → its hidden provenance marker
    `<!-- cxstatusline-prebuilt-build run=<id> manifest_sha=<sha> -->` must record *this* build's
    manifest digest; if it does not, the run reports **blocked** and touches nothing.
 4. **Upload only what is missing.** An asset already attached with the same size is skipped; a
    different size is blocked, never overwritten. `--clobber` appears nowhere in this pipeline.
-5. **Download all three back and re-verify** their sha256 against the manifest and `SHA256SUMS`.
+5. **Download all assets back and re-verify** their sha256 against the manifest and `SHA256SUMS`.
    A mismatch fails the run and leaves the release a **draft**: nothing is published.
 6. **`gh release edit --draft=false --latest=false`**, then the release URL to the step summary.
 
@@ -173,18 +178,18 @@ rewritten.
 
 ### `report`
 
-`report` (`if: always()`, `needs: [detect, validate, native, publish]`) is the only job granted
+`report` (`if: always()`, `needs: [detect, validate, native, merge, publish]`) is the only job granted
 `issues: write`, and it holds no release credentials.
 
 ```
 bun scripts/prebuilt.ts report --detect <result> --validate <result> --native <result> \
-  --publish <result> --codex-version <v> --cx-version <v> --tag <tag> --upstream-tag <tag> \
-  --patch-sha256 <sha> --source-commit <sha> --should-build <bool> --publish-requested <bool> \
-  --release-url <url> --run-url <url> --repo <owner/name> --event <name> \
-  [--blocked-reason <text>] [--log-dir <dir>] [--error-file <path>]
+  [--merge <result>] --publish <result> --codex-version <v> --cx-version <v> --tag <tag> \
+  --upstream-tag <tag> --patch-sha256 <sha> --source-commit <sha> --should-build <bool> \
+  --publish-requested <bool> --release-url <url> --run-url <url> --repo <owner/name> \
+  --event <name> --platforms <platforms> [--blocked-reason <text>] [--log-dir <dir>] [--error-file <path>]
 ```
 
-- **Failing stage** is the first of `detect → validate → native → publish` that did not succeed. A
+- **Failing stage** is the first of `detect → validate → native → merge → publish` that did not succeed. A
   *deliberately* skipped job is not a failure: a skipped `publish` on a manual run without
   `publish=true`, and every skipped build job on a `should_build=false` run.
 - **One issue per identity.** Title is `Prebuilt blocked: Codex <version>`, or
@@ -229,7 +234,8 @@ call they make goes through it. The workflow itself guards on repository identit
 
 **Build and publish now (the normal path).** Actions → *Prebuilt release* → *Run workflow*:
 
-- `self_hosted` = **true** (hosted macOS minutes are billing-blocked)
+- `self_hosted` = **false** (hosted macOS minutes are free on the public repository) or **true** for the owner's Mac
+- `platforms` = `arm64,x64` (default; must be `arm64` if `self_hosted=true`)
 - `codex_version` = `auto`, or an exact supported version
 - `publish` = **true**
 

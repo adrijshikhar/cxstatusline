@@ -20,6 +20,11 @@ on:
         type: choice
         options: ["auto", "0.153.4", "0.153.0", "0.152.1"]
         default: "auto"
+      platforms:
+        description: Target platforms to build (arm64,x64 or arm64)
+        type: choice
+        options: ["arm64,x64", "arm64"]
+        default: "arm64,x64"
       self_hosted:
         description: Run on the owner's self-hosted Apple Silicon runner (arm64 only; no hosted minutes)
         type: boolean
@@ -61,6 +66,8 @@ jobs:
       release_state: ${{ steps.detect.outputs.release_state }}
       should_build: ${{ steps.detect.outputs.should_build }}
       blocked_reason: ${{ steps.detect.outputs.blocked_reason }}
+      platforms: ${{ steps.detect.outputs.platforms }}
+      matrix: ${{ steps.detect.outputs.matrix }}
     steps:
       # Full history: a scheduled run resolves an older `v<CX>` source commit and must read
       # `patches/manifest.json` and the patch bytes out of *that* commit, not out of this
@@ -82,12 +89,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REQUESTED_CODEX_VERSION: ${{ inputs.codex_version || 'auto' }}
+          REQUESTED_PLATFORMS: ${{ inputs.platforms || 'arm64,x64' }}
+          SELF_HOSTED: ${{ inputs.self_hosted && 'true' || 'false' }}
         run: |
           set -o pipefail
           bun scripts/prebuilt.ts detect \
             --codex-version "$REQUESTED_CODEX_VERSION" \
             --event "$GITHUB_EVENT_NAME" \
-            --repo "$GITHUB_REPOSITORY" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-detect.log"
+            --repo "$GITHUB_REPOSITORY" \
+            --platforms "$REQUESTED_PLATFORMS" \
+            --self-hosted "$SELF_HOSTED" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-detect.log"
       # The evidence `report` excerpts from. `if: always()` so a failed step's log still ships,
       # and one artifact name per job because v4 artifacts are immutable.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -140,13 +151,19 @@ jobs:
   native:
     needs: [detect, validate]
     if: needs.detect.outputs.should_build == 'true'
-    runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64"]') || 'macos-15' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.detect.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
     env:
       CODEX_VERSION: ${{ needs.detect.outputs.codex_version }}
       CX_VERSION: ${{ needs.detect.outputs.cx_version }}
       SOURCE_COMMIT: ${{ needs.detect.outputs.source_commit }}
-      EXPECTED_ARCH: arm64
+      EXPECTED_ARCH: ${{ matrix.arch }}
+      V8_TARGET: ${{ matrix.target }}
+      PLATFORM: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -191,7 +208,7 @@ jobs:
       - name: Prepare verified Codex V8 archive and bindings
         run: |
           set -o pipefail
-          bash scripts/setup-ci-v8.sh "$GITHUB_WORKSPACE/upstream" aarch64-apple-darwin 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
+          bash scripts/setup-ci-v8.sh "$GITHUB_WORKSPACE/upstream" "$V8_TARGET" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
       - name: Prepare Rust test tools
         run: |
           set -o pipefail
@@ -229,12 +246,14 @@ jobs:
             --upstream "$GITHUB_WORKSPACE/upstream" \
             --staging "$RUNNER_TEMP/staging" \
             --rust-notices "$RUNNER_TEMP/rust-notices.md" \
+            --platform "$PLATFORM" \
             --out "$GITHUB_WORKSPACE/out" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
       - name: Verify release assets
         run: |
           set -o pipefail
           bun scripts/prebuilt.ts verify --out "$GITHUB_WORKSPACE/out" \
-            --codex-version "$CODEX_VERSION" --cx-version "$CX_VERSION" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
+            --codex-version "$CODEX_VERSION" --cx-version "$CX_VERSION" \
+            --platform "$PLATFORM" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
       - name: Record build provenance
         env:
           UPSTREAM_COMMIT: ${{ steps.build.outputs.upstream_commit }}
@@ -261,20 +280,63 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
-          name: logs-native-${{ github.run_id }}
+          name: logs-native-${{ matrix.platform }}-${{ github.run_id }}
           path: ${{ runner.temp }}/prebuilt-native.log
+          if-no-files-found: warn
+          retention-days: 7
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-${{ needs.detect.outputs.tag }}-${{ matrix.platform }}
+          path: out/
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: provenance-${{ needs.detect.outputs.tag }}-${{ matrix.platform }}
+          path: provenance/
+          if-no-files-found: error
+          retention-days: 7
+
+  merge:
+    needs: [detect, native]
+    if: needs.detect.outputs.should_build == 'true'
+    runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64"]') || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          ref: ${{ needs.detect.outputs.source_commit }}
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.4.0"
+      - run: set -o pipefail; bun install --frozen-lockfile 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-merge.log"
+      - name: Download platform release artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: release-${{ needs.detect.outputs.tag }}-*
+          merge-multiple: false
+          path: parts
+      - name: Merge release manifests and archives
+        env:
+          PLATFORMS: ${{ needs.detect.outputs.platforms }}
+        run: |
+          set -o pipefail
+          bun scripts/prebuilt.ts merge \
+            --inputs "$GITHUB_WORKSPACE/parts" \
+            --out "$GITHUB_WORKSPACE/out" \
+            --platforms "$PLATFORMS" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-merge.log"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: logs-merge-${{ github.run_id }}
+          path: ${{ runner.temp }}/prebuilt-merge.log
           if-no-files-found: warn
           retention-days: 7
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-${{ needs.detect.outputs.tag }}
           path: out/
-          if-no-files-found: error
-          retention-days: 7
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: provenance-${{ needs.detect.outputs.tag }}
-          path: provenance/
           if-no-files-found: error
           retention-days: 7
 
@@ -285,7 +347,7 @@ jobs:
   # SHA256SUMS, and only then flips the draft to published. No --clobber, no delete, no visibility
   # change, ever. Exit 3 means blocked: the owner has to act and `report` files one issue.
   publish:
-    needs: [detect, native]
+    needs: [detect, merge]
     if: >-
       github.repository == 'adrijshikhar/cxstatusline' && needs.detect.outputs.should_build == 'true'
       && (github.event_name == 'schedule' || inputs.publish == true)
@@ -314,7 +376,7 @@ jobs:
       # Teed like every other failing-capable step, so `report` has an excerpt when dependency
       # installation is what broke.
       - run: set -o pipefail; bun install --frozen-lockfile 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-publish.log"
-      # The exact bytes `native` verified: nothing is rebuilt and no timestamp is regenerated.
+      # The exact bytes `merge` unified: nothing is rebuilt and no timestamp is regenerated.
       - id: fetch-assets
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
@@ -336,6 +398,7 @@ jobs:
           TAG: ${{ needs.detect.outputs.tag }}
           CODEX_VERSION: ${{ needs.detect.outputs.codex_version }}
           CX_VERSION: ${{ needs.detect.outputs.cx_version }}
+          PLATFORMS: ${{ needs.detect.outputs.platforms }}
           SOURCE_COMMIT: ${{ needs.detect.outputs.source_commit }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -348,6 +411,7 @@ jobs:
             --source-commit "$SOURCE_COMMIT" \
             --codex-version "$CODEX_VERSION" \
             --cx-version "$CX_VERSION" \
+            --platforms "$PLATFORMS" \
             --event "$GITHUB_EVENT_NAME" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-publish.log"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
@@ -361,7 +425,7 @@ jobs:
   # title *and* body marker, closes the issue that a success actually clears, and fails the job if
   # the GitHub API call it needed did not succeed - it never claims issue state it did not observe.
   report:
-    needs: [detect, validate, native, publish]
+    needs: [detect, validate, native, merge, publish]
     if: always() && github.repository == 'adrijshikhar/cxstatusline'
     runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64"]') || 'ubuntu-latest' }}
     timeout-minutes: 10
@@ -396,6 +460,7 @@ jobs:
           DETECT_RESULT: ${{ needs.detect.result }}
           VALIDATE_RESULT: ${{ needs.validate.result }}
           NATIVE_RESULT: ${{ needs.native.result }}
+          MERGE_RESULT: ${{ needs.merge.result }}
           PUBLISH_RESULT: ${{ needs.publish.result }}
           CODEX_VERSION: ${{ needs.detect.outputs.codex_version }}
           CX_VERSION: ${{ needs.detect.outputs.cx_version }}
@@ -407,12 +472,14 @@ jobs:
           PUBLISH_REQUESTED: ${{ github.event_name == 'schedule' || inputs.publish == true }}
           RELEASE_URL: ${{ needs.publish.outputs.release_url }}
           BLOCKED_REASON: ${{ needs.detect.outputs.blocked_reason }}
+          PLATFORMS: ${{ needs.detect.outputs.platforms }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           bun scripts/prebuilt.ts report \
             --detect "$DETECT_RESULT" \
             --validate "$VALIDATE_RESULT" \
             --native "$NATIVE_RESULT" \
+            --merge "$MERGE_RESULT" \
             --publish "$PUBLISH_RESULT" \
             --codex-version "$CODEX_VERSION" \
             --cx-version "$CX_VERSION" \
@@ -427,4 +494,5 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --event "$GITHUB_EVENT_NAME" \
             --blocked-reason "$BLOCKED_REASON" \
+            --platforms "$PLATFORMS" \
             --log-dir "$GITHUB_WORKSPACE/stage-logs"
