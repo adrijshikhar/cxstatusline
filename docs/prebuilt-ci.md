@@ -45,11 +45,10 @@ build steps holds release-write or issue-write credentials.
   `aarch64-apple-darwin`. Nothing is cross-compiled and no universal binary is produced, so a
   release manifest carries exactly one artifact (the installer schema permits one or two).
   Intel support needs an Intel runner and its own dispatch; do not infer it from an arm64 run.
-- **Private repository only.** `detect` and `publish` both carry
-  `github.event.repository.private == true` (the same guard `prebuilt-smoke.yml` uses). Guarding
-  `detect` also stops `validate` and `native`, which need it. This pipeline publishes private
-  releases and files private issues; it must never run against a fork or a repository that has been
-  made public.
+- **Repository identity guard.** `detect` and `publish` both carry
+  `github.repository == 'adrijshikhar/cxstatusline'`. Guarding `detect` also stops `validate` and
+  `native`, which need it. This pipeline keeps forks from running a release pipeline against their
+  own repository.
 - **Runner prerequisites.** The self-hosted runner must have `gh` on `PATH`, authenticated for this
   repository: `publish` and `report` each begin with a `command -v gh` preflight that fails the job
   with `::error::gh CLI is required on this runner` rather than letting the script fail later. It
@@ -165,8 +164,8 @@ Repository visibility is never read or changed, and no draft is ever deleted aut
   build publishes under a new tag.
 - **Already published, identical** (same `sourceCommit` and `patchSha256`). Success, skipped, with
   nothing uploaded. `detect` catches this first and skips the build entirely.
-- **Already published, different.** **Blocked**, exit 3. Published releases, including private
-  ones, are immutable: their assets are never replaced. Only a cxstatusline version bump - a new
+- **Already published, different.** **Blocked**, exit 3. Published releases
+  are immutable: their assets are never replaced. Only a cxstatusline version bump - a new
   tag - can publish different bytes.
 
 Retry URLs live in the run log and the tracking issue. Original build provenance is never
@@ -225,8 +224,8 @@ bun scripts/prebuilt.ts report --detect <result> --validate <result> --native <r
 
 **Before the first dispatch.** On the self-hosted runner, check `gh --version` and
 `gh auth status`: `publish` and `report` refuse to start without `gh` on `PATH`, and every GitHub
-call they make goes through it. The workflow itself also refuses to run unless the repository is
-private.
+call they make goes through it. The workflow itself guards on repository identity
+(`github.repository == 'adrijshikhar/cxstatusline'`).
 
 **Build and publish now (the normal path).** Actions → *Prebuilt release* → *Run workflow*:
 
@@ -234,7 +233,7 @@ private.
 - `codex_version` = `auto`, or an exact supported version
 - `publish` = **true**
 
-That builds `github.sha` and publishes `cxstatusline-v<CX>-codex-v<CODEX>` as a private release.
+That builds `github.sha` and publishes `cxstatusline-v<CX>-codex-v<CODEX>`.
 With `publish=false` it builds and verifies only, and `report` says "build succeeded, not
 published".
 
@@ -249,9 +248,9 @@ patch. A published-but-different release needs a cxstatusline version bump. A co
 needs the draft deleted by hand, or a version bump. The pipeline never resolves any of these for
 you, and never deletes a draft on its own.
 
-**Releases are private and immutable.** They live in this private repository and nothing in this
-pipeline reads or changes repository visibility. Once published, a release's assets are never
-replaced - differing bytes always mean a new CX version and therefore a new tag.
+**Releases are immutable.** Nothing in this pipeline changes repository visibility. Once
+published, a release's assets are never replaced - differing bytes always mean a new CX version and
+therefore a new tag.
 
 ### Known acceptance gap
 

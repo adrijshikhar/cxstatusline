@@ -225,8 +225,8 @@ export async function checkExistingRelease(c: ExistingCheck): Promise<ExistingVe
 /** The message a published-but-different release earns. Shared by `detect` and `publish`. */
 export function immutabilityMessage(tag: string, detail: string): string {
   return (
-    `Release ${tag} is already published but was built from different inputs (${detail}). Published releases, `
-    + `including private ones, are immutable: their assets are never replaced. Publishing this build requires a `
+    `Release ${tag} is already published but was built from different inputs (${detail}). Published releases `
+    + `are immutable: their assets are never replaced. Publishing this build requires a `
     + `cxstatusline version bump so it gets its own tag. Nothing was uploaded, deleted or overwritten.`
   );
 }

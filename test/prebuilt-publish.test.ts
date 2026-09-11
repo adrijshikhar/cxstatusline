@@ -156,7 +156,8 @@ describe("release notes", () => {
 
   test("carries every required disclosure", () => {
     const notes = releaseNotes(notesInput);
-    expect(notes).toContain(`cxstatusline v${CX} · Codex ${CODEX} (darwin-arm64, private)`);
+    expect(notes).toContain(`cxstatusline v${CX} · Codex ${CODEX} (darwin-arm64)`);
+    expect(notes).not.toMatch(/private/i);
     expect(notes).toContain(`Built from cxstatusline commit ${SOURCE} (package version ${CX})`);
     expect(notes).toContain(`patch codex-${CODEX}.patch sha256 ${PATCH_SHA}`);
     expect(notes).toContain("darwin-arm64 only (Apple Silicon); Intel is not built in this release.");

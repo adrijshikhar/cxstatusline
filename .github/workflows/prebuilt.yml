@@ -45,11 +45,9 @@ env:
 jobs:
   # Resolves every release input once, so no later job re-derives the version or the tag.
   detect:
-    # Private-repository guard, same as prebuilt-smoke.yml: this pipeline publishes private
-    # releases and files private issues, and must never run against a fork or a repository that
-    # has been made public. `github.event.repository` is present on both `schedule` and
-    # `workflow_dispatch`. Guarding `detect` also stops `validate`/`native`, which need it.
-    if: github.event.repository.private == true
+    # Repository-identity guard: keeps forks from running a release pipeline against their
+    # own repository. Guarding `detect` also stops `validate`/`native`, which need it.
+    if: github.repository == 'adrijshikhar/cxstatusline'
     runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64"]') || 'ubuntu-latest' }}
     timeout-minutes: 10
     outputs:
@@ -289,7 +287,7 @@ jobs:
   publish:
     needs: [detect, native]
     if: >-
-      github.event.repository.private == true && needs.detect.outputs.should_build == 'true'
+      github.repository == 'adrijshikhar/cxstatusline' && needs.detect.outputs.should_build == 'true'
       && (github.event_name == 'schedule' || inputs.publish == true)
     runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64"]') || 'macos-15' }}
     timeout-minutes: 60
@@ -364,7 +362,7 @@ jobs:
   # the GitHub API call it needed did not succeed - it never claims issue state it did not observe.
   report:
     needs: [detect, validate, native, publish]
-    if: always() && github.event.repository.private == true
+    if: always() && github.repository == 'adrijshikhar/cxstatusline'
     runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64"]') || 'ubuntu-latest' }}
     timeout-minutes: 10
     permissions:
