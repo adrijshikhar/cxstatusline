@@ -7,32 +7,33 @@
  * call in the other `scripts/prebuilt/*` modules, and `./prebuilt/api` re-exports the tested
  * surface so `test/prebuilt*.test.ts` has one import path.
  */
-import { runBuild, runPackage, runRustNotices, runVerify } from "./prebuilt/cli-build";
+import { runBuild, runMerge, runPackage, runRustNotices, runVerify } from "./prebuilt/cli-build";
 import { runDetect } from "./prebuilt/cli-detect";
 import { runPublish, runReportCommand } from "./prebuilt/cli-publish";
 import { parseFlags } from "./prebuilt/env";
 
 export * from "./prebuilt/api";
-export { runPackage, runRustNotices } from "./prebuilt/cli-build";
+export { runMerge, runPackage, runRustNotices } from "./prebuilt/cli-build";
 export { resetDirectory, sourceCommit } from "./prebuilt/env";
 
 // ---- CLI ----
 
 const USAGE = [
   "usage: bun scripts/prebuilt.ts <command> [flags]",
-  "  detect       [--codex-version auto|X.Y.Z] [--event NAME] [--repo OWNER/NAME] [--platform P]",
-  "               [--releases-file FILE] [--source-releases-file FILE]",
+  "  detect       [--codex-version auto|X.Y.Z] [--event NAME] [--repo OWNER/NAME] [--platforms P]",
+  "               [--self-hosted true|false] [--releases-file FILE] [--source-releases-file FILE]",
   "  build        --codex-version X.Y.Z --upstream DIR",
   "  rust-notices --upstream DIR --out FILE",
   "  package      --codex-version X.Y.Z --cx-version X.Y.Z --source-commit SHA --upstream DIR --staging DIR",
-  "               --out DIR --rust-notices FILE [--workflow-url URL]",
-  "  verify       --out DIR --codex-version X.Y.Z --cx-version X.Y.Z [--skip-macho]",
+  "               --out DIR --rust-notices FILE [--workflow-url URL] [--platform P]",
+  "  verify       --out DIR --codex-version X.Y.Z --cx-version X.Y.Z [--platform P] [--skip-macho]",
+  "  merge        --inputs DIR[,DIR...] --out DIR --platforms P[,P...]",
   "  publish      --tag TAG --dir DIR --run-id ID --run-url URL --source-commit SHA",
-  "               --codex-version X.Y.Z --cx-version X.Y.Z [--event NAME] [--platform P]",
-  "  report       --detect R --validate R --native R --publish R --codex-version V --tag TAG --run-url URL",
+  "               --codex-version X.Y.Z --cx-version X.Y.Z [--event NAME] [--platforms P]",
+  "  report       --detect R --validate R --native R [--merge R] --publish R --codex-version V --tag TAG --run-url URL",
   "               --source-commit SHA --patch-sha256 SHA --event NAME [--cx-version V] [--upstream-tag TAG]",
   "               [--repo OWNER/NAME] [--should-build true|false] [--publish-requested true|false]",
-  "               [--release-url URL] [--error-file PATH] [--log-dir DIR] [--blocked-reason TEXT]",
+  "               [--release-url URL] [--error-file PATH] [--log-dir DIR] [--blocked-reason TEXT] [--platforms P]",
 ].join("\n");
 
 if (import.meta.main) {
@@ -44,6 +45,7 @@ if (import.meta.main) {
     else if (command === "rust-notices") await runRustNotices(flags);
     else if (command === "package") await runPackage(flags);
     else if (command === "verify") await runVerify(flags);
+    else if (command === "merge") await runMerge(flags);
     else if (command === "publish") await runPublish(flags);
     else if (command === "report") await runReportCommand(flags);
     else {

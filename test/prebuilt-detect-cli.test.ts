@@ -10,7 +10,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { commitPatches, selectSourceRelease, sha256File, workingTreePatches } from "../scripts/prebuilt";
+import { buildMatrix, commitPatches, selectSourceRelease, sha256File, workingTreePatches } from "../scripts/prebuilt";
 import { loadManifest } from "../src/patch/manifest";
 
 const root = join(import.meta.dir, "..");
@@ -72,6 +72,47 @@ describe("detect on a schedule", () => {
     const run = runDetect(["--event", "workflow_dispatch", "--platform", "linux-x64"], []);
     expect(run.status).toBe(1);
     expect(run.stderr).toMatch(/--platform must be one of darwin-arm64, darwin-x64/);
+  });
+
+  test("a bad --platforms is refused", () => {
+    const run = runDetect(["--event", "workflow_dispatch", "--platforms", "arm64,solaris-x64"], []);
+    expect(run.status).toBe(1);
+    expect(run.stderr).toMatch(/--platforms must be one of/);
+  });
+
+  test("self-hosted with x64 fails fast", () => {
+    const run = runDetect(["--event", "workflow_dispatch", "--self-hosted", "--platforms", "arm64,x64"], []);
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain("self-hosted runner is arm64 only");
+  });
+});
+
+describe("buildMatrix", () => {
+  test("self-hosted runner is pinned to ARM64 runner array", () => {
+    const m = buildMatrix(["darwin-arm64"], true);
+    expect(m).toEqual([{
+      runner: ["self-hosted", "macOS", "ARM64"],
+      arch: "arm64",
+      target: "aarch64-apple-darwin",
+      platform: "darwin-arm64",
+    }]);
+  });
+
+  test("hosted runner maps each platform to its runner and target", () => {
+    const m = buildMatrix(["darwin-arm64", "darwin-x64"], false);
+    expect(m).toHaveLength(2);
+    expect(m[0]).toEqual({
+      runner: "macos-15",
+      arch: "arm64",
+      target: "aarch64-apple-darwin",
+      platform: "darwin-arm64",
+    });
+    expect(m[1]).toEqual({
+      runner: "macos-15-intel",
+      arch: "x64",
+      target: "x86_64-apple-darwin",
+      platform: "darwin-x64",
+    });
   });
 });
 

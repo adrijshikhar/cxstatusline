@@ -7,7 +7,7 @@
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { validateManifest, type ExpectedRelease, type ReleaseManifest } from "../../src/distribution";
+import { validateManifest, type ExpectedRelease, type Platform, type ReleaseManifest } from "../../src/distribution";
 import { ghText, type GhRunner } from "./gh";
 import { parseChecksums, sha256File } from "./pack";
 import { redact } from "./redact";
@@ -48,10 +48,17 @@ export interface ReleaseView {
 export interface VerifiedSet {
   readonly manifest: ReleaseManifest;
   readonly archive: string;
+  readonly archives: readonly string[];
   readonly manifestSha256: string;
-  /** Exactly the three release assets, in upload order. */
   readonly assets: readonly ReleaseAsset[];
 }
+
+export type ExpectedReleaseInput = {
+  readonly cxVersion: string;
+  readonly codexVersion: string;
+  readonly platforms?: readonly Platform[];
+  readonly platform?: Platform;
+};
 
 export interface ExpectedIdentity {
   readonly sourceCommit: string;
@@ -65,42 +72,62 @@ export interface ExpectedIdentity {
  * files, a manifest the *installer's own* validator accepts, and a `SHA256SUMS` that agrees with
  * both the archive and the manifest's own bytes.
  */
-export async function verifyReleaseDir(dir: string, expected: ExpectedRelease): Promise<VerifiedSet> {
+export async function verifyReleaseDir(dir: string, expected: ExpectedReleaseInput): Promise<VerifiedSet> {
+  const platforms = expected.platforms ?? (expected.platform ? [expected.platform] : ["darwin-arm64"]);
+  const expectedCount = platforms.length + 2;
   const entries = readdirSync(dir).sort();
-  if (entries.length !== 3) {
-    throw new Error(`release directory must hold exactly three files, found ${entries.length}: ${entries.join(", ")}`);
+  if (entries.length !== expectedCount) {
+    if (platforms.length === 1) {
+      throw new Error(`release directory must hold exactly three files, found ${entries.length}: ${entries.join(", ")}`);
+    }
+    throw new Error(`release directory must hold exactly ${expectedCount} files, found ${entries.length}: ${entries.join(", ")}`);
   }
   const manifestFile = join(dir, "manifest.json");
   if (!existsSync(manifestFile)) throw new Error(`manifest.json is missing from ${dir}`);
-  const manifest = validateManifest(JSON.parse(readFileSync(manifestFile, "utf8")), expected);
-  const artifact = manifest.artifacts.find((a) => a.platform === expected.platform);
-  if (artifact === undefined) throw new Error(`manifest.json has no ${expected.platform} artifact`);
-  const names = [artifact.filename, "manifest.json", "SHA256SUMS"];
-  for (const name of names) {
-    if (!SAFE_ASSET_NAME.test(name)) throw new Error(`unusable release asset name ${JSON.stringify(name)}`);
-    if (!entries.includes(name)) throw new Error(`${name} is missing from ${dir}`);
+  const raw = JSON.parse(readFileSync(manifestFile, "utf8"));
+  let manifest!: ReleaseManifest;
+  for (const platform of platforms) {
+    manifest = validateManifest(raw, {
+      cxVersion: expected.cxVersion,
+      codexVersion: expected.codexVersion,
+      platform,
+    });
   }
 
-  const archive = await sha256File(join(dir, artifact.filename));
-  if (archive.sha256 !== artifact.sha256 || archive.size !== artifact.size) {
-    throw new Error(`${artifact.filename} sha256/size does not match manifest.json`);
-  }
-  const manifestDigest = await sha256File(manifestFile);
   const sums = parseChecksums(readFileSync(join(dir, "SHA256SUMS"), "utf8"));
-  if (sums[artifact.filename] !== artifact.sha256) throw new Error("SHA256SUMS disagrees with manifest.json");
+  const manifestDigest = await sha256File(manifestFile);
   if (sums["manifest.json"] !== manifestDigest.sha256) {
     throw new Error("SHA256SUMS does not match manifest.json's own bytes");
   }
+
+  const archives: string[] = [];
+  const assets: ReleaseAsset[] = [];
+  for (const platform of platforms) {
+    const artifact = manifest.artifacts.find((a) => a.platform === platform);
+    if (artifact === undefined) throw new Error(`manifest.json has no ${platform} artifact`);
+    if (!SAFE_ASSET_NAME.test(artifact.filename)) throw new Error(`unusable release asset name ${JSON.stringify(artifact.filename)}`);
+    if (!entries.includes(artifact.filename)) throw new Error(`${artifact.filename} is missing from ${dir}`);
+
+    const archive = await sha256File(join(dir, artifact.filename));
+    if (archive.sha256 !== artifact.sha256 || archive.size !== artifact.size) {
+      throw new Error(`${artifact.filename} sha256/size does not match manifest.json`);
+    }
+    if (sums[artifact.filename] !== artifact.sha256) throw new Error("SHA256SUMS disagrees with manifest.json");
+
+    archives.push(artifact.filename);
+    assets.push({ name: artifact.filename, size: archive.size });
+  }
+
   const sumsDigest = await sha256File(join(dir, "SHA256SUMS"));
+  assets.push({ name: "manifest.json", size: manifestDigest.size });
+  assets.push({ name: "SHA256SUMS", size: sumsDigest.size });
+
   return {
     manifest,
-    archive: artifact.filename,
+    archive: archives[0]!,
+    archives,
     manifestSha256: manifestDigest.sha256,
-    assets: [
-      { name: artifact.filename, size: archive.size },
-      { name: "manifest.json", size: manifestDigest.size },
-      { name: "SHA256SUMS", size: sumsDigest.size },
-    ],
+    assets,
   };
 }
 
@@ -197,7 +224,7 @@ export interface ExistingCheck {
   readonly run: GhRunner;
   readonly tag: string;
   readonly expected: ExpectedIdentity;
-  readonly release: ExpectedRelease;
+  readonly release: ExpectedReleaseInput;
   readonly assetNames: readonly string[];
   readonly tmpRoot: string;
 }
@@ -211,13 +238,33 @@ export async function checkExistingRelease(c: ExistingCheck): Promise<ExistingVe
   const view = inspectRelease(c.run, c.tag);
   if (view.state !== "published") return { state: view.state, view } as ExistingVerdict;
 
-  const attached = new Set(view.assets.map((a) => a.name));
+  const attached = new Map(view.assets.map((a) => [a.name, a.size]));
   const missing = c.assetNames.filter((n) => !attached.has(n));
   if (missing.length > 0) {
     return { state: "published", view, identical: false, detail: `published release is missing ${missing.join(", ")}` };
   }
   const file = downloadAsset(c.run, c.tag, "manifest.json", join(c.tmpRoot, "published"));
-  const manifest = validateManifest(JSON.parse(readFileSync(file, "utf8")), c.release);
+  const raw = JSON.parse(readFileSync(file, "utf8"));
+  const platforms = c.release.platforms ?? (c.release.platform ? [c.release.platform] : ["darwin-arm64"]);
+  let manifest!: ReleaseManifest;
+  for (const platform of platforms) {
+    manifest = validateManifest(raw, {
+      cxVersion: c.release.cxVersion,
+      codexVersion: c.release.codexVersion,
+      platform,
+    });
+  }
+  for (const artifact of manifest.artifacts) {
+    const size = attached.get(artifact.filename);
+    if (size === undefined || size !== artifact.size) {
+      return {
+        state: "published",
+        view,
+        identical: false,
+        detail: `asset ${artifact.filename} is missing or size differs (${size} vs ${artifact.size})`,
+      };
+    }
+  }
   const comparison = compareIdentity(manifest, c.expected);
   return { state: "published", view, identical: comparison.identical, detail: comparison.detail };
 }

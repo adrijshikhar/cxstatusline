@@ -35,7 +35,8 @@ export type BuildIdentity =
 export interface NotesInput {
   readonly cxVersion: string;
   readonly codexVersion: string;
-  readonly platform: Platform;
+  readonly platform?: Platform;
+  readonly platforms?: readonly Platform[];
   readonly sourceCommit: string;
   readonly upstreamTag: string;
   readonly upstreamCommit: string;
@@ -47,8 +48,9 @@ export interface NotesInput {
   readonly identity: BuildIdentity;
 }
 
-export function releaseTitle(i: Pick<NotesInput, "cxVersion" | "codexVersion" | "platform">): string {
-  return `cxstatusline v${i.cxVersion} · Codex ${i.codexVersion} (${i.platform})`;
+export function releaseTitle(i: Pick<NotesInput, "cxVersion" | "codexVersion"> & { platform?: Platform; platforms?: readonly Platform[] }): string {
+  const platforms = i.platforms ?? (i.platform ? [i.platform] : ["darwin-arm64"]);
+  return `cxstatusline v${i.cxVersion} · Codex ${i.codexVersion} (${platforms.join(", ")})`;
 }
 
 function identityLine(i: NotesInput): string {
@@ -58,12 +60,25 @@ function identityLine(i: NotesInput): string {
   return `Workflow run ${i.runUrl} (${trigger})`;
 }
 
+function architecturesSection(platforms: readonly Platform[]): string {
+  if (platforms.length === 1 && platforms[0] === "darwin-arm64") {
+    return "darwin-arm64 only (Apple Silicon); Intel is not built in this release.";
+  }
+  const descriptions = platforms.map((p) => {
+    if (p === "darwin-arm64") return "darwin-arm64 (Apple Silicon)";
+    if (p === "darwin-x64") return "darwin-x64 (Intel)";
+    return p;
+  });
+  return `${descriptions.join(", ")}.`;
+}
+
 /**
  * The published release body. Everything a person needs in order to decide whether to trust these
  * bytes: what they were built from, what they will and will not run on, what is unproven, and the
  * escape hatch if they would rather not use a prebuilt binary at all.
  */
 export function releaseNotes(i: NotesInput): string {
+  const platforms = i.platforms ?? (i.platform ? [i.platform] : ["darwin-arm64"]);
   return [
     `# ${releaseTitle(i)}`,
     "",
@@ -73,7 +88,7 @@ export function releaseNotes(i: NotesInput): string {
     "",
     "## Architectures",
     "",
-    `${i.platform} only (Apple Silicon); Intel is not built in this release.`,
+    architecturesSection(platforms),
     "",
     "## Signing",
     "",

@@ -13,12 +13,13 @@ import {
   archiveFilename,
   ARCHIVE_ENTRIES,
   buildManifest,
+  mergeManifests,
   packArchive,
   writeChecksums,
   type GhResult,
   type GhRunner,
 } from "../scripts/prebuilt";
-import type { ArtifactFile, FileDigest } from "../src/distribution";
+import type { ArtifactFile, FileDigest, Platform } from "../src/distribution";
 
 export const CX = "0.1.0";
 export const CODEX = "0.153.0";
@@ -67,6 +68,42 @@ export async function releaseDir(sourceCommit = SOURCE, patchSha256 = PATCH_SHA)
   });
   writeFileSync(join(out, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   await writeChecksums(out, [ARCHIVE, "manifest.json"]);
+  return out;
+}
+
+/** Multi-platform release directory: archives for each platform + merged manifest.json + SHA256SUMS. */
+export async function multiReleaseDir(platforms: readonly Platform[] = ["darwin-arm64", "darwin-x64"]): Promise<string> {
+  const stage = tmp("staging-multi");
+  for (const name of ARCHIVE_ENTRIES) {
+    const executable = name === "codex" || name === "codex-code-mode-host";
+    writeFileSync(join(stage, name), executable ? "#!/bin/sh\necho stub\n" : `${name} text\n`);
+    chmodSync(join(stage, name), executable ? 0o755 : 0o644);
+  }
+  const out = tmp("out-multi");
+  const manifests = [];
+  const archiveNames: string[] = [];
+  for (const platform of platforms) {
+    const archiveName = archiveFilename(CODEX, platform);
+    archiveNames.push(archiveName);
+    const archive = await packArchive(stage, join(out, archiveName));
+    manifests.push(
+      buildManifest({
+        cxVersion: CX,
+        codexVersion: CODEX,
+        platform,
+        upstreamCommit: "b".repeat(40),
+        patchSha256: PATCH_SHA,
+        sourceCommit: SOURCE,
+        workflowUrl: RUN_URL,
+        createdAt: "2026-09-07T00:00:00Z",
+        archive,
+        files: digests(stage),
+      }),
+    );
+  }
+  const merged = mergeManifests(manifests);
+  writeFileSync(join(out, "manifest.json"), `${JSON.stringify(merged, null, 2)}\n`);
+  await writeChecksums(out, [...archiveNames, "manifest.json"]);
   return out;
 }
 

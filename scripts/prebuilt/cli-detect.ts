@@ -19,7 +19,7 @@ import {
   cxVersion,
   emit,
   oneLine,
-  releasePlatform,
+  releasePlatforms,
   repoSlug,
   runnerTmp,
   sourceCommit,
@@ -80,6 +80,43 @@ function resolveSource(flags: Record<string, string>, run: GhRunner, event: stri
   };
 }
 
+export interface MatrixEntry {
+  readonly runner: string | readonly string[];
+  readonly arch: "arm64" | "x64";
+  readonly target: "aarch64-apple-darwin" | "x86_64-apple-darwin";
+  readonly platform: Platform;
+}
+
+export function buildMatrix(platforms: readonly Platform[], selfHosted: boolean): readonly MatrixEntry[] {
+  if (selfHosted) {
+    return [{
+      runner: ["self-hosted", "macOS", "ARM64"],
+      arch: "arm64",
+      target: "aarch64-apple-darwin",
+      platform: "darwin-arm64",
+    }];
+  }
+  return platforms.map((platform) => {
+    if (platform === "darwin-arm64") {
+      return {
+        runner: "macos-15",
+        arch: "arm64",
+        target: "aarch64-apple-darwin",
+        platform: "darwin-arm64",
+      };
+    }
+    if (platform === "darwin-x64") {
+      return {
+        runner: "macos-15-intel",
+        arch: "x64",
+        target: "x86_64-apple-darwin",
+        platform: "darwin-x64",
+      };
+    }
+    throw new Error(`unknown platform ${String(platform)}`);
+  });
+}
+
 /**
  * Classify the release that already exists for this tag. `published` and identical means this run
  * has nothing to do (success, no build); `published` and different means the immutability rule has
@@ -89,14 +126,14 @@ async function releaseState(
   run: GhRunner,
   detection: Detection,
   expected: { readonly sourceCommit: string; readonly patchSha256: string },
-  platform: Platform,
+  platforms: readonly Platform[],
 ): Promise<{ state: ReleaseState; identical: boolean; detail: string; url: string }> {
   const verdict = await checkExistingRelease({
     run,
     tag: detection.tag,
     expected,
-    release: { cxVersion: detection.cxVersion, codexVersion: detection.codexVersion, platform },
-    assetNames: [archiveFilename(detection.codexVersion, platform), "manifest.json", "SHA256SUMS"],
+    release: { cxVersion: detection.cxVersion, codexVersion: detection.codexVersion, platforms },
+    assetNames: [...platforms.map((p) => archiveFilename(detection.codexVersion, p)), "manifest.json", "SHA256SUMS"],
     tmpRoot: runnerTmp("prebuilt-detect"),
   });
   return {
@@ -141,7 +178,7 @@ function blockedExit(outputs: Record<string, string>, title: string, message: st
 }
 
 /** The deliberate, successful no-op: a cron run with no `v<CX>` source release to build. */
-function skipNoSource(): void {
+function skipNoSource(platforms: readonly Platform[], matrix: readonly MatrixEntry[]): void {
   summary([
     "## Prebuilt release: nothing to build",
     "",
@@ -150,18 +187,38 @@ function skipNoSource(): void {
     "Scheduled runs build the highest stable owner-published `v<CX>` source release. Publish one,",
     "or dispatch this workflow manually to build a specific commit.",
   ]);
-  emit({ should_build: "false", release_state: "absent", skip_reason: "no-source-release" });
+  emit({
+    should_build: "false",
+    release_state: "absent",
+    skip_reason: "no-source-release",
+    platforms: platforms.join(","),
+    matrix: JSON.stringify(matrix),
+  });
 }
 
 /** Resolve the release identity, or exit 3 attributed to the version that is not covered. */
-function resolveOrBlock(manifest: Manifest, codexVersion: string, source: SourceSelection): Detection {
+function resolveOrBlock(
+  manifest: Manifest,
+  codexVersion: string,
+  source: SourceSelection,
+  platforms: readonly Platform[],
+  matrix: readonly MatrixEntry[],
+): Detection {
   try {
     return resolveDetection(manifest, codexVersion, source.cxVersion);
   } catch (e) {
     if (!(e instanceof UncoveredUpstreamError)) throw e;
     // The version *is* known here, so the issue belongs to it, not to "upstream detection".
     blockedExit(
-      { codex_version: codexVersion, cx_version: source.cxVersion, tag: "", patch_sha256: "", release_state: "unknown" },
+      {
+        codex_version: codexVersion,
+        cx_version: source.cxVersion,
+        tag: "",
+        patch_sha256: "",
+        release_state: "unknown",
+        platforms: platforms.join(","),
+        matrix: JSON.stringify(matrix),
+      },
       blockedIssueTitle(codexVersion),
       e.message,
     );
@@ -180,6 +237,8 @@ function finish(
   source: SourceSelection,
   existing: { state: ReleaseState; identical: boolean; detail: string; url: string },
   resolved: Resolved,
+  platforms: readonly Platform[],
+  matrix: readonly MatrixEntry[],
 ): void {
   const frozen = {
     codex_version: detection.codexVersion,
@@ -193,6 +252,8 @@ function finish(
     source_tag: source.sourceTag ?? "",
     release_state: existing.state,
     release_url: existing.url,
+    platforms: platforms.join(","),
+    matrix: JSON.stringify(matrix),
   };
   if (existing.state === "published" && !existing.identical) {
     // Immutability: the tag is taken by different bytes. Only a CX version bump resolves it.
@@ -217,18 +278,22 @@ function finish(
  */
 export async function runDetect(flags: Record<string, string>): Promise<void> {
   const event = flags["event"] ?? process.env.GITHUB_EVENT_NAME ?? "workflow_dispatch";
-  // Validated before anything reaches the network, so bad input fails fast and cheaply.
-  const platform = releasePlatform(flags);
+  const selfHosted = flags["self-hosted"] === "true";
+  const platforms = releasePlatforms(flags);
+  if (selfHosted && platforms.includes("darwin-x64")) {
+    throw new Error("self-hosted runner is arm64 only");
+  }
+  const matrix = buildMatrix(platforms, selfHosted);
   const source = resolveSource(flags, execGh, event);
   if (source === null) {
-    skipNoSource();
+    skipNoSource(platforms, matrix);
     return;
   }
   const { version: codexVersion, pinned } = await resolveCodexVersion(flags);
   const patches = patchTreeFor(source);
-  const detection = resolveOrBlock(loadManifest(patches.manifestDir), codexVersion, source);
+  const detection = resolveOrBlock(loadManifest(patches.manifestDir), codexVersion, source, platforms, matrix);
   const patchSha256 = (await sha256File(patches.patchPath(detection.patchFile))).sha256;
   const expected = { sourceCommit: source.sourceCommit, patchSha256 };
-  const existing = await releaseState(execGh, detection, expected, platform);
-  finish(detection, source, existing, { patchSha256, pinned, patchesFrom: patches.describe });
+  const existing = await releaseState(execGh, detection, expected, platforms);
+  finish(detection, source, existing, { patchSha256, pinned, patchesFrom: patches.describe }, platforms, matrix);
 }

@@ -27,6 +27,7 @@ import {
   CX,
   fakeGh,
   handles,
+  multiReleaseDir,
   ok,
   PATCH_SHA,
   publishArgs,
@@ -44,13 +45,10 @@ import {
 
 describe("selectSourceRelease", () => {
   const rel = (tag: string, extra: Record<string, unknown> = {}) => ({
-    tag_name: tag,
-    draft: false,
-    prerelease: false,
-    ...extra,
+    tag_name: tag, draft: false, prerelease: false, ...extra,
   });
 
-  test("picks the highest stable v<CX> release by semver, not lexicographically", () => {
+  test("picks highest stable v<CX> release by semver, not lexicographically", () => {
     expect(selectSourceRelease([rel("v0.9.0"), rel("v0.11.0"), rel("v0.10.3")])?.version).toBe("0.11.0");
   });
 
@@ -70,11 +68,7 @@ describe("selectSourceRelease", () => {
 });
 
 describe("planUploads", () => {
-  const local = [
-    { name: ARCHIVE, size: 100 },
-    { name: "manifest.json", size: 20 },
-    { name: "SHA256SUMS", size: 10 },
-  ];
+  const local = [{ name: ARCHIVE, size: 100 }, { name: "manifest.json", size: 20 }, { name: "SHA256SUMS", size: 10 }];
 
   test("uploads everything when the release has no assets", () => {
     expect(planUploads([], local).upload).toEqual([ARCHIVE, "manifest.json", "SHA256SUMS"]);
@@ -132,6 +126,17 @@ describe("verifyReleaseDir", () => {
     writeFileSync(join(dir, ARCHIVE), "tampered");
     await expect(verifyReleaseDir(dir, expected)).rejects.toThrow(/sha256/);
   });
+
+  test("accepts a multi-platform release directory", async () => {
+    const dir = await multiReleaseDir();
+    const set = await verifyReleaseDir(dir, {
+      cxVersion: CX,
+      codexVersion: CODEX,
+      platforms: ["darwin-arm64", "darwin-x64"],
+    });
+    expect(set.assets.map((a) => a.name)).toHaveLength(4);
+    expect(set.manifestSha256).toMatch(/^[0-9a-f]{64}$/);
+  });
 });
 
 describe("release notes", () => {
@@ -156,20 +161,23 @@ describe("release notes", () => {
 
   test("carries every required disclosure", () => {
     const notes = releaseNotes(notesInput);
-    expect(notes).toContain(`cxstatusline v${CX} · Codex ${CODEX} (darwin-arm64)`);
     expect(notes).not.toMatch(/private/i);
-    expect(notes).toContain(`Built from cxstatusline commit ${SOURCE} (package version ${CX})`);
-    expect(notes).toContain(`patch codex-${CODEX}.patch sha256 ${PATCH_SHA}`);
-    expect(notes).toContain("darwin-arm64 only (Apple Silicon); Intel is not built in this release.");
-    expect(notes).toContain("Unsigned, not notarized");
-    expect(notes).toContain("do not disable Gatekeeper globally");
-    expect(notes).toContain("Apache-2.0");
-    expect(notes).toContain("MIT");
-    expect(notes).toContain("cxstatusline install --compile");
-    expect(notes).toContain("clean macOS 14");
-    expect(notes).toContain("cargo deny check licenses");
-    expect(notes).toContain(`Workflow run ${RUN_URL} (manual dispatch of commit ${SOURCE})`);
-    expect(notes).toContain(provenanceMarker({ runId: RUN_ID, manifestSha256: "f".repeat(64) }));
+    const disclosures = [
+      `cxstatusline v${CX} · Codex ${CODEX} (darwin-arm64)`,
+      `Built from cxstatusline commit ${SOURCE} (package version ${CX})`,
+      `patch codex-${CODEX}.patch sha256 ${PATCH_SHA}`,
+      "darwin-arm64 only (Apple Silicon); Intel is not built in this release.",
+      "Unsigned, not notarized",
+      "do not disable Gatekeeper globally",
+      "Apache-2.0",
+      "MIT",
+      "cxstatusline install --compile",
+      "clean macOS 14",
+      "cargo deny check licenses",
+      `Workflow run ${RUN_URL} (manual dispatch of commit ${SOURCE})`,
+      provenanceMarker({ runId: RUN_ID, manifestSha256: "f".repeat(64) }),
+    ];
+    for (const d of disclosures) expect(notes).toContain(d);
   });
 
   test("names the source release for a scheduled build", () => {
@@ -184,6 +192,12 @@ describe("release notes", () => {
 
   test("finds no provenance in a body that has none", () => {
     expect(parseProvenance("just some notes")).toBeNull();
+  });
+
+  test("formats multiple architectures in title and notes", () => {
+    const notes = releaseNotes({ ...notesInput, platforms: ["darwin-arm64", "darwin-x64"] });
+    expect(notes).toContain(`cxstatusline v${CX} · Codex ${CODEX} (darwin-arm64, darwin-x64)`);
+    expect(notes).toContain("darwin-arm64 (Apple Silicon), darwin-x64 (Intel).");
   });
 });
 
@@ -211,23 +225,15 @@ describe("publishRelease", () => {
     const server = tmp("published");
     for (const name of [ARCHIVE, "manifest.json", "SHA256SUMS"]) cpSync(join(dir, name), join(server, name));
     const fake = fakeGh({
-      "release view": () =>
-        ok(
-          JSON.stringify({
-            isDraft: false,
-            url: RELEASE_URL,
-            body: "notes",
-            assets: [ARCHIVE, "manifest.json", "SHA256SUMS"].map((name) => ({
-              name,
-              size: readFileSync(join(server, name)).length,
-            })),
-          }),
-        ),
+      "release view": () => ok(JSON.stringify({
+        isDraft: false, url: RELEASE_URL, body: "notes",
+        assets: [ARCHIVE, "manifest.json", "SHA256SUMS"].map((name) => ({ name, size: readFileSync(join(server, name)).length })),
+      })),
       "release download": (a) => {
-        const pattern = a[a.indexOf("--pattern") + 1]!;
-        const target = a[a.indexOf("--dir") + 1]!;
-        mkdirSync(target, { recursive: true });
-        cpSync(join(server, pattern), join(target, pattern));
+        const p = a[a.indexOf("--pattern") + 1]!;
+        const t = a[a.indexOf("--dir") + 1]!;
+        mkdirSync(t, { recursive: true });
+        cpSync(join(server, p), join(t, p));
         return ok();
       },
     });
@@ -241,23 +247,15 @@ describe("publishRelease", () => {
     const dir = await releaseDir();
     const other = await releaseDir("d".repeat(40));
     const fake = fakeGh({
-      "release view": () =>
-        ok(
-          JSON.stringify({
-            isDraft: false,
-            url: RELEASE_URL,
-            body: "notes",
-            assets: [ARCHIVE, "manifest.json", "SHA256SUMS"].map((name) => ({
-              name,
-              size: readFileSync(join(other, name)).length,
-            })),
-          }),
-        ),
+      "release view": () => ok(JSON.stringify({
+        isDraft: false, url: RELEASE_URL, body: "notes",
+        assets: [ARCHIVE, "manifest.json", "SHA256SUMS"].map((name) => ({ name, size: readFileSync(join(other, name)).length })),
+      })),
       "release download": (a) => {
-        const pattern = a[a.indexOf("--pattern") + 1]!;
-        const target = a[a.indexOf("--dir") + 1]!;
-        mkdirSync(target, { recursive: true });
-        cpSync(join(other, pattern), join(target, pattern));
+        const p = a[a.indexOf("--pattern") + 1]!;
+        const t = a[a.indexOf("--dir") + 1]!;
+        mkdirSync(t, { recursive: true });
+        cpSync(join(other, p), join(t, p));
         return ok();
       },
     });
@@ -362,5 +360,36 @@ describe("publishRelease", () => {
     expect(readFileSync(join(dir, "manifest.json"))).toEqual(before);
     expect(resume.of("release create")).toHaveLength(0);
     expect(h.assets.map((a) => a.name).sort()).toEqual([ARCHIVE, "SHA256SUMS", "manifest.json"].sort());
+  });
+
+  test("publishes a multi-platform release and resumes missing upload", async () => {
+    const dir = await multiReleaseDir();
+    const h = handles();
+    const fake = releaseServer(h);
+    const outcome = await publishRelease({
+      ...publishArgs(dir, fake.run),
+      platforms: ["darwin-arm64", "darwin-x64"],
+    });
+    expect(outcome.kind).toBe("published");
+    expect(fake.of("release upload")).toHaveLength(4);
+    expect(fake.of("release download")).toHaveLength(4);
+    expect(fake.of("release edit")[0]).toContain("--draft=false");
+
+    const arm64 = `cxstatusline-codex-${CODEX}-darwin-arm64.tar.gz`;
+    const x64 = `cxstatusline-codex-${CODEX}-darwin-x64.tar.gz`;
+    const h2 = handles();
+    h2.draft.value = true;
+    const manifestSha256 = createHash("sha256").update(readFileSync(join(dir, "manifest.json"))).digest("hex");
+    h2.body.value = `notes\n${provenanceMarker({ runId: RUN_ID, manifestSha256 })}\n`;
+    const fake2 = releaseServer(h2);
+    fake2.run(["release", "upload", TAG, join(dir, arm64)]);
+
+    const outcome2 = await publishRelease({
+      ...publishArgs(dir, fake2.run),
+      platforms: ["darwin-arm64", "darwin-x64"],
+    });
+    expect(outcome2.kind).toBe("published");
+    const uploaded = fake2.of("release upload").slice(1).map((c) => c[3]!.split("/").pop());
+    expect(uploaded).toEqual([x64, "manifest.json", "SHA256SUMS"]);
   });
 });

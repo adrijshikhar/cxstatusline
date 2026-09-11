@@ -37,7 +37,8 @@ export interface PublishOptions {
   readonly sourceCommit: string;
   readonly codexVersion: string;
   readonly cxVersion: string;
-  readonly platform: Platform;
+  readonly platform?: Platform;
+  readonly platforms?: readonly Platform[];
   readonly event: string;
   readonly tmpRoot: string;
   readonly summary: (lines: readonly string[]) => void;
@@ -71,10 +72,11 @@ function buildIdentity(o: PublishOptions): BuildIdentity {
 
 function createDraft(o: PublishOptions, set: VerifiedSet): string {
   const m = set.manifest;
+  const platforms = o.platforms ?? (o.platform ? [o.platform] : ["darwin-arm64"]);
   const notes = releaseNotes({
     cxVersion: o.cxVersion,
     codexVersion: o.codexVersion,
-    platform: o.platform,
+    platforms,
     sourceCommit: m.sourceCommit,
     upstreamTag: m.upstreamTag,
     upstreamCommit: m.upstreamCommit,
@@ -88,7 +90,7 @@ function createDraft(o: PublishOptions, set: VerifiedSet): string {
   mkdirSync(o.tmpRoot, { recursive: true });
   const notesFile = join(o.tmpRoot, "release-notes.md");
   writeFileSync(notesFile, notes);
-  const title = releaseTitle({ cxVersion: o.cxVersion, codexVersion: o.codexVersion, platform: o.platform });
+  const title = releaseTitle({ cxVersion: o.cxVersion, codexVersion: o.codexVersion, platforms });
   // --draft: nothing is visible as a release until every asset has been downloaded back and
   // re-verified. No --clobber anywhere in this module, deliberately.
   return ghText(o.run, [
@@ -110,8 +112,7 @@ async function reverifyUploaded(o: PublishOptions, set: VerifiedSet): Promise<vo
   const dir = join(o.tmpRoot, "recheck");
   const sums = parseChecksums(readFileSync(join(o.dir, "SHA256SUMS"), "utf8"));
   const expected: Record<string, string> = {
-    [set.archive]: sums[set.archive]!,
-    "manifest.json": sums["manifest.json"]!,
+    ...sums,
     "SHA256SUMS": (await sha256File(join(o.dir, "SHA256SUMS"))).sha256,
   };
   for (const asset of set.assets) {
@@ -135,7 +136,8 @@ async function reverifyUploaded(o: PublishOptions, set: VerifiedSet): Promise<vo
  * error - leaving the draft untouched and unpublished - for a verification failure.
  */
 export async function publishRelease(o: PublishOptions): Promise<PublishOutcome> {
-  const release: ExpectedRelease = { cxVersion: o.cxVersion, codexVersion: o.codexVersion, platform: o.platform };
+  const platforms = o.platforms ?? (o.platform ? [o.platform] : ["darwin-arm64"]);
+  const release = { cxVersion: o.cxVersion, codexVersion: o.codexVersion, platforms };
   const set = await verifyReleaseDir(o.dir, release);
   if (set.manifest.sourceCommit !== o.sourceCommit) {
     throw new Error(

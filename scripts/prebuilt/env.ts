@@ -62,6 +62,24 @@ export function releasePlatform(flags: Record<string, string>): Platform {
   return platform;
 }
 
+export function releasePlatforms(flags: Record<string, string>): Platform[] {
+  if (flags["platform"] !== undefined && flags["platforms"] === undefined) {
+    return [releasePlatform(flags)];
+  }
+  const value = flags["platforms"];
+  if (value === undefined || value === "true") return ["darwin-arm64"];
+  const tokens = value.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+  return tokens.map((token) => {
+    if (token === "arm64") return "darwin-arm64";
+    if (token === "x64") return "darwin-x64";
+    const found = PLATFORMS.find((p) => p === token);
+    if (found === undefined) {
+      throw new Error(`--platforms must be one of ${PLATFORMS.join(", ")} or arm64, x64 (got ${JSON.stringify(token)})`);
+    }
+    return found;
+  });
+}
+
 export function repoSlug(flags: Record<string, string>): string {
   const repo = flags["repo"] ?? process.env.GITHUB_REPOSITORY;
   if (repo === undefined || repo === "true") throw new Error("--repo or GITHUB_REPOSITORY is required");
