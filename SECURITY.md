@@ -65,10 +65,7 @@ Do not assume Apple signing or notarization.
 
 ## Reporting a vulnerability
 
-Use **Report a vulnerability** in this repository's GitHub Security tab when available.
-Private-reporting availability has not yet been verified for public launch. If unavailable,
-open an issue asking the maintainer to arrange a private channel, with **no vulnerability
-details, exploit, credentials or sensitive logs** in that public request.
+Please report vulnerabilities privately using the **[Report a vulnerability](https://github.com/adrijshikhar/cxstatusline/security/advisories/new)** button in this repository's GitHub Security Advisories tab.
 
-Once a private channel is established, include CX/Codex versions, OS/architecture, a minimal
-reproduction, impact and redacted doctor output. Never attach tokens or unredacted session logs.
+Include CX and Codex versions, OS/architecture, a minimal reproduction, impact assessment, and redacted `cxstatusline doctor` output. Never attach tokens, API keys, or unredacted session logs.
+
