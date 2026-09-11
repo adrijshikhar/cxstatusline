@@ -110,14 +110,14 @@ it never opens the TUI.
 ## Update
 
 ```sh
-codex update
-# or
 cxstatusline update
 ```
 
-`codex update` (or `cxstatusline update`) runs Codex's upstream updater, then downloads the matching prebuilt; never compiles.
+`cxstatusline update` runs a pre-flight check: if upstream Codex has a new version but prebuilts have not yet been published, it warns and stops before touching your active installation.
 
-If no verified prebuilt release exists for the new version, cxstatusline fails closed: the working pair is left in place and the command says so. The SessionStart hook retries daily according to update policy.
+Options:
+- `cxstatusline update --compile`: updates upstream Codex and compiles the statusline from source for the new version.
+- `cxstatusline update --force`: updates upstream Codex to stock immediately, even if prebuilt binaries are not yet published.
 
 ## Revert
 

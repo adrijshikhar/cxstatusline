@@ -177,13 +177,20 @@ describe("command dispatch", () => {
       expect(d.calls.some((k) => k.cmd === "cargo" || k.cmd === "rustup")).toBe(false);
     });
   }
-  test("`update` runs the upstream updater first, then the prebuilt path", async () => {
+  test("`update --force` runs the upstream updater first, then the prebuilt path", async () => {
     const t = io("");
     const d = dispatchDeps();
-    expect(await main(["update"], { ...t.io, env: d.env }, d.deps)).toBe(1);
+    expect(await main(["update", "--force"], { ...t.io, env: d.env }, d.deps)).toBe(1);
     expect(d.calls.filter((k) => k.args[0] === "update")).toHaveLength(1);
     expect(d.calls.find((k) => k.args[0] === "update")?.opts?.interactive).toBe(true);
     expect(t.out.join("")).toMatch(/staging a prebuilt Codex pair needs 2 GiB/);
+  });
+  test("`update` without flags warns and stops before running updater when prebuilts missing", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    expect(await main(["update"], { ...t.io, env: d.env }, d.deps)).toBe(1);
+    expect(d.calls.filter((k) => k.args[0] === "update")).toHaveLength(0);
+    expect(t.out.join("")).toMatch(/Warning: Upstream Codex update available/);
   });
   test("`hook acquire` acquires the prebuilt pair and never touches hooks.json", async () => {
     const t = io("");

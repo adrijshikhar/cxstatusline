@@ -40,7 +40,7 @@ export const USAGE = `usage: cxstatusline [command]
   install [--compile]         install the published Codex pair (--compile builds it from source)
   patch [--force]             build and install the patched Codex from source
   patch --simulate-drift <v>  record <v> as the installed version so the next session sees drift
-  update                      run upstream's own updater, then install the pair for it
+  update [--compile|--force]  run upstream's own updater, then install the pair for it
   hook [install|uninstall]    manage the SessionStart entry; bare 'hook' is what Codex runs
   doctor                      report toolchain, drift, hook and wrapper state
   revert                      restore stock Codex; keep settings
@@ -103,6 +103,22 @@ async function installCommand(argv: readonly string[], io: MainIo, deps: MainDep
 }
 
 /**
+ * `update`, `update --compile`, and `update --force`.
+ */
+async function updateCommand(argv: readonly string[], io: MainIo, deps: MainDeps): Promise<number> {
+  const flags = argv.slice(1);
+  const allowed = new Set(["--compile", "--force", "-y", "--yes"]);
+  if (flags.some((f) => !allowed.has(f))) {
+    io.stderr(USAGE);
+    return 2;
+  }
+  return runUpdate(contextFor(io, deps), {
+    compile: flags.includes("--compile"),
+    force: flags.includes("--force") || flags.includes("-y") || flags.includes("--yes"),
+  });
+}
+
+/**
  * The internal `hook acquire`: what the SessionStart hook spawns detached when it sees drift.
  * Not documented in USAGE and deliberately not a second public install API - it acquires the
  * default (prebuilt) pair and does not touch hooks.json.
@@ -156,7 +172,7 @@ export async function main(argv: readonly string[], io: MainIo, deps: MainDeps =
   if (cmd === "hook" && argv.length === 1) return runHookCommand(io, deps);
   if (cmd === "hook" && argv[1] === "acquire" && argv.length === 2) return hookAcquireCommand(io, deps);
   if (cmd === "patch") return patchCommand(argv, io, deps);
-  if (cmd === "update") return runUpdate(contextFor(io, deps));
+  if (cmd === "update") return updateCommand(argv, io, deps);
   if (cmd === "install") return installCommand(argv, io, deps);
   if (cmd === "hook" && (argv[1] === "install" || argv[1] === "uninstall")) {
     return hookAdminCommand(argv[1], io, deps);

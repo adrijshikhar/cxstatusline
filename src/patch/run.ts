@@ -2,7 +2,10 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Context } from "../context";
 import { acquireLock } from "../lock";
-import type { TransportOptions } from "../distribution/transport";
+import type { FetchLike, TransportOptions } from "../distribution/transport";
+import { releaseTag } from "../distribution";
+import { VERSION } from "../version-info";
+import { readUpstreamVersion } from "../codex/upstream";
 import { installHook } from "../hook/install";
 import { writeState } from "../state";
 import { parseSemver } from "../version";
@@ -111,29 +114,101 @@ export async function runInstall(ctx: Context, opts: { compile: boolean }, trans
   }
 }
 
+export interface UpdateOptions {
+  readonly force?: boolean;
+  readonly compile?: boolean;
+}
+
+export async function probeUpstreamLatest(fetchFn: FetchLike): Promise<string | null> {
+  try {
+    const res = await fetchFn("https://api.github.com/repos/openai/codex/releases/latest", {
+      headers: { accept: "application/vnd.github+json", "user-agent": "cxstatusline" },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { tag_name?: string };
+    if (typeof data.tag_name !== "string") return null;
+    return data.tag_name.replace(/^rust-v/, "");
+  } catch {
+    return null;
+  }
+}
+
+export async function probePrebuiltExists(
+  targetCodexVersion: string,
+  cxVersion: string,
+  fetchFn: FetchLike,
+  baseUrl?: string,
+): Promise<boolean> {
+  try {
+    const tag = releaseTag(cxVersion, targetCodexVersion);
+    const url = baseUrl
+      ? `${baseUrl}/${tag}/manifest.json`
+      : `https://github.com/adrijshikhar/cxstatusline/releases/download/${tag}/manifest.json`;
+    const res = await fetchFn(url, { method: "HEAD", signal: AbortSignal.timeout(5000) });
+    return res.ok || res.status === 302 || res.status === 301;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * `codex update` -> upstream's own updater, then the prebuilt pair for whatever it landed on.
- * Never falls back to compiling: an update that cannot find its release leaves the working pair
- * exactly where it is, and says so.
+ * Performs a pre-flight probe: if upstream is moving to a version without a published prebuilt,
+ * warns and stops before touching stock Codex unless --force or --compile is specified.
  */
-export async function runUpdate(ctx: Context, transport: TransportOptions = {}): Promise<number> {
+export async function runUpdate(
+  ctx: Context,
+  optsOrTransport: UpdateOptions | TransportOptions = {},
+  maybeTransport?: TransportOptions,
+): Promise<number> {
+  const opts: UpdateOptions =
+    "compile" in optsOrTransport || "force" in optsOrTransport ? optsOrTransport : {};
+  const transport: TransportOptions =
+    "baseUrl" in optsOrTransport || "fetch" in optsOrTransport
+      ? optsOrTransport
+      : (maybeTransport ?? {});
+
   const state = loadState(ctx);
   const located = upstreamFor(ctx, state);
   if ("reason" in located) {
     ctx.say(`no upstream Codex to update: ${located.reason}`);
     return 1;
   }
+
+  const current = readUpstreamVersion(located.bin, ctx.run);
+  const fetchFn: FetchLike = transport.fetch ?? fetch;
+
+  if (current && !opts.force && !opts.compile) {
+    const latest = await probeUpstreamLatest(fetchFn);
+    if (latest && latest !== current.raw) {
+      const available = await probePrebuiltExists(latest, VERSION, fetchFn, transport.baseUrl);
+      if (!available) {
+        ctx.say(`Warning: Upstream Codex update available: ${current.raw} -> ${latest}.`);
+        ctx.say(`However, cxstatusline has not yet published prebuilt binaries for Codex ${latest}.`);
+        ctx.say("Updating now will replace your patched launcher with stock Codex.");
+        ctx.say("");
+        ctx.say("Options:");
+        ctx.say("  - Wait until cxstatusline publishes prebuilt binaries for this version.");
+        ctx.say("  - Update and compile from source: cxstatusline update --compile");
+        ctx.say("  - Update to stock Codex anyway:   cxstatusline update --force");
+        return 1;
+      }
+    } else if (latest && latest === current.raw) {
+      ctx.say(`Codex is already at the latest version (${current.raw}).`);
+      return 0;
+    }
+  }
+
   ctx.say(`running upstream updater: ${located.bin} update`);
-  // Why interactive: upstream's Standalone updater prompts. stdio is inherited, so r.stderr is
-  // always "" in this mode - never interpolate it into a message.
   const r = ctx.run(located.bin, ["update"], { interactive: true });
   if (r.status !== 0) {
     ctx.say(`upstream updater exited ${String(r.status)}; see its output above. Not installing.`);
     return 1;
   }
-  // Upstream just moved: runAcquisition re-resolves the launcher and re-reads its version rather
-  // than trusting anything read before the updater ran.
-  const outcome = await runAcquisition(ctx, { source: "prebuilt", force: true }, transport);
+
+  const source = opts.compile ? "compiled" : "prebuilt";
+  const outcome = await runAcquisition(ctx, { source, force: true }, transport);
   report(ctx, outcome);
   return outcome.kind === "installed" ? 0 : 1;
 }
