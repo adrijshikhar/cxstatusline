@@ -26,7 +26,35 @@ is intentionally skipped. Native CI builds are separate and substantially more e
 Preserve copied ccstatusline UI/widget behavior and attribution. Unsupported Claude integrations
 and custom commands remain outside the catalog. No `@ts-nocheck`. Include reproduction and test
 evidence in PRs. Never commit credentials, personal settings, logs or private planning documents.
-See SECURITY.md for sensitive reports.
+See [SECURITY.md](SECURITY.md) for sensitive reports.
+
+## Adding a new Codex version
+
+To add support for a newly released upstream Codex version:
+
+1. Check if the existing candidate patch applies cleanly to the new tag:
+   ```sh
+   git -C /path/to/openai/codex checkout rust-v<NEW_VERSION>
+   git -C /path/to/openai/codex apply --check /path/to/patches/codex-<CANDIDATE>.patch
+   ```
+2. If it applies cleanly, copy the patch to `patches/codex-<NEW_VERSION>.patch`. If upstream changes broke the patch, adjust it cleanly while preserving the additive hook interface.
+3. Update `patches/manifest.json`: add an entry with `"min": "<NEW_VERSION>"`, `"max": "<NEW_VERSION>"`, `"file": "codex-<NEW_VERSION>.patch"`, and bump `"candidate": "<NEW_VERSION>"`.
+4. Add `<NEW_VERSION>` to the `codex_version` choices in `.github/workflows/prebuilt.yml`.
+5. Run the patch apply test against an upstream checkout:
+   ```sh
+   CXSTATUSLINE_CODEX_CHECKOUT=/path/to/openai/codex bun test test/patch-applies.test.ts
+   ```
+6. Run local checks: `bun test && bun run typecheck && bun run build && bun run check:package`.
+
+## Dispatching the release workflow
+
+The prebuilt release pipeline is defined in `.github/workflows/prebuilt.yml`:
+
+- **Manual dispatch:** In GitHub Actions → *Prebuilt release* → *Run workflow*:
+  - `codex_version`: `auto` (to detect the latest stable upstream release) or an exact version (e.g. `0.153.4`).
+  - `publish`: `false` for a build-and-verify run; `true` to publish the release.
+  - `self_hosted`: `true` to run on the arm64 self-hosted runner; `false` to use hosted runners.
+  - The pipeline runs `detect → validate → native → publish → report`.
 
 ## Regenerate the README demo
 
