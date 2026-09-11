@@ -46,7 +46,20 @@ Independent project; not an official OpenAI product.
 
 ## 🚀 Install
 
-Prebuilt binary installation is the recommended default. From a local clone of the repository:
+Install globally with npm:
+
+```sh
+npm install -g cxstatusline
+cxstatusline install
+cxstatusline doctor
+```
+
+`install` downloads the release matching your exact Codex version and CPU, verifies every byte against `manifest.json`, and activates it. Nothing is signed or notarized; see [Security and trust](#security-and-trust).
+
+Start Codex, accept its cxstatusline hook trust prompt, and open a new session after installation. An already-running process does not switch binaries when installation finishes.
+
+<details>
+<summary>Install from git checkout</summary>
 
 ```sh
 git clone https://github.com/adrijshikhar/cxstatusline.git
@@ -58,11 +71,7 @@ cxstatusline install
 cxstatusline doctor
 ```
 
-`install` downloads the release matching your exact Codex version and CPU, verifies every byte against `manifest.json`, and activates it. Nothing is signed or notarized; see [Security and trust](#security-and-trust).
-
-Start Codex, accept its cxstatusline hook trust prompt, and open a new session after installation. An already-running process does not switch binaries when installation finishes.
-
-*(Note: global `npm install -g cxstatusline` arrives with the public npm release.)*
+</details>
 
 <details>
 <summary>Build from source instead</summary>

@@ -11,7 +11,7 @@ const noJust = (): string | null => null;
 
 test("release bundle contains the TUI and attribution", () => {
   expect(pkg.type).toBe("module");
-  expect(pkg.version).toBe("0.1.0");
+  expect(pkg.version).toBe("0.1.1");
   expect(pkg.devDependencies?.ink).toBe("6.2.0");
   expect(pkg.devDependencies?.["react-devtools-core"]).toBe("^4.19.1");
   expect(readFileSync("THIRD_PARTY_NOTICES.md", "utf8")).toContain("6a3d855b82faf75b249155dcfa1624780f89cbbd");
