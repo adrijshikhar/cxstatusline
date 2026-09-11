@@ -156,7 +156,7 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.detect.outputs.matrix) }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 180
+    timeout-minutes: 360
     env:
       CODEX_VERSION: ${{ needs.detect.outputs.codex_version }}
       CX_VERSION: ${{ needs.detect.outputs.cx_version }}
