@@ -258,33 +258,22 @@ you, and never deletes a draft on its own.
 published, a release's assets are never replaced - differing bytes always mean a new CX version and
 therefore a new tag.
 
-### npm and source release procedure (`publish.yml`)
+### npm and source release procedure (`release.yml`)
 
-The npm publication workflow (`.github/workflows/publish.yml`) runs on push of tags matching `v*.*.*`:
+The unified release and npm publication workflow (`.github/workflows/release.yml`) runs on push to `main`, tags matching `v*.*.*`, or manual `workflow_dispatch`:
 
-1. **`verify`** (on `macos-15`):
+1. **`release-please`** (on `ubuntu-latest`):
+   - Uses `googleapis/release-please-action@v4` with `release-please-config.json` and `.release-please-manifest.json`.
+   - Automatically tracks Conventional Commits and maintains an open Release PR.
+   - When the Release PR is merged to `main`, creates the GitHub release and git tag.
+2. **`publish-npm`** (on `macos-15`, gated by `environment: npm` with owner required reviewer):
+   - Triggers when `releases_created == 'true'` or when a `v*.*.*` tag is pushed.
+   - Checks out the target release tag with full history.
    - Runs `bun run typecheck` and `bun test`.
    - Release build: `CXSTATUSLINE_RELEASE_BUILD=1 bun run build` and `bun run check:package`.
-   - Release identity check: `bun scripts/release-npm.ts check --tag "$TAG" --sha "$SHA"`.
-     This asserts:
-     - The git tag matches `v<package.json version>`.
-     - The built bundle contains the embedded source commit SHA (`github.sha`).
-     - The corresponding native release (`cxstatusline-v<CX>-codex-v<CODEX>`) already exists for the candidate Codex version.
    - Packs the npm tarball with `npm pack` and writes `SHA256SUMS`.
-   - Uploads artifact `npm-${{ github.ref_name }}`.
-2. **`publish`** (on `ubuntu-latest`, gated by `environment: npm` with owner required reviewer):
-   - Uses GitHub Actions OIDC Trusted Publishing (`id-token: write`).
-   - Downloads and verifies npm package artifact checksum against `SHA256SUMS`.
-   - Creates GitHub source release `v<CX>` with the packed `.tgz` and `SHA256SUMS` attached.
-   - Publishes to npm registry with `npm publish --provenance --access public`.
-
-**Release sequence:**
-1. Bump `version` in `package.json`, remove `"private": true`, update `CHANGELOG.md` and `README.md`.
-2. Merge the release PR into `main`.
-3. Dispatch `prebuilt.yml` with `codex_version=<candidate>`, `platforms=arm64,x64`, `publish=true` to create and publish the native release tuple `cxstatusline-v<CX>-codex-v<CODEX>` with both architectures.
-4. Create and push the source tag: `git tag v<CX> && git push origin v<CX>`. (Order matters: `release-npm.ts check` requires the native release to exist).
-5. GitHub Actions triggers `publish.yml`. After `verify` succeeds, approve the `npm` environment gate.
-6. The `publish` job creates the GitHub source release and publishes to npm with provenance.
+   - Attaches the packed `.tgz` and `SHA256SUMS` to the GitHub release.
+   - Publishes to npm registry with `npm publish --provenance --access public` via OIDC Trusted Publishing.
 
 
 ### Known acceptance gap

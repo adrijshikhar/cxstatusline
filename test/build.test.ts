@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BuildError, buildPatched } from "../src/patch/build";
+import { VERSION } from "../src/version-info";
 import { fakeExec, tmpEnv } from "./helpers";
 
 const plan = (root: string) => ({ tag: "rust-v0.152.1", sourceDir: join(root, "src"), patchFile: "/p/codex-0.152.1.patch" });
@@ -11,7 +12,7 @@ const noJust = (): string | null => null;
 
 test("release bundle contains the TUI and attribution", () => {
   expect(pkg.type).toBe("module");
-  expect(pkg.version).toBe("0.1.1");
+  expect(pkg.version).toBe(VERSION);
   expect(pkg.devDependencies?.ink).toBe("6.2.0");
   expect(pkg.devDependencies?.["react-devtools-core"]).toBe("^4.19.1");
   expect(readFileSync("THIRD_PARTY_NOTICES.md", "utf8")).toContain("6a3d855b82faf75b249155dcfa1624780f89cbbd");

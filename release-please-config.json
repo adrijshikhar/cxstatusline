@@ -1,0 +1,14 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "package-name": "cxstatusline",
+      "include-component-in-tag": false,
+      "bump-minor-pre-major": false,
+      "extra-files": [
+        "src/version-info.ts"
+      ]
+    }
+  }
+}
