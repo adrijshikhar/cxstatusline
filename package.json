@@ -1,6 +1,6 @@
 {
   "name": "cxstatusline",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Customizable statusline for OpenAI Codex CLI",
   "license": "MIT",
   "repository": {
@@ -13,7 +13,12 @@
   "bin": {
     "cxstatusline": "dist/cxstatusline.js"
   },
-  "files": ["dist/", "patches/", "NOTICE", "THIRD_PARTY_NOTICES.md"],
+  "files": [
+    "dist/",
+    "patches/",
+    "NOTICE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
   "engines": {
     "node": ">=22"
   },
