@@ -3,7 +3,7 @@ declare const CXSTATUSLINE_SOURCE_COMMIT: string | null | undefined;
 declare const CXSTATUSLINE_SOURCE_DIRTY: boolean | undefined;
 
 /** Stamped by `scripts/build.ts` via Bun's `define`; source runs use this release's version. */
-export const VERSION: string = typeof CXSTATUSLINE_VERSION === "string" ? CXSTATUSLINE_VERSION : "0.1.0";
+export const VERSION: string = typeof CXSTATUSLINE_VERSION === "string" ? CXSTATUSLINE_VERSION : "0.1.1";
 
 /**
  * The commit of the cxstatusline checkout this bundle was built from, or null.

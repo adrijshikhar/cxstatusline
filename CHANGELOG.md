@@ -3,7 +3,7 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased
+## 0.1.1 — 2026-09-11
 
 ### Added
 - Prebuilt native Codex distribution for macOS Apple Silicon (`darwin-arm64`) and Intel (`darwin-x64`).
@@ -12,6 +12,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Automated upstream detection and daily scheduled build pipeline in GitHub Actions.
 - Rust dependency license audit via `cargo deny` and generated notices via `cargo about`.
 - Standalone multi-platform merge and verification tools for release packaging.
+- Automated npm and source-release publication pipeline with provenance in GitHub Actions.
 
 ### Changed
 - `cxstatusline install` defaults to downloading verified prebuilt pairs; compilation is now explicit via `cxstatusline install --compile`.

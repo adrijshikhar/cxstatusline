@@ -1,9 +1,8 @@
 {
   "name": "cxstatusline",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Customizable statusline for OpenAI Codex CLI",
   "license": "MIT",
-  "private": true,
   "repository": {
     "type": "git",
     "url": "git+https://github.com/adrijshikhar/cxstatusline.git"
