@@ -57,7 +57,7 @@ function createTui(node: ReactNode): TuiHarness {
     lastFrame: () => lastFrame,
     async write(input: string): Promise<void> {
       stdin.write(input);
-      await new Promise<void>((resolve) => setTimeout(resolve, 10));
+      await new Promise<void>((resolve) => setTimeout(resolve, 50));
     },
     cleanup() {
       instance.unmount();
