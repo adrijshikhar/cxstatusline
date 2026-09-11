@@ -18,5 +18,5 @@ export interface RunResult {
 export type Runner = (
   cmd: string,
   args: readonly string[],
-  opts?: { cwd?: string; interactive?: boolean; timeoutMs?: number },
+  opts?: { cwd?: string; interactive?: boolean; timeoutMs?: number; env?: NodeJS.ProcessEnv },
 ) => RunResult;

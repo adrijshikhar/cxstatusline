@@ -1,6 +1,7 @@
 import { existsSync, lstatSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { Runner } from "../env";
+import { resolveV8Env } from "./v8";
 
 export interface BuildPlan {
   readonly tag: string;
@@ -34,9 +35,9 @@ const HEX40 = /^[0-9a-f]{40}$/;
 
 export type Which = (cmd: string) => string | null;
 
-function must(step: string, run: Runner, log: (l: string) => void, cmd: string, args: string[], cwd?: string): void {
+function must(step: string, run: Runner, log: (l: string) => void, cmd: string, args: string[], cwd?: string, env?: NodeJS.ProcessEnv): void {
   log(`$ ${[cmd, ...args].join(" ")}`);
-  const r = run(cmd, args, cwd ? { cwd } : undefined);
+  const r = run(cmd, args, { cwd, env });
   for (const line of `${r.stdout}${r.stderr}`.split("\n").filter(Boolean)) log(line);
   if (r.status !== 0) throw new BuildError(step, r.stderr || r.stdout);
 }
@@ -48,14 +49,14 @@ function must(step: string, run: Runner, log: (l: string) => void, cmd: string, 
  * silently skipping it. Which one ran is recorded in the log, because "the tests passed" is only
  * meaningful if you can tell what was run.
  */
-function runFocusedTests(run: Runner, log: (l: string) => void, which: Which, crateDir: string): void {
+function runFocusedTests(run: Runner, log: (l: string) => void, which: Which, crateDir: string, env?: NodeJS.ProcessEnv): void {
   if (which("just")) {
     log("running the focused Rust tests with just");
-    must("just test", run, log, "just", ["test", "--release", "-p", "codex-tui", "cxstatusline", "--retries", "0"], crateDir);
+    must("just test", run, log, "just", ["test", "--release", "-p", "codex-tui", "cxstatusline", "--retries", "0"], crateDir, env);
     return;
   }
   log("just is not on PATH; running the focused Rust tests with cargo");
-  must("cargo test", run, log, "cargo", ["test", "--release", "-p", "codex-tui", "cxstatusline"], crateDir);
+  must("cargo test", run, log, "cargo", ["test", "--release", "-p", "codex-tui", "cxstatusline"], crateDir, env);
 }
 
 /** `git -C <sourceDir> rev-parse HEAD`, refusing anything that is not a real commit id. */
@@ -110,9 +111,11 @@ export function buildPatched(plan: BuildPlan, run: Runner, log: (line: string) =
   git("apply --check", "apply", "--index", "--check", plan.patchFile);
   git("apply", "apply", "--index", plan.patchFile);
   const crateDir = join(plan.sourceDir, "codex-rs");
+  const v8Env = resolveV8Env(plan.sourceDir, run, log);
   must("cargo build", run, log, "cargo",
     ["build", "--release", "-p", "codex-cli", "--bin", "codex", "-p", "codex-code-mode-host", "--bin", "codex-code-mode-host"],
-    crateDir);
+    crateDir,
+    v8Env);
   // Why verify: a cargo run that exits 0 without producing an artifact (wrong -p, a workspace
   // [profile] override moving the output) would otherwise surface as an ENOENT from copyFileSync
   // in the caller, with no step name to report.
@@ -123,6 +126,6 @@ export function buildPatched(plan: BuildPlan, run: Runner, log: (line: string) =
     }
     return bin;
   }) as [string, string];
-  runFocusedTests(run, log, which, crateDir);
+  runFocusedTests(run, log, which, crateDir, v8Env);
   return { codex, codexCodeModeHost, upstreamCommit };
 }
