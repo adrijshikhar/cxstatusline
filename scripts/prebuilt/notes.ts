@@ -48,7 +48,7 @@ export interface NotesInput {
 }
 
 export function releaseTitle(i: Pick<NotesInput, "cxVersion" | "codexVersion" | "platform">): string {
-  return `cxstatusline v${i.cxVersion} · Codex ${i.codexVersion} (${i.platform}, private)`;
+  return `cxstatusline v${i.cxVersion} · Codex ${i.codexVersion} (${i.platform})`;
 }
 
 function identityLine(i: NotesInput): string {

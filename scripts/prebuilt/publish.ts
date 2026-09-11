@@ -183,7 +183,7 @@ export async function publishRelease(o: PublishOptions): Promise<PublishOutcome>
   o.summary([
     `## Prebuilt ${o.tag}`,
     "",
-    `Published (private): ${url}`,
+    `Published: ${url}`,
     `Uploaded: ${plan.upload.length === 0 ? "none" : plan.upload.join(", ")}`,
     `Already attached, skipped: ${plan.skip.length === 0 ? "none" : plan.skip.join(", ")}`,
     `Build run: ${o.runUrl}`,
