@@ -35,26 +35,39 @@ Independent project; not an official OpenAI product.
 
 </details>
 
-## Status and requirements
+## Requirements
 
-v0.1.0 is the initial release baseline after private laptop soak. `cxstatusline install` downloads a
-prebuilt Codex pair; `cxstatusline install --compile` builds one from source. Prebuilt pairs are
-served from **private GitHub Releases**, so while this repository is private the download needs an
-authenticated `gh` with access to it — otherwise the installer says no pair is available and points
-at `--compile`. There is no public npm installation command to use yet.
+- **macOS 14 (Sonoma) or newer** on Apple Silicon (`darwin-arm64`) or Intel (`darwin-x64`). Clean-macOS-14 acceptance is unproven and evidenced only by build metadata (`MACOSX_DEPLOYMENT_TARGET=14.0`, `vtool` `minos`, and system-only `otool -L` linkage).
+- **Node.js 22+**.
+- **Stock Codex CLI install** kept in place (`~/.codex/` and original launcher).
+- **Git**.
+- **Bun 1.4+** is required only for building/linking from a git checkout.
+- **Rust toolchain** (1.95.0+) is required only for `cxstatusline install --compile`.
 
-Initial support is macOS. Apple Silicon has local acceptance evidence; Intel native CI is being
-validated. Linux and Windows are not release-validated. Current supported Codex versions are
-**0.152.1 and 0.153.0 exactly**; newer versions fail closed until explicitly supported.
+## 🚀 Install
 
-Source installation requires Node.js 22+, Bun 1.4+, Git, macOS Command Line Tools, a working
-stock Codex installation, rustup and at least 20 GiB free build space. Keep stock Codex installed.
-Powerline glyphs need a compatible terminal font; plain separators work without one.
+Prebuilt binary installation is the recommended default. From a local clone of the repository:
 
-## 🚀 Install from source
+```sh
+git clone https://github.com/adrijshikhar/cxstatusline.git
+cd cxstatusline
+bun install --frozen-lockfile
+bun run link:local
+export PATH="$HOME/.local/bin:$PATH"
+cxstatusline install
+cxstatusline doctor
+```
 
-Install Command Line Tools with `xcode-select --install` if needed, and rustup from
-[rustup.rs](https://rustup.rs/) if it is not installed. Then:
+`install` downloads the release matching your exact Codex version and CPU, verifies every byte against `manifest.json`, and activates it. Nothing is signed or notarized; see [Security and trust](#security-and-trust).
+
+Start Codex, accept its cxstatusline hook trust prompt, and open a new session after installation. An already-running process does not switch binaries when installation finishes.
+
+*(Note: global `npm install -g cxstatusline` arrives with the public npm release.)*
+
+<details>
+<summary>Build from source instead</summary>
+
+If you prefer to compile the patched Codex binaries locally from source:
 
 ```sh
 rustup toolchain install 1.95.0 --component clippy --component rustfmt --component rust-src
@@ -67,13 +80,9 @@ cxstatusline install --compile
 cxstatusline doctor
 ```
 
-`--compile` is what makes this the source path: plain `cxstatusline install` downloads the prebuilt
-pair instead. While the repo is private, cloning requires repository access. Persist the PATH entry
-in your shell configuration. `link:local` builds and links the renderer from this checkout; keep the
-checkout in place. The first Codex source build can take tens of minutes.
+`install --compile` clones the exact upstream tag for your Codex version into `~/.local/share/cxstatusline/codex/`, applies the tested patch, builds both `codex` and `codex-code-mode-host`, verifies them, and activates them. Local compilation requires at least 20 GiB of free disk space and takes tens of minutes on a cold build.
 
-Start Codex, accept its cxstatusline hook trust prompt, and open a new session after installation.
-An already-running process does not switch binaries when installation finishes.
+</details>
 
 ## 🎛️ Configure
 
@@ -89,71 +98,63 @@ Custom command/weather widgets and unsupported Claude-only widgets are not inclu
 For scripts, `cxstatusline render` reads a versioned JSON payload on stdin and prints ANSI rows;
 it never opens the TUI.
 
-## Update or revert
+## Update
 
 ```sh
 codex update
-cxstatusline doctor
+# or
+cxstatusline update
 ```
 
-The wrapper runs Codex's updater, then downloads the prebuilt pair matching whatever version it
-landed on. It never compiles: if no prebuilt pair is published for that version, the working pair is
-left exactly where it is and the command says so. Compiling is only ever explicit, via
-`cxstatusline install --compile` or `cxstatusline patch`. The SessionStart hook can also start
-background installs on version drift according to the update policy. It does not hot-swap your
-running session or guess patches for unsupported versions.
+`codex update` (or `cxstatusline update`) runs Codex's upstream updater, then downloads the matching prebuilt; never compiles.
+
+If no verified prebuilt release exists for the new version, cxstatusline fails closed: the working pair is left in place and the command says so. The SessionStart hook retries daily according to update policy.
+
+## Revert
 
 ```sh
 cxstatusline revert
 ```
 
-Revert restores the saved stock launcher where recorded, removes CX-owned executables and the
-hook, and keeps settings and source. It refuses while a build holds the lock. Close patched
-sessions before reverting. If no saved launcher exists, the command explains what remains to
-restore; it never overwrites an unrelated executable.
+`cxstatusline revert` restores the stock launcher, removes CX-owned executables, generations, and the hook, and keeps settings and source. Generations are kept until revert; close Codex sessions first.
 
-Each install lands as one immutable generation under
-`~/.local/libexec/cxstatusline/generations/`, and `~/.local/libexec/cxstatusline/current` is the
-symlink that decides which one a fresh `codex` runs. Older generations are kept on purpose - a
-Codex session started earlier is still executing out of one - so they accumulate (roughly the
-size of the Codex binary pair each) until you run `cxstatusline revert`, which is the only thing
-that removes them. Close your patched sessions first. Revert only deletes directories it can
-prove are cxstatusline generations; anything else under that path is left in place.
+## How it works
 
-If you installed cxstatusline before generations existed (a flat
-`~/.local/libexec/cxstatusline/codex` pair), run `cxstatusline revert` once and reinstall - there
-is no in-place migration.
+**Renderer and settings:** The statusline is powered by a Node CLI renderer that receives session metadata from Codex, formats ANSI rows according to your `settings.json`, and writes the footer.
+
+**The additive Rust patch:** Because the Codex CLI does not yet provide an external statusline hook ([openai/codex#17827](https://github.com/openai/codex/issues/17827)), cxstatusline applies a minimal additive patch to `codex-tui` and builds synchronized binaries (`codex` and companion `codex-code-mode-host`). The patch invokes the local renderer without altering Codex's networking or command evaluation.
+
+**Generations and atomic activation:** Each verified pair installs into an immutable generation directory under `~/.local/libexec/cxstatusline/generations/<id>/`. An atomic rename switches the `~/.local/libexec/cxstatusline/current` symlink. The wrapper in `~/.local/bin/codex` resolves `current` once before execution, ensuring running sessions and their companion host stay locked to the same generation. Previous generations accumulate until explicit `cxstatusline revert`.
+
+**SessionStart hook and update policy:** A hook registered in Codex's `hooks.json` checks for upstream version drift on session start. When drift is detected, a detached child process downloads the matching prebuilt release without interrupting your active terminal session.
+
+## Supported versions
+
+cxstatusline matches exact stable releases. Supported versions in `patches/manifest.json`:
+- **0.152.1**
+- **0.153.0**
+- **0.153.4** (candidate)
+
+If your Codex version is not listed, cxstatusline fails closed: it will neither download an unverified prebuilt nor attempt source compilation. New versions require a tested patch file, an entry in `patches/manifest.json`, and a release workflow run.
 
 ## 🩺 Troubleshooting
 
-- No footer: run `cxstatusline doctor`, check `which codex` and PATH, accept the hook prompt,
-  and start a new session.
-- Unsupported version: wait for an explicitly supported patch. `--force` does not bypass
-  compatibility. Keep a working stock Codex installation.
-- Failed build: inspect `~/.local/state/cxstatusline/patch.log`, fix the prerequisite, then run
-  `cxstatusline patch --force`. Redact paths, session identifiers and secrets before sharing logs.
-- Missing companion/interrupted install: run doctor; use revert to return to stock before
-  reinstalling if unhealthy. Do not manually replace only one binary.
+- **No footer:** Run `cxstatusline doctor`, verify `which codex` points to `~/.local/bin/codex`, check your `PATH`, accept the hook prompt in Codex, and start a fresh session.
+- **Unsupported version:** Wait for an explicitly supported patch. `--force` does not bypass version compatibility. Keep a working stock Codex installation.
+- **Failed build:** Inspect `~/.local/state/cxstatusline/patch.log`, fix the prerequisite, then run `cxstatusline patch --force`. Redact personal paths, session identifiers, and secrets before sharing logs.
+- **Missing companion / interrupted install:** Run `cxstatusline doctor`. Use `cxstatusline revert` to return to stock before reinstalling if unhealthy. Do not manually replace only one binary.
+
+## Security and trust
+
+- **Unsigned and unnotarized:** cxstatusline binaries are not signed or notarized by Apple; macOS Gatekeeper warnings are expected. Do not disable Gatekeeper globally; clear the quarantine attribute for these two files only, or build from source with `install --compile`.
+- **Integrity vs. identity:** Checksums and manifests prove integrity relative to the GitHub release, not publisher identity.
+- **Archive contents:** Each prebuilt release archive contains exactly five files: `codex`, `codex-code-mode-host`, upstream `LICENSE` (Apache-2.0), upstream `NOTICE`, and `THIRD_PARTY_NOTICES.md` (combining cxstatusline notices and generated Rust dependency notices). No extra directories, files, or telemetry.
+- **Security policy:** See [SECURITY.md](SECURITY.md) for full trust boundaries, file layout, and vulnerability reporting.
 
 ## Contributing and license
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and [CHANGELOG.md](CHANGELOG.md).
 
-Inspired by [ccstatusline](https://github.com/sirmalloc/ccstatusline) for Claude Code.
-Its renderer and configuration UI are adapted here for Codex. Thanks to its creators and contributors!
+Inspired by [ccstatusline](https://github.com/sirmalloc/ccstatusline) for Claude Code. Its renderer and configuration UI are adapted here for Codex. Thanks to its creators and contributors!
 
-cxstatusline is [MIT licensed](LICENSE). [NOTICE](NOTICE) and
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) preserve upstream attribution.
-The build includes dependency license texts in `dist/THIRD_PARTY_LICENSES.txt`.
-OpenAI Codex remains separately licensed under Apache-2.0.
-
-<details>
-<summary>Changelog</summary>
-
-### 0.1.0
-
-Initial baseline: configurable one-to-three-row Codex statusline, interactive editor,
-colors and Powerline themes, preset import/export, source installation, update hooks,
-diagnostics and revert. Prebuilt distribution is still under private testing.
-
-</details>
+cxstatusline is [MIT licensed](LICENSE). [NOTICE](NOTICE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) preserve upstream attribution. The build includes dependency license texts in `dist/THIRD_PARTY_LICENSES.txt`. OpenAI Codex remains separately licensed under Apache-2.0.
