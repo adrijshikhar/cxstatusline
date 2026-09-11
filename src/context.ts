@@ -34,11 +34,12 @@ export function realContext(env: Env, io: { say(line: string): void; log(line: s
   const deps = realDeps();
   const sccache = deps.which("sccache");
   const run: Runner = (cmd, args, opts) => {
+    const baseEnv = opts?.env ? { ...process.env, ...opts.env } : process.env;
     const r = spawnSync(cmd, args, {
       encoding: "utf8",
       cwd: opts?.cwd,
       stdio: opts?.interactive ? "inherit" : "pipe",
-      env: sccache && cmd === "cargo" ? { ...process.env, RUSTC_WRAPPER: sccache } : process.env,
+      env: sccache && cmd === "cargo" ? { ...baseEnv, RUSTC_WRAPPER: sccache } : baseEnv,
       maxBuffer: 64 * 1024 * 1024,
       ...(opts?.timeoutMs === undefined ? {} : { timeout: opts.timeoutMs, killSignal: "SIGKILL" as const }),
     });
