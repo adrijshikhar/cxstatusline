@@ -87,6 +87,9 @@ export function releaseNotes(i: NotesInput): string {
       + "Apache-2.0; cxstatusline's own code is MIT. The archive carries upstream's `LICENSE` and "
       + "`NOTICE` plus this repository's `THIRD_PARTY_NOTICES.md`; read those, not this summary.",
     "",
+    "- Dependency licenses: `cargo deny check licenses` passed against upstream's policy and the "
+      + "generated notices are appended to the archive's `THIRD_PARTY_NOTICES.md`.",
+    "",
     "## Compile fallback",
     "",
     "You never have to use these binaries. For a supported Codex version, "
@@ -96,8 +99,6 @@ export function releaseNotes(i: NotesInput): string {
     "",
     "- No acceptance run on a clean macOS 14 machine or VM. macOS 14 support is evidenced only by "
       + "`MACOSX_DEPLOYMENT_TARGET=14.0`, `vtool` `minos` and system-only `otool -L` linkage.",
-    "- The Rust dependency-license audit of the two binaries is still pending; "
-      + "`THIRD_PARTY_NOTICES.md` covers this repository's JS dependencies only.",
     "",
     "## Build identity",
     "",

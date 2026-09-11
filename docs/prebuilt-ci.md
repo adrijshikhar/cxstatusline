@@ -275,9 +275,11 @@ system-only-linkage checks. That is evidence of intent, not proof of behaviour o
 it is recorded as an open gap rather than papered over. Hiding build tools from `PATH` on a
 macOS 15 runner would not close it either.
 
-The Rust dependency-license audit of the two binaries (`codex`, `codex-code-mode-host`) has also
-not yet been performed. `THIRD_PARTY_NOTICES.md` covers this repository's own JS dependencies, but
-no equivalent inventory exists yet for the Rust crate graph the patched upstream build pulls in.
-This is deferred to the public-launch checklist, same as the macOS 14 gap above; neither release
-notes nor this document should imply it has been done until it has. Both gaps are repeated verbatim
-in the generated release notes ("Known gaps"), so a person reading only the release still sees them.
+### Rust dependency-license audit
+
+The two binaries (`codex`, `codex-code-mode-host`) are audited during the native job:
+`cargo deny check licenses` runs against upstream's own policy (`codex-rs/deny.toml`), and
+`cargo about generate` generates the Markdown inventory of crate licenses using `scripts/prebuilt/about.toml`
+and `scripts/prebuilt/about.hbs`. These notices are appended directly below the repository notices in the
+archive's `THIRD_PARTY_NOTICES.md` under `## Rust dependency licenses (generated)`.
+A copy is also saved to `provenance/rust-notices.md` in the provenance workflow artifact.

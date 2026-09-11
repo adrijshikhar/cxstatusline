@@ -166,7 +166,7 @@ describe("release notes", () => {
     expect(notes).toContain("MIT");
     expect(notes).toContain("cxstatusline install --compile");
     expect(notes).toContain("clean macOS 14");
-    expect(notes).toContain("dependency-license audit");
+    expect(notes).toContain("cargo deny check licenses");
     expect(notes).toContain(`Workflow run ${RUN_URL} (manual dispatch of commit ${SOURCE})`);
     expect(notes).toContain(provenanceMarker({ runId: RUN_ID, manifestSha256: "f".repeat(64) }));
   });

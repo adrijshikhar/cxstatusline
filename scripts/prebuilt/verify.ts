@@ -11,6 +11,7 @@ import { validateManifest, type Artifact, type Platform, type ReleaseManifest } 
 import { extractArchive } from "../../src/distribution/archive";
 import { validateLinkage, validateVersion } from "../ci-prebuilt";
 import { ARCHIVE_ENTRIES, parseChecksums, sha256File } from "./pack";
+import { RUST_NOTICES_MARKER } from "./rust-licenses";
 
 /** The deployment-target ceiling the release promises. */
 export const MAX_MINOS = "14.0";
@@ -114,6 +115,21 @@ function checkSmoke(staged: string, o: VerifyOptions, checks: string[]): void {
   checks.push("staged codex --version and companion --help smoke passed");
 }
 
+function checkRustNotices(staged: string, checks: string[]): void {
+  const file = join(staged, "THIRD_PARTY_NOTICES.md");
+  const content = readFileSync(file, "utf8");
+  const markerIndex = content.indexOf(RUST_NOTICES_MARKER);
+  if (markerIndex === -1) {
+    throw new Error("Rust dependency notices marker is missing from THIRD_PARTY_NOTICES.md");
+  }
+  const afterMarker = content.slice(markerIndex + RUST_NOTICES_MARKER.length);
+  const hasBullet = afterMarker.split("\n").some((line) => line.trimStart().startsWith("- "));
+  if (!hasBullet) {
+    throw new Error("Rust dependency notices contain no dependency entries");
+  }
+  checks.push("Rust dependency notices present");
+}
+
 /**
  * Verify `outDir` (archive + `manifest.json` + `SHA256SUMS`) end to end. Throws on the first
  * disagreement; a returned report is the evidence that publication may proceed.
@@ -142,6 +158,7 @@ export async function verifyOutput(o: VerifyOptions): Promise<VerifyReport> {
     await extractArchive(archivePath, staged);
     checks.push("archive passes the installer's five-file validator");
     await checkExtractedDigests(staged, artifact, checks);
+    checkRustNotices(staged, checks);
     if (o.skipMacho) checks.push("Mach-O arch/linkage/minos SKIPPED");
     else checkMachO(staged, o, checks);
     checkSmoke(staged, o, checks);

@@ -10,6 +10,7 @@ import { basename, dirname, join } from "node:path";
 import { create } from "tar";
 import type { ArtifactFile, FileDigest, Platform } from "../../src/distribution";
 import { ARTIFACT_FILES, GENERATION_EXECUTABLES } from "../../src/distribution/files";
+import { appendRustNotices } from "./rust-licenses";
 
 /** Fixed entry order. The installer's validator requires exactly these five basenames. */
 export const ARCHIVE_ENTRIES: readonly ArtifactFile[] = ARTIFACT_FILES;
@@ -128,6 +129,7 @@ export interface AssembleInput {
   /** This repository's root, source of `THIRD_PARTY_NOTICES.md`. */
   readonly repoRoot: string;
   readonly stagingDir: string;
+  readonly rustNotices?: string;
 }
 
 /** Copy the five release members into a clean staging directory with the release's modes. */
@@ -145,4 +147,5 @@ export function assembleStaging(input: AssembleInput): void {
     copyFileSync(sources[name], join(input.stagingDir, name));
     chmodSync(join(input.stagingDir, name), isExecutable(name) ? EXECUTABLE_MODE : LEGAL_MODE);
   }
+  if (input.rustNotices !== undefined) appendRustNotices(input.stagingDir, input.rustNotices);
 }
