@@ -180,7 +180,12 @@ export async function publishRelease(o: PublishOptions): Promise<PublishOutcome>
 
   const existing = verdict.state === "absent" ? [] : verdict.view.assets;
   const plan = planUploads(existing, set.assets);
-  for (const name of plan.upload) ghText(o.run, ["release", "upload", o.tag, join(o.dir, name), "--clobber"]);
+  for (const name of plan.upload) {
+    const isOverwriting = existing.some((a) => a.name === name);
+    const args = ["release", "upload", o.tag, join(o.dir, name)];
+    if (isOverwriting) args.push("--clobber");
+    ghText(o.run, args);
+  }
   await reverifyUploaded(o, set);
   
   if (verdict.state !== "published-partial") {
