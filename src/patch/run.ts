@@ -11,6 +11,12 @@ import { writeState } from "../state";
 import { parseSemver } from "../version";
 import { describeOutcome, loadState, runAcquisition, upstreamFor, type PatchOutcome } from "./acquire";
 import { ManifestError, loadManifest, resolvePatch } from "./manifest";
+import {
+  renderInstallFailure,
+  renderInstallHeader,
+  renderInstallHookError,
+  renderInstallSuccess,
+} from "../ui/install-format";
 
 export {
   describeOutcome,
@@ -99,17 +105,29 @@ export function runPatch(ctx: Context, opts: { force: boolean }): Promise<PatchO
  * hooks.json must not make `install` look like it did nothing.
  */
 export async function runInstall(ctx: Context, opts: { compile: boolean }, transport: TransportOptions = {}): Promise<number> {
+  ctx.say(renderInstallHeader(opts.compile));
   const outcome = await runAcquisition(ctx, { source: opts.compile ? "compiled" : "prebuilt", force: true }, transport);
-  report(ctx, outcome);
-  if (outcome.kind !== "installed") return 1;
+  if (outcome.kind !== "installed") {
+    const advice = outcome.kind === "unavailable" ? fallbackAdvice(ctx, outcome.version) : [];
+    ctx.say(renderInstallFailure(outcome, advice));
+    return 1;
+  }
   try {
     const r = installHook(ctx.paths.hooksFile, ctx.cxBin);
-    ctx.say(`hook ${r} in ${ctx.paths.hooksFile}`);
-    if (r === "added") ctx.say("Start Codex once and accept the cxstatusline hook when prompted.");
+    ctx.say(renderInstallSuccess({
+      version: outcome.version,
+      source: outcome.source,
+      reused: outcome.reused,
+      hookAction: r,
+      hookFile: ctx.paths.hooksFile,
+    }));
     return 0;
   } catch (e) {
-    ctx.say(`Codex ${outcome.version} is installed, but the SessionStart hook could not be written: ${String(e)}`);
-    ctx.say(`Fix ${ctx.paths.hooksFile} by hand, then run \`cxstatusline hook install\`.`);
+    ctx.say(renderInstallHookError({
+      version: outcome.version,
+      hookFile: ctx.paths.hooksFile,
+      error: String(e),
+    }));
     return 1;
   }
 }
