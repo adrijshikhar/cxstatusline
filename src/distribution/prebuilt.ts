@@ -150,14 +150,19 @@ async function stageArchive(
   opts: TransportOptions,
 ): Promise<PreparedPair> {
   const archive = join(download, artifact.filename);
+  opts.onStatus?.("download", `Downloading prebuilt archive (${artifact.filename})...`);
   const got = await downloadAsset(ctx, tag, artifact.filename, archive, ARCHIVE_MAX_BYTES, opts);
   if (got.sha256 !== artifact.sha256 || got.size !== artifact.size) {
     throw new Error(`${artifact.filename} does not match the release manifest sha256`);
   }
+  opts.onStatus?.("download-done", `Downloaded ${artifact.filename}`);
   const staging = privateTemp(ctx, "staging-");
   try {
+    opts.onStatus?.("extract", "Extracting and verifying executables...");
     await extractArchive(archive, staging);
-    return stagedPair(ctx, staging, manifest, artifact, tag);
+    const pair = stagedPair(ctx, staging, manifest, artifact, tag);
+    opts.onStatus?.("extract-done", "Verified executables (codex, codex-code-mode-host)");
+    return pair;
   } catch (e) {
     rmSync(staging, { recursive: true, force: true });
     throw e;
@@ -177,12 +182,14 @@ export async function preparePrebuilt(
   opts: TransportOptions = {},
 ): Promise<PrebuiltPreparation> {
   const tag = releaseTag(expected.cxVersion, expected.codexVersion);
+  opts.onStatus?.("manifest", `Checking release ${tag} for ${expected.platform}...`);
   const download = privateTemp(ctx, "download-");
   try {
     const manifestFile = join(download, MANIFEST_ASSET);
     await downloadAsset(ctx, tag, MANIFEST_ASSET, manifestFile, MANIFEST_MAX_BYTES, opts);
     const manifest = validateManifest(JSON.parse(readFileSync(manifestFile, "utf8")), expected);
     const artifact = artifactFor(manifest, expected);
+    opts.onStatus?.("manifest-done", `Found release for Codex ${manifest.codexVersion} (${artifact.platform})`);
 
     const unchanged = unchangedPair(ctx, manifest, artifact, tag);
     if (unchanged !== null) return { kind: "unchanged", pair: unchanged };

@@ -71,7 +71,12 @@ function stage(ctx: Context, built: BuildResult): { directory: string; executabl
  * The caller owns `pair.directory` and must remove it once `activatePair` has returned - exactly
  * the contract `preparePrebuilt` uses, so both sources converge on one activation path.
  */
-export function prepareCompiled(ctx: Context, upstream: SemVer, ref: { file: string; tag: string }): PreparedPair {
+export function prepareCompiled(
+  ctx: Context,
+  upstream: SemVer,
+  ref: { file: string; tag: string },
+  onStatus?: (phase: string, message: string) => void,
+): PreparedPair {
   const patchFile = join(ctx.patchesDir, ref.file);
   const patchSha256 = digestOf(patchFile).sha256;
   const built = buildPatched(
@@ -79,8 +84,11 @@ export function prepareCompiled(ctx: Context, upstream: SemVer, ref: { file: str
     ctx.run,
     ctx.log,
     ctx.which,
+    onStatus,
   );
+  onStatus?.("stage", "Staging generation and verifying binaries...");
   const staged = stage(ctx, built);
+  onStatus?.("stage-done", "Generation staged and binaries verified");
   return {
     directory: staged.directory,
     codexVersion: upstream.raw,

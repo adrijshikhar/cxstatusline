@@ -104,18 +104,40 @@ function prepareCheckout(plan: BuildPlan, run: Runner, log: (l: string) => void)
  * pair from that one checkout, and run the focused regression tests. Returns both paths and the
  * exact upstream commit; the caller stages and activates them.
  */
-export function buildPatched(plan: BuildPlan, run: Runner, log: (line: string) => void, which: Which): BuildResult {
+export function buildPatched(
+  plan: BuildPlan,
+  run: Runner,
+  log: (line: string) => void,
+  which: Which,
+  onStatus?: (phase: string, message: string) => void,
+): BuildResult {
   const git = (step: string, ...args: string[]): void => must(step, run, log, "git", ["-C", plan.sourceDir, ...args]);
+  onStatus?.("checkout", `Preparing checkout for ${plan.tag}...`);
   prepareCheckout(plan, run, log);
   const upstreamCommit = headCommit(plan, run);
+  onStatus?.("checkout-done", `Upstream source ready at ${upstreamCommit.slice(0, 10)}`);
+
+  const patchBase = plan.patchFile.split("/").pop() ?? "patch";
+  onStatus?.("patch", `Applying ${patchBase}...`);
   git("apply --check", "apply", "--index", "--check", plan.patchFile);
   git("apply", "apply", "--index", plan.patchFile);
+  onStatus?.("patch-done", `Applied ${patchBase} cleanly`);
+
   const crateDir = join(plan.sourceDir, "codex-rs");
   const v8Env = resolveV8Env(plan.sourceDir, run, log);
+
+  onStatus?.("build", "Compiling release binaries (cargo build --release)... Note: this full compile typically takes 10 to 20 minutes.");
+  const buildStart = Date.now();
   must("cargo build", run, log, "cargo",
     ["build", "--release", "-p", "codex-cli", "--bin", "codex", "-p", "codex-code-mode-host", "--bin", "codex-code-mode-host"],
     crateDir,
     v8Env);
+  const buildElapsed = Math.round((Date.now() - buildStart) / 1000);
+  const buildElapsedStr = buildElapsed >= 60
+    ? `${Math.floor(buildElapsed / 60)}m ${buildElapsed % 60}s`
+    : `${buildElapsed}s`;
+  onStatus?.("build-done", `Release binaries compiled (codex, codex-code-mode-host in ${buildElapsedStr})`);
+
   // Why verify: a cargo run that exits 0 without producing an artifact (wrong -p, a workspace
   // [profile] override moving the output) would otherwise surface as an ENOENT from copyFileSync
   // in the caller, with no step name to report.
@@ -126,6 +148,15 @@ export function buildPatched(plan: BuildPlan, run: Runner, log: (line: string) =
     }
     return bin;
   }) as [string, string];
+
+  onStatus?.("test", "Running focused regression tests...");
+  const testStart = Date.now();
   runFocusedTests(run, log, which, crateDir, v8Env);
+  const testElapsed = Math.round((Date.now() - testStart) / 1000);
+  const testElapsedStr = testElapsed >= 60
+    ? `${Math.floor(testElapsed / 60)}m ${testElapsed % 60}s`
+    : `${testElapsed}s`;
+  onStatus?.("test-done", `Focused regression tests passed (in ${testElapsedStr})`);
+
   return { codex, codexCodeModeHost, upstreamCommit };
 }
