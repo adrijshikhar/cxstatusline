@@ -81,7 +81,8 @@ function platformLine(): DoctorLine {
 function cxVersionLine(record: InstallationRecord | null): DoctorLine {
   if (!record) return line("cx_version", NO_GENERATION, null);
   const match = record.provenance.cxVersion === VERSION;
-  return line("cx_version", `running ${VERSION} vs installed ${record.provenance.cxVersion}`, match);
+  if (match) return line("cx_version", VERSION, true);
+  return line("cx_version", `cli ${VERSION} vs generation ${record.provenance.cxVersion}`, false);
 }
 
 function releaseLine(record: InstallationRecord | null): DoctorLine {
