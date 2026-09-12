@@ -36,7 +36,7 @@ export interface ReleaseAsset {
   readonly size: number;
 }
 
-export type ReleaseState = "absent" | "draft" | "published";
+export type ReleaseState = "absent" | "draft" | "published" | "published-partial";
 
 export interface ReleaseView {
   readonly state: ReleaseState;
@@ -147,7 +147,9 @@ export function planUploads(
     const attached = existing.find((a) => a.name === asset.name);
     if (attached === undefined) upload.push(asset.name);
     else if (attached.size === asset.size) skip.push(asset.name);
-    else {
+    else if (asset.name === "manifest.json" || asset.name === "SHA256SUMS") {
+      upload.push(asset.name);
+    } else {
       throw new BlockedError(
         "Prebuilt blocked: release asset conflict",
         `${asset.name} is already attached to the release with size ${attached.size}, but this build produced `
@@ -218,7 +220,8 @@ export function downloadAsset(run: GhRunner, tag: string, name: string, dir: str
 export type ExistingVerdict =
   | { readonly state: "absent"; readonly view: ReleaseView }
   | { readonly state: "draft"; readonly view: ReleaseView }
-  | { readonly state: "published"; readonly view: ReleaseView; readonly identical: boolean; readonly detail: string };
+  | { readonly state: "published"; readonly view: ReleaseView; readonly identical: boolean; readonly detail: string }
+  | { readonly state: "published-partial"; readonly view: ReleaseView; readonly missing: readonly string[] };
 
 export interface ExistingCheck {
   readonly run: GhRunner;
@@ -240,33 +243,61 @@ export async function checkExistingRelease(c: ExistingCheck): Promise<ExistingVe
 
   const attached = new Map(view.assets.map((a) => [a.name, a.size]));
   const missing = c.assetNames.filter((n) => !attached.has(n));
+  
+  if (attached.has("manifest.json")) {
+    const file = downloadAsset(c.run, c.tag, "manifest.json", join(c.tmpRoot, "published"));
+    const raw = JSON.parse(readFileSync(file, "utf8"));
+    
+    if (missing.length > 0) {
+      if (raw.sourceCommit === c.expected.sourceCommit && raw.patchSha256 === c.expected.patchSha256) {
+        return { state: "published-partial", view, missing };
+      }
+      return { state: "published", view, identical: false, detail: `published release is missing ${missing.join(", ")}` };
+    }
+
+    const platforms = c.release.platforms ?? (c.release.platform ? [c.release.platform] : ["darwin-arm64"]);
+    let manifest!: ReleaseManifest;
+    let valid = true;
+    for (const platform of platforms) {
+      try {
+        manifest = validateManifest(raw, {
+          cxVersion: c.release.cxVersion,
+          codexVersion: c.release.codexVersion,
+          platform,
+        });
+      } catch (e) {
+        valid = false;
+        break;
+      }
+    }
+    
+    if (!valid) {
+      if (raw.sourceCommit === c.expected.sourceCommit && raw.patchSha256 === c.expected.patchSha256) {
+        return { state: "published-partial", view, missing };
+      }
+      return { state: "published", view, identical: false, detail: "published release manifest is invalid for requested platforms" };
+    }
+
+    for (const artifact of manifest.artifacts) {
+      const size = attached.get(artifact.filename);
+      if (size === undefined || size !== artifact.size) {
+        return {
+          state: "published",
+          view,
+          identical: false,
+          detail: `asset ${artifact.filename} is missing or size differs (${size} vs ${artifact.size})`,
+        };
+      }
+    }
+    const comparison = compareIdentity(manifest, c.expected);
+    return { state: "published", view, identical: comparison.identical, detail: comparison.detail };
+  }
+
   if (missing.length > 0) {
     return { state: "published", view, identical: false, detail: `published release is missing ${missing.join(", ")}` };
   }
-  const file = downloadAsset(c.run, c.tag, "manifest.json", join(c.tmpRoot, "published"));
-  const raw = JSON.parse(readFileSync(file, "utf8"));
-  const platforms = c.release.platforms ?? (c.release.platform ? [c.release.platform] : ["darwin-arm64"]);
-  let manifest!: ReleaseManifest;
-  for (const platform of platforms) {
-    manifest = validateManifest(raw, {
-      cxVersion: c.release.cxVersion,
-      codexVersion: c.release.codexVersion,
-      platform,
-    });
-  }
-  for (const artifact of manifest.artifacts) {
-    const size = attached.get(artifact.filename);
-    if (size === undefined || size !== artifact.size) {
-      return {
-        state: "published",
-        view,
-        identical: false,
-        detail: `asset ${artifact.filename} is missing or size differs (${size} vs ${artifact.size})`,
-      };
-    }
-  }
-  const comparison = compareIdentity(manifest, c.expected);
-  return { state: "published", view, identical: comparison.identical, detail: comparison.detail };
+
+  return { state: "published", view, identical: false, detail: "published release is missing manifest.json" };
 }
 
 /** The message a published-but-different release earns. Shared by `detect` and `publish`. */

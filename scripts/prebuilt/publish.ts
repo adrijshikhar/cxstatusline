@@ -163,8 +163,9 @@ export async function publishRelease(o: PublishOptions): Promise<PublishOutcome>
   }
 
   let url = verdict.view.url;
-  if (verdict.state === "absent") url = createDraft(o, set) || url;
-  else {
+  if (verdict.state === "absent") {
+    url = createDraft(o, set) || url;
+  } else if (verdict.state === "draft") {
     const provenance = parseProvenance(verdict.view.body);
     if (provenance === null || provenance.manifestSha256 !== set.manifestSha256) {
       throw draftBlock(
@@ -173,13 +174,19 @@ export async function publishRelease(o: PublishOptions): Promise<PublishOutcome>
         provenance === null ? "no build provenance" : `manifest_sha=${provenance.manifestSha256}`,
       );
     }
+  } else if (verdict.state === "published-partial") {
+    // published-partial: we don't need provenance checks because the manifest identity already matched
   }
 
-  const existing = verdict.state === "draft" ? verdict.view.assets : [];
+  const existing = verdict.state === "absent" ? [] : verdict.view.assets;
   const plan = planUploads(existing, set.assets);
-  for (const name of plan.upload) ghText(o.run, ["release", "upload", o.tag, join(o.dir, name)]);
+  for (const name of plan.upload) ghText(o.run, ["release", "upload", o.tag, join(o.dir, name), "--clobber"]);
   await reverifyUploaded(o, set);
-  ghText(o.run, ["release", "edit", o.tag, "--draft=false", "--latest=false"]);
+  
+  if (verdict.state !== "published-partial") {
+    ghText(o.run, ["release", "edit", o.tag, "--draft=false", "--latest=false"]);
+  }
+  
   if (url === "") url = inspectRelease(o.run, o.tag).url;
 
   o.summary([
