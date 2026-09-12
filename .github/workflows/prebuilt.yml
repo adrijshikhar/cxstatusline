@@ -53,7 +53,7 @@ jobs:
     # Repository-identity guard: keeps forks from running a release pipeline against their
     # own repository. Guarding `detect` also stops `validate`/`native`, which need it.
     if: github.repository == 'adrijshikhar/cxstatusline'
-    runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64"]') || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64","m5-pro"]') || 'ubuntu-latest' }}
     timeout-minutes: 10
     outputs:
       codex_version: ${{ steps.detect.outputs.codex_version }}
@@ -112,7 +112,7 @@ jobs:
   validate:
     needs: detect
     if: needs.detect.outputs.should_build == 'true'
-    runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64"]') || 'macos-15' }}
+    runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64","m5-pro"]') || 'macos-15' }}
     timeout-minutes: 20
     steps:
       # The frozen source commit, not the branch head: a scheduled run builds its source release.
@@ -300,7 +300,7 @@ jobs:
   merge:
     needs: [detect, native]
     if: needs.detect.outputs.should_build == 'true'
-    runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64"]') || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64","m5-pro"]') || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -351,7 +351,7 @@ jobs:
     if: >-
       github.repository == 'adrijshikhar/cxstatusline' && needs.detect.outputs.should_build == 'true'
       && (github.event_name == 'schedule' || inputs.publish == true)
-    runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64"]') || 'macos-15' }}
+    runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64","m5-pro"]') || 'macos-15' }}
     timeout-minutes: 60
     permissions:
       contents: write
@@ -427,7 +427,7 @@ jobs:
   report:
     needs: [detect, validate, native, merge, publish]
     if: always() && github.repository == 'adrijshikhar/cxstatusline'
-    runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64"]') || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64","m5-pro"]') || 'ubuntu-latest' }}
     timeout-minutes: 10
     permissions:
       contents: read
