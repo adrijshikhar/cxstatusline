@@ -14,6 +14,8 @@ import { getTerminalWidth } from "./utils/terminal";
 import { runTUI as runTUIFromApp } from "./tui/App";
 import { readMemoryUsage } from "./utils/memory";
 
+import type { TransportOptions } from "./distribution/transport";
+
 export interface MainIo {
   readonly env: Env;
   /** The CLI supplies the real terminal state; embedded tests default to interactive. */
@@ -31,6 +33,7 @@ export interface MainDeps {
    * real Context would reach for the owner's own ~/.local, ~/.codex and toolchain to prove it.
    */
   readonly context?: (env: Env, io: { say(line: string): void; log(line: string): void }) => Context;
+  readonly transport?: TransportOptions;
 }
 
 export const USAGE = `usage: cxstatusline [command]
@@ -99,7 +102,7 @@ async function installCommand(argv: readonly string[], io: MainIo, deps: MainDep
     io.stderr(USAGE);
     return 2;
   }
-  return runInstall(contextFor(io, deps), { compile: flags[0] === "--compile" });
+  return runInstall(contextFor(io, deps), { compile: flags[0] === "--compile" }, deps.transport);
 }
 
 /**
@@ -112,10 +115,14 @@ async function updateCommand(argv: readonly string[], io: MainIo, deps: MainDeps
     io.stderr(USAGE);
     return 2;
   }
-  return runUpdate(contextFor(io, deps), {
-    compile: flags.includes("--compile"),
-    force: flags.includes("--force") || flags.includes("-y") || flags.includes("--yes"),
-  });
+  return runUpdate(
+    contextFor(io, deps),
+    {
+      compile: flags.includes("--compile"),
+      force: flags.includes("--force") || flags.includes("-y") || flags.includes("--yes"),
+    },
+    deps.transport,
+  );
 }
 
 /**

@@ -139,8 +139,10 @@ export interface UpdateOptions {
 
 export async function probeUpstreamLatest(fetchFn: FetchLike): Promise<string | null> {
   try {
+    const headers: Record<string, string> = { accept: "application/vnd.github+json", "user-agent": "cxstatusline" };
+    if (process.env.GITHUB_TOKEN) headers.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
     const res = await fetchFn("https://api.github.com/repos/openai/codex/releases/latest", {
-      headers: { accept: "application/vnd.github+json", "user-agent": "cxstatusline" },
+      headers,
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return null;
