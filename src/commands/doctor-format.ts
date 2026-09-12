@@ -71,6 +71,29 @@ function renderSummary(lines: readonly DoctorLine[]): string {
   ], { borderColor: chalk.green, minWidth: 68 });
 }
 
+export function singleLineSummary(text: string): string {
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  if (lines.length <= 1) return text;
+
+  const match = /^(failed\s+\S+\s+at\s+[0-9T:.-]+Z?):\s*(.*)/.exec(lines[0]!);
+  const prefix = match ? match[1]! : (lines[0]!.split(":")[0] ?? "failed");
+
+  const errorLine = lines.find((l) => /^error(\[[A-Z0-9]+\])?:/i.test(l))
+    ?? lines.find((l) => /^failed to/i.test(l))
+    ?? lines.find((l) => /panic/i.test(l))
+    ?? lines[lines.length - 1]!;
+
+  return `${prefix}: ${errorLine}`;
+}
+
+function formatDiagnosticLine(item: DoctorLine, maxKeyWidth: number): string {
+  const bullet = statusBullet(item.ok);
+  const key = chalk.cyan(item.key.padEnd(maxKeyWidth));
+  const summary = singleLineSummary(String(item.value ?? ""));
+  const val = formatValue(summary, item.ok);
+  return `    ${bullet} ${key}  ${val}`;
+}
+
 export function formatDoctorPretty(lines: readonly DoctorLine[]): string {
   const lineMap = new Map(lines.map((l) => [l.key, l]));
   const seen = new Set<string>();
@@ -94,10 +117,7 @@ export function formatDoctorPretty(lines: readonly DoctorLine[]): string {
 
     parts.push(renderSectionTitle(section.title));
     for (const item of sectionLines) {
-      const bullet = statusBullet(item.ok);
-      const key = chalk.cyan(item.key.padEnd(maxKeyWidth));
-      const val = formatValue(item.value, item.ok);
-      parts.push(`    ${bullet} ${key}  ${val}`);
+      parts.push(formatDiagnosticLine(item, maxKeyWidth));
     }
     parts.push("");
   }
@@ -107,10 +127,7 @@ export function formatDoctorPretty(lines: readonly DoctorLine[]): string {
   if (extra.length > 0) {
     parts.push(renderSectionTitle("Other Diagnostics"));
     for (const item of extra) {
-      const bullet = statusBullet(item.ok);
-      const key = chalk.cyan(item.key.padEnd(maxKeyWidth));
-      const val = formatValue(item.value, item.ok);
-      parts.push(`    ${bullet} ${key}  ${val}`);
+      parts.push(formatDiagnosticLine(item, maxKeyWidth));
     }
     parts.push("");
   }
