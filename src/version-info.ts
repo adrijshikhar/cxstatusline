@@ -1,9 +1,11 @@
+import pkg from "../package.json";
+
 declare const CXSTATUSLINE_VERSION: string | undefined;
 declare const CXSTATUSLINE_SOURCE_COMMIT: string | null | undefined;
 declare const CXSTATUSLINE_SOURCE_DIRTY: boolean | undefined;
 
-/** Stamped by `scripts/build.ts` via Bun's `define`; source runs use this release's version. */
-export const VERSION: string = typeof CXSTATUSLINE_VERSION === "string" ? CXSTATUSLINE_VERSION : "0.2.0";
+/** Stamped by `scripts/build.ts` via Bun's `define`; source runs use package.json. */
+export const VERSION: string = typeof CXSTATUSLINE_VERSION === "string" ? CXSTATUSLINE_VERSION : pkg.version;
 
 /**
  * The commit of the cxstatusline checkout this bundle was built from, or null.

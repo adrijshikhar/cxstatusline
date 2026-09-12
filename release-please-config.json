@@ -5,10 +5,7 @@
       "release-type": "node",
       "package-name": "cxstatusline",
       "include-component-in-tag": false,
-      "bump-minor-pre-major": false,
-      "extra-files": [
-        "src/version-info.ts"
-      ]
+      "bump-minor-pre-major": false
     }
   }
 }
