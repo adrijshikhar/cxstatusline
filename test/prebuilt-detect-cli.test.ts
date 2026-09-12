@@ -91,7 +91,7 @@ describe("buildMatrix", () => {
   test("self-hosted runner is pinned to ARM64 runner array", () => {
     const m = buildMatrix(["darwin-arm64"], true);
     expect(m).toEqual([{
-      runner: ["self-hosted", "macOS", "ARM64"],
+      runner: ["self-hosted", "macOS", "ARM64", "m5-pro"],
       arch: "arm64",
       target: "aarch64-apple-darwin",
       platform: "darwin-arm64",

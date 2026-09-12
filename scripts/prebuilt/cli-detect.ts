@@ -90,7 +90,7 @@ export interface MatrixEntry {
 export function buildMatrix(platforms: readonly Platform[], selfHosted: boolean): readonly MatrixEntry[] {
   if (selfHosted) {
     return [{
-      runner: ["self-hosted", "macOS", "ARM64"],
+      runner: ["self-hosted", "macOS", "ARM64", "m5-pro"],
       arch: "arm64",
       target: "aarch64-apple-darwin",
       platform: "darwin-arm64",
