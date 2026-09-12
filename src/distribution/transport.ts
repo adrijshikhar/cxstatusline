@@ -30,6 +30,8 @@ export interface TransportOptions {
   /** Structural, not `typeof fetch`: a plain stub must satisfy it under every runtime's lib types. */
   readonly fetch?: FetchLike;
   readonly baseUrl?: string;
+  readonly onProgress?: (loaded: number, total: number | null) => void;
+  readonly onStatus?: (phase: string, message: string) => void;
 }
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -92,7 +94,13 @@ function nextUrl(current: string, location: string, allowHttp: boolean, asset: s
 }
 
 /** Stream a response body to `dest`, hashing as it goes and refusing to exceed `maxBytes`. */
-async function streamToFile(response: Response, dest: string, maxBytes: number, asset: string): Promise<Downloaded> {
+async function streamToFile(
+  response: Response,
+  dest: string,
+  maxBytes: number,
+  asset: string,
+  onProgress?: (loaded: number, total: number | null) => void,
+): Promise<Downloaded> {
   const declared = response.headers.get("content-length");
   const expected = declared === null ? null : Number(declared);
   if (expected !== null && (!Number.isSafeInteger(expected) || expected < 0 || expected > maxBytes)) {
@@ -113,6 +121,7 @@ async function streamToFile(response: Response, dest: string, maxBytes: number, 
       if (size > maxBytes) throw new Error(`${asset} is larger than the ${maxBytes}-byte limit`);
       hash.update(value);
       await handle.write(value);
+      onProgress?.(size, expected);
     }
   } finally {
     await handle.close();
@@ -148,7 +157,7 @@ async function httpDownload(
     }
     if (response.status === 404) return "not-found";
     if (!response.ok) throw new Error(`download of ${asset} failed with HTTP ${response.status}`);
-    return await streamToFile(response, dest, maxBytes, asset);
+    return await streamToFile(response, dest, maxBytes, asset, opts.onProgress);
   }
   throw new Error(`download of ${asset} exceeded ${MAX_REDIRECTS} redirects`);
 }

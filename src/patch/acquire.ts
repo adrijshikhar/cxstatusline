@@ -121,7 +121,7 @@ async function acquireLocked(
     return { kind: "refused", reason };
   }
   return opts.source === "compiled"
-    ? compiledAcquisition(ctx, state, upstream)
+    ? compiledAcquisition(ctx, state, upstream, transport.onStatus)
     : prebuiltAcquisition(ctx, state, upstream, transport);
 }
 
@@ -146,7 +146,12 @@ function install(
   }
 }
 
-function compiledAcquisition(ctx: Context, state: State, upstream: SemVer): PatchOutcome {
+function compiledAcquisition(
+  ctx: Context,
+  state: State,
+  upstream: SemVer,
+  onStatus?: (phase: string, message: string) => void,
+): PatchOutcome {
   // Why the try: `loadManifest` throws on a missing or malformed manifest, and "patch resolution
   // fails closed" means a refusal the caller can print, not an uncaught stack trace.
   let ref: { file: string; tag: string } | null;
@@ -170,7 +175,7 @@ function compiledAcquisition(ctx: Context, state: State, upstream: SemVer): Patc
   }
   let pair: PreparedPair;
   try {
-    pair = prepareCompiled(ctx, upstream, ref);
+    pair = prepareCompiled(ctx, upstream, ref, onStatus);
   } catch (e) {
     const reason = reasonOf(e);
     recordFailure(ctx, state, upstream.raw, reason);

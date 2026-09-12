@@ -94,9 +94,18 @@ function report(ctx: Context, outcome: PatchOutcome): void {
   if (outcome.kind === "unavailable") for (const line of fallbackAdvice(ctx, outcome.version)) ctx.say(line);
 }
 
-/** `cxstatusline patch [--force]`: the explicit compile-from-source path. */
-export function runPatch(ctx: Context, opts: { force: boolean }): Promise<PatchOutcome> {
-  return runAcquisition(ctx, { source: "compiled", force: opts.force });
+import { createInstallProgressTracker } from "../ui/progress";
+
+export function runPatch(ctx: Context, opts: { force: boolean }, transport: TransportOptions = {}): Promise<PatchOutcome> {
+  ctx.say(renderInstallHeader(true));
+  const progress = createInstallProgressTracker({
+    isTTY: process.stdout?.isTTY,
+    write: (s) => process.stdout.write(s),
+    say: (l) => ctx.say(l),
+  }, transport);
+  return runAcquisition(ctx, { source: "compiled", force: opts.force }, progress.transport).finally(() => {
+    progress.finish();
+  });
 }
 
 /**
@@ -106,7 +115,18 @@ export function runPatch(ctx: Context, opts: { force: boolean }): Promise<PatchO
  */
 export async function runInstall(ctx: Context, opts: { compile: boolean }, transport: TransportOptions = {}): Promise<number> {
   ctx.say(renderInstallHeader(opts.compile));
-  const outcome = await runAcquisition(ctx, { source: opts.compile ? "compiled" : "prebuilt", force: true }, transport);
+  const progress = createInstallProgressTracker({
+    isTTY: process.stdout?.isTTY,
+    write: (s) => process.stdout.write(s),
+    say: (l) => ctx.say(l),
+  }, transport);
+
+  let outcome: PatchOutcome;
+  try {
+    outcome = await runAcquisition(ctx, { source: opts.compile ? "compiled" : "prebuilt", force: true }, progress.transport);
+  } finally {
+    progress.finish();
+  }
   if (outcome.kind !== "installed") {
     const advice = outcome.kind === "unavailable" ? fallbackAdvice(ctx, outcome.version) : [];
     ctx.say(renderInstallFailure(outcome, advice));
@@ -228,7 +248,17 @@ export async function runUpdate(
   }
 
   const source = opts.compile ? "compiled" : "prebuilt";
-  const outcome = await runAcquisition(ctx, { source, force: true }, transport);
+  const progress = createInstallProgressTracker({
+    isTTY: process.stdout?.isTTY,
+    write: (s) => process.stdout.write(s),
+    say: (l) => ctx.say(l),
+  }, transport);
+  let outcome: PatchOutcome;
+  try {
+    outcome = await runAcquisition(ctx, { source, force: true }, progress.transport);
+  } finally {
+    progress.finish();
+  }
   report(ctx, outcome);
   return outcome.kind === "installed" ? 0 : 1;
 }
