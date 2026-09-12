@@ -3,6 +3,23 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.2.0...v0.3.0) (2026-09-12)
+
+
+### Features
+
+* **cli:** bring premium TUI look to install and doctor commands ([#7](https://github.com/adrijshikhar/cxstatusline/issues/7)) ([9cb7a9f](https://github.com/adrijshikhar/cxstatusline/commit/9cb7a9f2584f5f793c573312dfe03bbf8d07ab50))
+* **ui:** add live progress bar for prebuilt downloads and compile stages ([9398583](https://github.com/adrijshikhar/cxstatusline/commit/9398583d73a5ce97ff0f87e68c701a3e02bf536d))
+
+
+### Bug Fixes
+
+* **doctor:** clarify cx_version diagnostic label as cli vs generation ([#9](https://github.com/adrijshikhar/cxstatusline/issues/9)) ([c1aa110](https://github.com/adrijshikhar/cxstatusline/commit/c1aa1101e965224ca4f845d0b19a95d90e09ab8b))
+* **doctor:** condense multiline compiler traces to single line summary ([#8](https://github.com/adrijshikhar/cxstatusline/issues/8)) ([b8e4fd1](https://github.com/adrijshikhar/cxstatusline/commit/b8e4fd160157f790004ca37f9d2391b8e27ecd02))
+* **patch:** add recursion limit and local settings fix for codex 0.154.0 ([b2fa290](https://github.com/adrijshikhar/cxstatusline/commit/b2fa290d2249834d2eeda2bd4cfa5489f843fa47))
+* **prebuilt:** allow appending missing assets to existing release ([7d899f5](https://github.com/adrijshikhar/cxstatusline/commit/7d899f5fa093ed4b709248da6ca108464c31ad16))
+* **version:** read version from package.json instead of hardcoded fallback ([4d395bd](https://github.com/adrijshikhar/cxstatusline/commit/4d395bd75b4a2ab5c66aeecf3cf8472b8d57769c))
+
 ## [0.2.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.1.1...v0.2.0) (2026-09-11)
 
 
