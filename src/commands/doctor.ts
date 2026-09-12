@@ -119,8 +119,8 @@ export function doctorReport(ctx: Context): DoctorLine[] {
   return lines.filter((l): l is DoctorLine => l !== null);
 }
 
+import { formatDoctorPretty } from "./doctor-format";
+
 export function formatDoctor(lines: readonly DoctorLine[]): string {
-  const mark = (ok: boolean | null): string => (ok === null ? " " : ok ? "✓" : "✗");
-  const width = Math.max(...lines.map((l) => l.key.length));
-  return `${lines.map((l) => `${mark(l.ok)} ${l.key.padEnd(width)}  ${l.value}`).join("\n")}\n`;
+  return formatDoctorPretty(lines);
 }

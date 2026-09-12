@@ -188,7 +188,14 @@ describe("command dispatch", () => {
   test("`update` without flags warns and stops before running updater when prebuilts missing", async () => {
     const t = io("");
     const d = dispatchDeps();
-    expect(await main(["update"], { ...t.io, env: d.env }, d.deps)).toBe(1);
+    const mockFetch = async (url: string | URL | Request) => {
+      const u = typeof url === "string" ? url : url.toString();
+      if (u.includes("releases/latest")) {
+        return new Response(JSON.stringify({ tag_name: "rust-v0.154.0" }), { status: 200 });
+      }
+      return new Response("not found", { status: 404 });
+    };
+    expect(await main(["update"], { ...t.io, env: d.env }, { ...d.deps, transport: { fetch: mockFetch } })).toBe(1);
     expect(d.calls.filter((k) => k.args[0] === "update")).toHaveLength(0);
     expect(t.out.join("")).toMatch(/Warning: Upstream Codex update available/);
   });
