@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { renderBox, renderHeader, renderSectionTitle, symbols } from "../src/ui/box";
-import { formatDoctorPretty } from "../src/commands/doctor-format";
+import { formatDoctorPretty, singleLineSummary } from "../src/commands/doctor-format";
 import { line } from "../src/commands/doctor";
 import { renderInstallFailure, renderInstallHeader, renderInstallHookError, renderInstallSuccess } from "../src/ui/install-format";
 
@@ -47,6 +47,24 @@ describe("Doctor & Install UI Formatters", () => {
     ];
     const out = formatDoctorPretty(lines);
     expect(out).toContain("2 issues detected");
+  });
+
+  test("singleLineSummary condenses multiline cargo errors into one line", () => {
+    const multiline = `failed 0.154.0 at 2026-09-11T14:00:40.557Z:
+The following warnings were emitted during compilation:
+warning: clang: warning: ...
+error: failed to run custom build command for \`v8 v150.4.0\`
+--- stderr
+thread 'main' panicked at 'assertion failed'`;
+
+    const summary = singleLineSummary(multiline);
+    expect(summary).toBe(
+      "failed 0.154.0 at 2026-09-11T14:00:40.557Z: error: failed to run custom build command for `v8 v150.4.0`",
+    );
+  });
+
+  test("singleLineSummary preserves single line strings unchanged", () => {
+    expect(singleLineSummary("ok 0.154.0")).toBe("ok 0.154.0");
   });
 
   test("renderInstallSuccess formats success card", () => {
