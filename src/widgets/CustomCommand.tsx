@@ -21,17 +21,14 @@ import {
     DEFAULT_TIMEOUT_MS,
     MAX_TIMEOUT_MS,
     MIN_TIMEOUT_MS,
-    describeFailure,
-    refundBudget,
     resolveTimeout,
     spawnCommand,
-    takeBudget,
     type CommandRunner
 } from './shared/command-runner';
+import { resolveCommandText } from './shared/cached-command';
 import { makeModifierText } from './shared/editor-display';
 import {
     MAX_WIDTH_ACTION,
-    applyMaxWidth,
     getMaxWidthKeybind,
     getMaxWidthModifier,
     renderMaxWidthEditor
@@ -47,12 +44,12 @@ export function truncateCommand(cmd: string): string {
     return cmd.length > PREVIEW_COMMAND_CHARS ? `${cmd.substring(0, PREVIEW_COMMAND_CHARS - 3)}...` : cmd;
 }
 
-/** First visibly non-empty line of stdout, trimmed. Codex rejects frames with blank or extra rows. */
-export function firstLine(stdout: string): string {
-    return stdout
-        .split(/\r?\n/)
-        .map(line => line.trim())
-        .find(line => getVisibleText(line).trim().length > 0) ?? '';
+export function previewText(item: WidgetItem): string {
+    if (!item.commandPath) {
+        return '[No command]';
+    }
+    const shown = item.commandPath.substring(0, PREVIEW_COMMAND_CHARS);
+    return `[cmd: ${shown}${item.commandPath.length > PREVIEW_COMMAND_CHARS ? '...' : ''}]`;
 }
 
 // Adapted from ccstatusline's CustomCommand: same fields, keys, preview and diagnostic tokens.
@@ -91,46 +88,9 @@ export class CustomCommandWidget implements Widget {
     }
 
     render(item: WidgetItem, context: RenderContext, _settings: Settings): string | null {
-        if (context.isPreview) {
-            if (!item.commandPath) {
-                return '[No command]';
-            }
-            const shown = item.commandPath.substring(0, PREVIEW_COMMAND_CHARS);
-            return `[cmd: ${shown}${item.commandPath.length > PREVIEW_COMMAND_CHARS ? '...' : ''}]`;
-        }
-        if (!item.commandPath) {
-            return null;
-        }
-
-        const timeoutMs = takeBudget(context, resolveTimeout(item));
-        if (timeoutMs === 0) {
-            return '[Budget]';
-        }
-
-        const input = JSON.stringify(typeof context.terminalWidth === 'number'
-            ? { ...context.data, terminal_width: context.terminalWidth }
-            : context.data);
-        const cwd = context.data.session?.cwd;
-        const start = performance.now();
-        const result = this.runner({
-            command: item.commandPath,
-            input,
-            timeoutMs,
-            cwd: cwd && cwd.length > 0 ? cwd : undefined
-        });
-        const elapsed = performance.now() - start;
-        refundBudget(context, timeoutMs - elapsed);
-
-        const timedOut = result.errorCode === 'ETIMEDOUT' || elapsed >= timeoutMs;
-        const failure = describeFailure(result, timedOut);
-        if (failure) {
-            return failure;
-        }
-
-        const line = firstLine(result.stdout);
-        const cleaned = item.preserveColors ? keepSgrOnly(line) : keepSgrOnly(getVisibleText(line));
-        const text = applyMaxWidth(cleaned, item.maxWidth);
-        return getVisibleText(text).trim().length > 0 ? text : null;
+        if (context.isPreview) return previewText(item);
+        if (!item.commandPath) return null;
+        return resolveCommandText(item, context, this.runner);
     }
 
     getCustomKeybinds(): CustomKeybind[] {

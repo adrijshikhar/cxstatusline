@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { DEFAULT_SETTINGS } from "../../src/types/Settings";
 import type { RenderContext } from "../../src/types/RenderContext";
 import type { WidgetItem } from "../../src/types/Widget";
-import { CustomCommandWidget, firstLine, truncateCommand } from "../../src/widgets/CustomCommand";
+import { CustomCommandWidget, truncateCommand } from "../../src/widgets/CustomCommand";
+import { firstLine } from "../../src/widgets/shared/cached-command";
 import type { CommandRequest, CommandResult, CommandRunner } from "../../src/widgets/shared/command-runner";
 import { DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS, RENDER_BUDGET_MS } from "../../src/widgets/shared/command-runner";
 
