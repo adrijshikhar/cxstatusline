@@ -82,6 +82,7 @@ describe("CustomCommandWidget.render", () => {
     expect(widget({ status: 3 }).render(item(), live(), DEFAULT_SETTINGS)).toBe("[Exit: 3]");
     expect(widget({ status: 127 }).render(item(), live(), DEFAULT_SETTINGS)).toBe("[Cmd not found]");
     expect(widget({ status: null, signal: "SIGKILL", errorCode: "ETIMEDOUT" }).render(item(), live(), DEFAULT_SETTINGS)).toBe("[Timeout]");
+    expect(widget({ status: null, signal: "SIGKILL" }).render(item(), live(), DEFAULT_SETTINGS)).toBe("[Signal: SIGKILL]");
   });
 
   test("shares one budget across the commands of a render and refunds unused time", () => {

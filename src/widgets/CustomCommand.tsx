@@ -116,7 +116,8 @@ export class CustomCommandWidget implements Widget {
         const elapsed = performance.now() - start;
         refundBudget(context, timeoutMs - elapsed);
 
-        const failure = describeFailure(result);
+        const timedOut = result.errorCode === 'ETIMEDOUT' || elapsed >= timeoutMs;
+        const failure = describeFailure(result, timedOut);
         if (failure) {
             return failure;
         }

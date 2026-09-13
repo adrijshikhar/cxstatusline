@@ -41,16 +41,17 @@ describe("takeBudget and refundBudget", () => {
 describe("describeFailure", () => {
   const ok = { status: 0, signal: null, stdout: "x" } as const;
   test("maps results to upstream tokens", () => {
-    expect(describeFailure(ok)).toBeNull();
-    expect(describeFailure({ ...ok, errorCode: "ETIMEDOUT", signal: "SIGKILL", status: null })).toBe("[Timeout]");
-    expect(describeFailure({ ...ok, signal: "SIGKILL", status: null })).toBe("[Timeout]");
-    expect(describeFailure({ ...ok, status: 127 })).toBe("[Cmd not found]");
-    expect(describeFailure({ ...ok, errorCode: "ENOENT", status: null })).toBe("[Cmd not found]");
-    expect(describeFailure({ ...ok, errorCode: "EACCES", status: null })).toBe("[Permission denied]");
-    expect(describeFailure({ ...ok, errorCode: "ENOBUFS", signal: "SIGKILL", status: null })).toBe("[Error]");
-    expect(describeFailure({ ...ok, signal: "SIGTERM", status: null })).toBe("[Signal: SIGTERM]");
-    expect(describeFailure({ ...ok, status: 3 })).toBe("[Exit: 3]");
-    expect(describeFailure({ ...ok, status: null })).toBe("[Error]");
+    expect(describeFailure(ok, false)).toBeNull();
+    expect(describeFailure({ ...ok, errorCode: "ETIMEDOUT", signal: "SIGKILL", status: null }, true)).toBe("[Timeout]");
+    expect(describeFailure({ ...ok, signal: "SIGKILL", status: null }, false)).toBe("[Signal: SIGKILL]");
+    expect(describeFailure({ ...ok, signal: "SIGKILL", status: null }, true)).toBe("[Timeout]");
+    expect(describeFailure({ ...ok, status: 127 }, false)).toBe("[Cmd not found]");
+    expect(describeFailure({ ...ok, errorCode: "ENOENT", status: null }, false)).toBe("[Cmd not found]");
+    expect(describeFailure({ ...ok, errorCode: "EACCES", status: null }, false)).toBe("[Permission denied]");
+    expect(describeFailure({ ...ok, errorCode: "ENOBUFS", signal: "SIGKILL", status: null }, false)).toBe("[Error]");
+    expect(describeFailure({ ...ok, signal: "SIGTERM", status: null }, false)).toBe("[Signal: SIGTERM]");
+    expect(describeFailure({ ...ok, status: 3 }, false)).toBe("[Exit: 3]");
+    expect(describeFailure({ ...ok, status: null }, false)).toBe("[Error]");
   });
 });
 
@@ -68,7 +69,7 @@ describe.skipIf(process.platform === "win32")("spawnCommand", () => {
 
   test("kills on timeout", () => {
     const result = spawnCommand({ command: "sleep 5", input: "", timeoutMs: MIN_TIMEOUT_MS });
-    expect(describeFailure(result)).toBe("[Timeout]");
+    expect(describeFailure(result, true)).toBe("[Timeout]");
   });
 
   test("honours cwd", () => {

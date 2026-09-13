@@ -77,14 +77,15 @@ export function refundBudget(context: RenderContext, unusedMs: number): void {
 }
 
 /** Upstream diagnostic token for a failed result, or null when the command succeeded. */
-export function describeFailure(result: CommandResult): string | null {
+export function describeFailure(result: CommandResult, timedOut: boolean = false): string | null {
     if (result.errorCode === 'ETIMEDOUT') return '[Timeout]';
     if (result.errorCode === 'ENOBUFS') return '[Error]';
     if (result.errorCode === 'ENOENT' || result.status === 127) return '[Cmd not found]';
     if (result.errorCode === 'EACCES') return '[Permission denied]';
-    if (result.signal === 'SIGKILL') return '[Timeout]';
+    if (result.signal === 'SIGKILL' && timedOut) return '[Timeout]';
     if (result.signal) return `[Signal: ${result.signal}]`;
     if (result.status === null) return '[Error]';
     if (result.status !== 0) return `[Exit: ${result.status}]`;
     return null;
 }
+
