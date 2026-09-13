@@ -30,3 +30,26 @@ test("preview never executes and shows the command placeholder", () => {
   const [row] = renderStatusLines(settings(false), { ...live, isPreview: true });
   expect(getVisibleText(row!)).toBe("[cmd: printf '\\033[31mred\\...]");
 });
+
+test.skipIf(process.platform === "win32")("overrideForegroundColor wins over preserveColors (gradient and solid)", () => {
+  const cmd = "printf '\\033[32mgreen\\033[0m'";
+  const gradientSettings: Settings = {
+    ...DEFAULT_SETTINGS,
+    colorLevel: 3,
+    overrideForegroundColor: "gradient:hex:FF0000,hex:0000FF",
+    lines: [[{ id: "c", type: "custom-command", commandPath: cmd, preserveColors: true }]],
+  };
+  const [gradRow] = renderStatusLines(gradientSettings, live);
+  expect(gradRow).not.toContain("\x1b[32m");
+  expect(getVisibleText(gradRow!)).toBe("green");
+
+  const solidSettings: Settings = {
+    ...DEFAULT_SETTINGS,
+    colorLevel: 3,
+    overrideForegroundColor: "cyan",
+    lines: [[{ id: "c", type: "custom-command", commandPath: cmd, preserveColors: true }]],
+  };
+  const [solidRow] = renderStatusLines(solidSettings, live);
+  expect(solidRow).not.toContain("\x1b[32m");
+  expect(getVisibleText(solidRow!)).toBe("green");
+});

@@ -61,7 +61,7 @@ export function resolveStyledText(
     if (!styled)
         return { text: content, styled: false };
     const fgOverride = settings.overrideForegroundColor;
-    if (colorLevel === 'none' || (fgOverride && fgOverride !== 'none' && !isGradientSpec(fgOverride)))
+    if (colorLevel === 'none' || (fgOverride && fgOverride !== 'none'))
         return { text: stripSgrCodes(content), styled: false };
     return { text: content, styled: true };
 }
