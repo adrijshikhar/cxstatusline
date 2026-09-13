@@ -84,15 +84,29 @@ describe("CustomCommandWidget.render", () => {
     expect(widget({ status: null, signal: "SIGKILL", errorCode: "ETIMEDOUT" }).render(item(), live(), DEFAULT_SETTINGS)).toBe("[Timeout]");
   });
 
-  test("shares one budget across the commands of a render", () => {
+  test("shares one budget across the commands of a render and refunds unused time", () => {
     const { runner, calls } = fakeRunner(() => ({ stdout: "ok" }));
     const widget = new CustomCommandWidget(runner);
     const context = live();
+    expect(widget.render(item({ timeout: 4000 }), context, DEFAULT_SETTINGS)).toBe("ok");
+    expect(widget.render(item({ timeout: 2000 }), context, DEFAULT_SETTINGS)).toBe("ok");
+    expect(widget.render(item(), context, DEFAULT_SETTINGS)).toBe("ok");
+    expect(calls).toHaveLength(3);
+  });
+
+  test("deducts elapsed time from shared budget", () => {
+    const { runner, calls } = fakeRunner(() => {
+      const start = performance.now();
+      while (performance.now() - start < 120) {}
+      return { stdout: "ok" };
+    });
+    const widget = new CustomCommandWidget(runner);
+    const context = live();
     expect(widget.render(item({ timeout: 600 }), context, DEFAULT_SETTINGS)).toBe("ok");
-    expect(widget.render(item({ timeout: 600 }), context, DEFAULT_SETTINGS)).toBe("[Budget]");
-    expect(calls).toHaveLength(1);
-    expect(calls[0]!.timeoutMs).toBe(RENDER_BUDGET_MS);
-    expect(widget.render(item({ timeout: 100 }), live(), DEFAULT_SETTINGS)).toBe("ok");
+    expect(widget.render(item({ timeout: 600 }), context, DEFAULT_SETTINGS)).toBe("ok");
+    expect(calls).toHaveLength(2);
+    expect(calls[1]!.timeoutMs).toBeGreaterThanOrEqual(RENDER_BUDGET_MS - 140);
+    expect(calls[1]!.timeoutMs).toBeLessThanOrEqual(RENDER_BUDGET_MS - 100);
   });
 });
 

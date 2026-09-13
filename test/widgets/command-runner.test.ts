@@ -3,7 +3,7 @@ import type { RenderContext } from "../../src/types/RenderContext";
 import type { WidgetItem } from "../../src/types/Widget";
 import {
   DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS, MIN_TIMEOUT_MS, RENDER_BUDGET_MS,
-  describeFailure, resolveTimeout, spawnCommand, takeBudget,
+  describeFailure, refundBudget, resolveTimeout, spawnCommand, takeBudget,
 } from "../../src/widgets/shared/command-runner";
 
 const item = (timeout?: number): WidgetItem => ({ id: "c", type: "model", ...(timeout !== undefined && { timeout }) });
@@ -18,7 +18,7 @@ describe("resolveTimeout", () => {
   });
 });
 
-describe("takeBudget", () => {
+describe("takeBudget and refundBudget", () => {
   test("is shared per render context and independent across contexts", () => {
     const a = context();
     const b = context();
@@ -26,6 +26,15 @@ describe("takeBudget", () => {
     expect(takeBudget(a, 600)).toBe(RENDER_BUDGET_MS - 250);
     expect(takeBudget(a, 100)).toBe(0);
     expect(takeBudget(b, 600)).toBe(RENDER_BUDGET_MS);
+  });
+
+  test("refundBudget adds unused time back, capping at RENDER_BUDGET_MS", () => {
+    const c = context();
+    expect(takeBudget(c, 400)).toBe(400);
+    refundBudget(c, 150);
+    expect(takeBudget(c, 600)).toBe(350);
+    refundBudget(c, 1000);
+    expect(takeBudget(c, 600)).toBe(RENDER_BUDGET_MS);
   });
 });
 

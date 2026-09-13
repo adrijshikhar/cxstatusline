@@ -68,6 +68,14 @@ export function takeBudget(context: RenderContext, wanted: number): number {
     return granted;
 }
 
+/** Refunds unused execution time to this render's budget (capped at RENDER_BUDGET_MS). */
+export function refundBudget(context: RenderContext, unusedMs: number): void {
+    const refund = Math.max(0, unusedMs);
+    if (refund === 0) return;
+    const entry = budgets.get(context) ?? { remaining: RENDER_BUDGET_MS };
+    budgets.set(context, { remaining: Math.min(RENDER_BUDGET_MS, entry.remaining + refund) });
+}
+
 /** Upstream diagnostic token for a failed result, or null when the command succeeded. */
 export function describeFailure(result: CommandResult): string | null {
     if (result.errorCode === 'ETIMEDOUT') return '[Timeout]';

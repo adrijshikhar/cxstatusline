@@ -22,6 +22,7 @@ import {
     MAX_TIMEOUT_MS,
     MIN_TIMEOUT_MS,
     describeFailure,
+    refundBudget,
     resolveTimeout,
     spawnCommand,
     takeBudget,
@@ -105,12 +106,15 @@ export class CustomCommandWidget implements Widget {
             ? { ...context.data, terminal_width: context.terminalWidth }
             : context.data);
         const cwd = context.data.session?.cwd;
+        const start = performance.now();
         const result = this.runner({
             command: item.commandPath,
             input,
             timeoutMs,
             cwd: cwd && cwd.length > 0 ? cwd : undefined
         });
+        const elapsed = performance.now() - start;
+        refundBudget(context, timeoutMs - elapsed);
 
         const failure = describeFailure(result);
         if (failure) {
