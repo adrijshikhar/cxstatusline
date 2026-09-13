@@ -263,7 +263,7 @@ export function App({ initialSettings, settingsPath, readImportFile = readImport
         {screen === "items" && <ItemsEditor
           widgets={settings.lines[selectedLine] ?? []}
           onUpdate={(widgets) => updateLine(selectedLine, widgets)}
-          onBack={() => setScreen("lines")}
+          onBack={() => { if (settings) setEditSnapshot(cloneSettings(settings)); setScreen("lines"); }}
           lineNumber={selectedLine + 1}
           settings={settings}
         />}
