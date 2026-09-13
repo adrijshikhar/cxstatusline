@@ -6,6 +6,9 @@ import { WidgetItemSchema } from "../src/types/Widget";
 import { loadSettings, saveSettings } from "../src/utils/config";
 import { tmpEnv } from "./helpers";
 
+import { MIN_REFRESH_MS, resolveRefresh } from "../src/widgets/shared/cached-command";
+import { MIN_TIMEOUT_MS, resolveTimeout } from "../src/widgets/shared/command-runner";
+
 function settingsFile(): string {
   const { root } = tmpEnv();
   return join(root, ".config", "cxstatusline", "settings.json");
@@ -16,15 +19,15 @@ describe("settings", () => {
     expect(WidgetItemSchema.safeParse({
       id: "c", type: "model", customText: "[PROD]", customSymbol: "⚡", commandPath: "date", preserveColors: true, timeout: 4000,
     }).success).toBe(true);
-    expect(WidgetItemSchema.safeParse({ id: "c", type: "model", timeout: 0 }).success).toBe(false);
+    expect(WidgetItemSchema.safeParse({ id: "c", type: "model", timeout: 0 }).success).toBe(true);
     expect(WidgetItemSchema.safeParse({ id: "c", type: "model", timeout: 2.5 }).success).toBe(false);
   });
 
-  test("items accept refreshMs positive integer and reject invalid values", () => {
+  test("items accept refreshMs integer and reject non-integers", () => {
     expect(WidgetItemSchema.safeParse({ id: "c", type: "custom-command", commandPath: "date", refreshMs: 5000 }).success).toBe(true);
     expect(WidgetItemSchema.safeParse({ id: "c", type: "custom-command", commandPath: "date" }).success).toBe(true);
-    expect(WidgetItemSchema.safeParse({ id: "c", type: "custom-command", commandPath: "date", refreshMs: 0 }).success).toBe(false);
-    expect(WidgetItemSchema.safeParse({ id: "c", type: "custom-command", commandPath: "date", refreshMs: -100 }).success).toBe(false);
+    expect(WidgetItemSchema.safeParse({ id: "c", type: "custom-command", commandPath: "date", refreshMs: 0 }).success).toBe(true);
+    expect(WidgetItemSchema.safeParse({ id: "c", type: "custom-command", commandPath: "date", refreshMs: -100 }).success).toBe(true);
     expect(WidgetItemSchema.safeParse({ id: "c", type: "custom-command", commandPath: "date", refreshMs: 2.5 }).success).toBe(false);
   });
 
@@ -87,4 +90,27 @@ describe("settings", () => {
     expect(readdirSync(join(target, "..")).filter((name) => name.endsWith(".tmp"))).toEqual([]);
     expect(existsSync(file)).toBe(true);
   });
+
+  test("a settings file with refreshMs 0 and timeout 0 parses successfully and keeps every other widget; resolveRefresh(0) is MIN_REFRESH_MS and resolveTimeout({timeout: 0}) is MIN_TIMEOUT_MS", async () => {
+    const file = settingsFile();
+    mkdirSync(join(file, ".."), { recursive: true });
+    const content = {
+      version: 2,
+      lines: [
+        [
+          { id: "w1", type: "model" },
+          { id: "w2", type: "custom-command", commandPath: "date", refreshMs: 0, timeout: 0 },
+          { id: "w3", type: "git-branch" }
+        ]
+      ]
+    };
+    writeFileSync(file, JSON.stringify(content));
+
+    const loaded = await loadSettings(file);
+    expect(loaded.error).toBeNull();
+    expect(loaded.settings.lines[0]?.length).toBe(3);
+    expect(resolveRefresh(0)).toBe(MIN_REFRESH_MS);
+    expect(resolveTimeout({ timeout: 0 })).toBe(MIN_TIMEOUT_MS);
+  });
 });
+

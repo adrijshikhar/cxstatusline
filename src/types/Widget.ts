@@ -19,9 +19,9 @@ export const WidgetItemSchema = z.object({
   customSymbol: z.string().optional(),
   commandPath: z.string().optional(),
   preserveColors: z.boolean().optional(),
-  // Any positive integer is stored; the widget clamps to its range at render time.
-  timeout: z.number().int().positive().optional(),
-  refreshMs: z.number().int().positive().optional(),
+  // Any integer is stored; the widget clamps to its range at render time.
+  timeout: z.number().int().optional(),
+  refreshMs: z.number().int().optional(),
   maxWidth: z.number().optional(),
   merge: z.union([z.boolean(), z.literal("no-padding")]).optional(),
   hide: z.boolean().optional(),

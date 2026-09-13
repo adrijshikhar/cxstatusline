@@ -51,7 +51,7 @@ export const spawnCommand: CommandRunner = ({ command, input, timeoutMs, cwd }) 
     };
 };
 
-export function resolveTimeout(item: WidgetItem): number {
+export function resolveTimeout(item: { timeout?: number | undefined }): number {
     const requested = item.timeout ?? DEFAULT_TIMEOUT_MS;
     return Math.min(MAX_TIMEOUT_MS, Math.max(MIN_TIMEOUT_MS, requested));
 }

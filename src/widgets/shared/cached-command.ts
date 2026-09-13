@@ -34,8 +34,8 @@ export interface CacheDeps {
 
 export const productionCacheDeps: CacheDeps = { spawn, scriptPath: process.argv[1], now: Date.now };
 
-export function resolveRefresh(item: WidgetItem): number {
-    const raw = item.refreshMs ?? 0;
+export function resolveRefresh(item: WidgetItem | { refreshMs?: number | undefined } | number): number {
+    const raw = typeof item === 'number' ? item : item.refreshMs ?? 0;
     return Math.max(MIN_REFRESH_MS, Math.min(MAX_REFRESH_MS, raw));
 }
 
