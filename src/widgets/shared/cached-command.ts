@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, readFileSync } from 'node:fs';
+import { lstatSync, mkdirSync, readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
@@ -100,8 +100,16 @@ export function readDocument(filePath: string): CacheDocument | 'miss' {
 /** Writes a cache document to disk atomically, ensuring directory is 0700 and file is 0600 */
 export function writeDocument(filePath: string, doc: CacheDocument): void {
     const dir = dirname(filePath);
+    try {
+        if (lstatSync(dir).isSymbolicLink()) {
+            throw new Error(`Command cache directory must not be a symlink: ${dir}`);
+        }
+    } catch (e: any) {
+        if (e?.code !== 'ENOENT') {
+            throw e;
+        }
+    }
     mkdirSync(dir, { recursive: true, mode: 0o700 });
-    chmodSync(dir, 0o700);
     writeFileAtomic(filePath, JSON.stringify(doc, null, 2), { mode: 0o600 });
 }
 

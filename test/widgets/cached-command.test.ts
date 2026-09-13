@@ -111,6 +111,33 @@ describe("permissions", () => {
     const dirStat = statSync(join(root, "new-cache-dir", "sub"));
     expect(dirStat.mode & 0o777).toBe(0o700);
   });
+
+  test("refuses a symlinked command cache directory: throws, writes nothing, leaves target mode unchanged", () => {
+    const { root } = tmpEnv();
+    const { symlinkSync, chmodSync, readdirSync, mkdirSync } = require("node:fs");
+    const targetDir = join(root, "real-target");
+    mkdirSync(targetDir, { recursive: true, mode: 0o755 });
+    chmodSync(targetDir, 0o755);
+    const initialMode = statSync(targetDir).mode & 0o777;
+
+    const cacheSymlinkDir = join(root, "symlinked-cache");
+    symlinkSync(targetDir, cacheSymlinkDir);
+
+    const file = join(cacheSymlinkDir, "test.json");
+    const doc: CacheDocument = {
+      version: CACHE_VERSION,
+      command: "test",
+      cwd: "",
+      input: "{}",
+      requestedAt: 1000,
+      result: null,
+      producedAt: null,
+    };
+
+    expect(() => writeDocument(file, doc)).toThrow();
+    expect(readdirSync(targetDir).length).toBe(0);
+    expect(statSync(targetDir).mode & 0o777).toBe(initialMode);
+  });
 });
 
 describe("resolveCommandText cached render path and throttling", () => {
