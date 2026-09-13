@@ -57,7 +57,6 @@ export function App({ initialSettings, settingsPath, readImportFile = readImport
   const { stdout } = useStdout();
   const [settings, setSettings] = useState<Settings | null>(() => initialSettings ? clampSettings(initialSettings) : null);
   const [originalSettings, setOriginalSettings] = useState<Settings | null>(() => initialSettings ? clampSettings(initialSettings) : null);
-  const [editSnapshot, setEditSnapshot] = useState<Settings | null>(null);
   const [screen, setScreen] = useState<AppScreen>("main");
   const [selectedLine, setSelectedLine] = useState(0);
   const [colorLine, setColorLine] = useState<number | null>(null);
@@ -108,23 +107,14 @@ export function App({ initialSettings, settingsPath, readImportFile = readImport
   const replaceSettings = (next: Settings): void => setSettings(clampSettings(next));
   const beginEdit = (nextScreen: Extract<AppScreen, "lines" | "colors" | "powerline" | "overrides" | "export" | "import">): void => {
     if (!settings) return;
-    setEditSnapshot(cloneSettings(settings));
     setColorLine(null);
     setImportError(null);
     setImportPreview(null);
     setScreen(nextScreen);
   };
-  const cancelEdit = (nextScreen = "main"): void => {
+  const finishEdit = (nextScreen = "main"): void => {
     if (importApplyPending.current) return;
     importGeneration.current += 1;
-    if (editSnapshot) replaceSettings(editSnapshot);
-    setEditSnapshot(null);
-    setColorLine(null);
-    setImportPreview(null);
-    setScreen(nextScreen as AppScreen);
-  };
-  const finishEdit = (nextScreen = "main"): void => {
-    setEditSnapshot(null);
     setColorLine(null);
     setImportPreview(null);
     setScreen(nextScreen as AppScreen);
@@ -141,7 +131,6 @@ export function App({ initialSettings, settingsPath, readImportFile = readImport
     try {
       await writeSettings(settingsPath, settings);
       setOriginalSettings(cloneSettings(settings));
-      setEditSnapshot(null);
       exit();
     } catch {
       setFlash("Could not save settings.");
@@ -155,7 +144,6 @@ export function App({ initialSettings, settingsPath, readImportFile = readImport
     try {
       await writeSettings(settingsPath, settings);
       setOriginalSettings(cloneSettings(settings));
-      setEditSnapshot(null);
       setImportPreview(null);
       setFlash("Configuration saved.");
       setScreen("main");
@@ -226,7 +214,6 @@ export function App({ initialSettings, settingsPath, readImportFile = readImport
       await writeSettings(settingsPath, next);
       replaceSettings(next);
       setOriginalSettings(cloneSettings(next));
-      setEditSnapshot(null);
       setImportPreview(null);
       setFlash("Imported configuration.");
       setScreen("main");
@@ -256,7 +243,7 @@ export function App({ initialSettings, settingsPath, readImportFile = readImport
           lines={settings.lines}
           onSelect={(line) => { setSelectedLine(line); setScreen("items"); }}
           onLinesUpdate={(lines) => replaceSettings({ ...settings, lines })}
-          onBack={() => cancelEdit()}
+          onBack={() => finishEdit()}
           title="Edit Lines"
           allowEditing
         />}
@@ -270,7 +257,7 @@ export function App({ initialSettings, settingsPath, readImportFile = readImport
         {screen === "colors" && colorLine === null && <LineSelector
           lines={settings.lines}
           onSelect={setColorLine}
-          onBack={() => cancelEdit()}
+          onBack={() => finishEdit()}
           title="Edit Colors"
         />}
         {screen === "colors" && colorLine !== null && <ColorMenu
@@ -280,24 +267,24 @@ export function App({ initialSettings, settingsPath, readImportFile = readImport
           onUpdate={(widgets) => updateLine(colorLine, widgets)}
           onBack={() => setColorLine(null)}
         />}
-        {screen === "powerline" && <PowerlineSetup settings={settings} onUpdate={replaceSettings} onBack={() => cancelEdit()} />}
-        {screen === "overrides" && <GlobalOverridesMenu settings={settings} onUpdate={replaceSettings} onBack={() => cancelEdit()} />}
+        {screen === "powerline" && <PowerlineSetup settings={settings} onUpdate={replaceSettings} onBack={() => finishEdit()} />}
+        {screen === "overrides" && <GlobalOverridesMenu settings={settings} onUpdate={replaceSettings} onBack={() => finishEdit()} />}
         {screen === "export" && <ExportConfigDialog
           initialPath={`${settingsPath}.export.json`}
           onExport={exportSettings}
-          onCancel={() => cancelEdit()}
+          onCancel={() => finishEdit()}
         />}
         {screen === "import" && <ImportConfigDialog
           error={importError}
           onFileChosen={importSettings}
-          onCancel={() => cancelEdit()}
+          onCancel={() => finishEdit()}
         />}
         {screen === "import-preview" && importPreview && <ImportPreviewDialog
           preview={importPreview}
           terminalWidth={terminalWidth}
           busy={importApplying}
           onConfirm={() => void applyImport()}
-          onCancel={() => cancelEdit()}
+          onCancel={() => finishEdit()}
         />}
         {screen === "confirm-save" && <ConfirmDialog
           message="Save the current configuration and exit?"

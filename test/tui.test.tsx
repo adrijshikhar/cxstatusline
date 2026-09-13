@@ -127,7 +127,7 @@ describe("configuration TUI", () => {
     }
   });
 
-  test("cancelling an editor restores its cloned settings snapshot", async () => {
+  test("editors never mutate the caller's settings and Escape only navigates", async () => {
     const { root } = tmpEnv();
     const settingsPath = join(root, "settings.json");
     const initialSettings = { ...DEFAULT_SETTINGS, lines: [[]] };
@@ -145,8 +145,7 @@ describe("configuration TUI", () => {
       expect(app.lastFrame()).toContain("Main Menu");
 
       await app.write("\r");
-      expect(app.lastFrame()).toContain("Line 1");
-      expect(app.lastFrame()).not.toContain("Line 2");
+      expect(app.lastFrame()).toContain("Line 2");
     } finally {
       app.cleanup();
     }
