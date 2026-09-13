@@ -1,3 +1,10 @@
+/**
+ * Cached command execution and disk cache management.
+ *
+ * Callers:
+ * 1. CustomCommandWidget.render (src/widgets/CustomCommand.tsx) — renders via resolveCommandText
+ * 2. runRefreshCommand (src/commands/refresh-command.ts via --internal-refresh-command) — background refresh worker
+ */
 import { lstatSync, mkdirSync, readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';

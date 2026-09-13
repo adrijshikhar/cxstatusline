@@ -60,4 +60,10 @@ describe("custom-command upstream tracking and isolation parity", () => {
       expect(forbidden.has(specifier)).toBe(false);
     }
   });
+
+  test("CustomCommand.tsx has no unused imports from ../utils/ansi", () => {
+    const content = readFileSync(customCommandFile, "utf8");
+    const specifiers = extractImportSpecifiers(content);
+    expect(specifiers.includes("../utils/ansi")).toBe(false);
+  });
 });

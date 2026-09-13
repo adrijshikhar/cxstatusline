@@ -14,7 +14,6 @@ import type {
     WidgetEditorProps,
     WidgetItem
 } from '../types/Widget';
-import { getVisibleText, keepSgrOnly } from '../utils/ansi';
 import { shouldInsertInput } from '../utils/input-guards';
 
 import {
@@ -57,9 +56,8 @@ export function previewText(item: WidgetItem): string {
     return `[cmd: ${shown}${item.commandPath.length > PREVIEW_COMMAND_CHARS ? '...' : ''}]`;
 }
 
-// Adapted from ccstatusline's CustomCommand: same fields, keys, preview and diagnostic tokens.
-// Departures for the Codex host: injectable runner, clamped timeout with a shared per-render
-// budget, first-line-only output, and SGR-only colour preservation.
+// Presentation only; execution lives in shared/cached-command.ts (cache policy) and
+// shared/command-runner.ts (spawn options, diagnostic tokens); route upstream execution hunks there.
 export class CustomCommandWidget implements Widget {
     constructor(private readonly runner: CommandRunner = spawnCommand) {}
 
