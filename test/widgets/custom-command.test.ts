@@ -120,12 +120,20 @@ describe("CustomCommandWidget editor surface", () => {
   test("display text, modifiers and keys match the spec", () => {
     expect(widget.getEditorDisplay(item())).toEqual({ displayText: "Custom Command (date)", modifierText: undefined });
     expect(widget.getEditorDisplay(item({ timeout: 300 }))).toEqual({ displayText: "Custom Command (date)", modifierText: undefined });
-    expect(widget.getEditorDisplay(item({ commandPath: "git status --short | wc -l", maxWidth: 12, timeout: 4000, preserveColors: true })))
-      .toEqual({ displayText: "Custom Command (git status --shor...)", modifierText: "(max:12, timeout:600ms, preserve)" });
+    expect(widget.getEditorDisplay(item({ refreshMs: 5000 }))).toEqual({ displayText: "Custom Command (date)", modifierText: "(refresh: 5000ms)" });
+    expect(widget.getEditorDisplay(item({ commandPath: "git status --short | wc -l", maxWidth: 12, timeout: 4000, refreshMs: 2500, preserveColors: true })))
+      .toEqual({ displayText: "Custom Command (git status --shor...)", modifierText: "(max:12, timeout:600ms, refresh: 2500ms, preserve)" });
     expect(widget.getEditorDisplay(item({ commandPath: undefined }))).toEqual({ displayText: "Custom Command (No command)", modifierText: undefined });
     expect(widget.getCustomKeybinds().map((k) => [k.key, k.action])).toEqual([
-      ["e", "edit-command"], ["w", "edit-max-width"], ["t", "edit-timeout"], ["p", "toggle-preserve"],
+      ["e", "edit-command"], ["w", "edit-max-width"], ["t", "edit-timeout"], ["f", "edit-refresh"], ["p", "toggle-preserve"],
     ]);
+  });
+
+  test("custom-command keybinds are disjoint from items-editor reserved keys", () => {
+    const reservedKeys = new Set(["a", "i", "d", "k", "c", " ", "r", "m", "x"]);
+    for (const kb of widget.getCustomKeybinds()) {
+      expect(reservedKeys.has(kb.key)).toBe(false);
+    }
   });
 
   test("toggle-preserve is immediate; other actions open an editor", () => {
@@ -133,6 +141,7 @@ describe("CustomCommandWidget editor surface", () => {
     expect(widget.handleEditorAction("toggle-preserve", item({ preserveColors: true }))).toEqual(item({ preserveColors: false }));
     expect(widget.handleEditorAction("edit-command", item())).toBeNull();
     expect(widget.handleEditorAction("edit-timeout", item())).toBeNull();
+    expect(widget.handleEditorAction("edit-refresh", item())).toBeNull();
   });
 
   test("flags", () => {

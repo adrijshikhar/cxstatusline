@@ -150,7 +150,7 @@ describe("doctorReport", () => {
       "renderer", "settings", "upstream", "state", "patched_from", "policy", "drift", "wrapper",
       "active", "generation", "platform", "cx_version", "release", "patch", "source_commit",
       "upstream_commit", "codex_digest", "host_digest", "codex_version", "legal",
-      "hook", "last_attempt", "toolchain", "lock",
+      "hook", "last_attempt", "toolchain", "lock", "command_cache",
     ]);
   });
   test("legacy flat-layout files without an active generation are flagged, not silently accepted", () => {
@@ -403,5 +403,33 @@ describe("doctorReport", () => {
     const { c, paths } = ctx("0.152.1");
     writeState(paths.stateFile, { ...DEFAULT_STATE, last_attempt: { at: "2026-09-01T00:00:00.000Z", ok: false, version: "0.153.0", reason: "boom" } });
     expect(get(doctorReport(c), "last_attempt")).toMatchObject({ ok: false, value: "failed 0.153.0 at 2026-09-01T00:00:00.000Z: boom" });
+  });
+
+  test("command_cache: missing directory reports 0 entries, not an error", () => {
+    const { c } = ctx("0.152.1");
+    expect(get(doctorReport(c), "command_cache")).toMatchObject({
+      key: "command_cache",
+      value: "0 entries",
+      ok: null,
+    });
+  });
+
+  test("command_cache: reports entry count and oldest entry age", () => {
+    const { c, paths } = ctx("0.152.1");
+    mkdirSync(paths.commandCacheDir, { recursive: true });
+    writeFileSync(join(paths.commandCacheDir, "entry1.json"), "{}");
+    writeFileSync(join(paths.commandCacheDir, "entry2.json"), "{}");
+    const { utimesSync } = require("node:fs");
+    const now = c.now().getTime();
+    const oldestSec = (now - 120_000) / 1000;
+    const newerSec = (now - 30_000) / 1000;
+    utimesSync(join(paths.commandCacheDir, "entry1.json"), oldestSec, oldestSec);
+    utimesSync(join(paths.commandCacheDir, "entry2.json"), newerSec, newerSec);
+
+    expect(get(doctorReport(c), "command_cache")).toMatchObject({
+      key: "command_cache",
+      value: "2 entries (oldest: 2m)",
+      ok: null,
+    });
   });
 });

@@ -25,7 +25,11 @@ import {
     spawnCommand,
     type CommandRunner
 } from './shared/command-runner';
-import { resolveCommandText } from './shared/cached-command';
+import {
+    MIN_REFRESH_MS,
+    MAX_REFRESH_MS,
+    resolveCommandText
+} from './shared/cached-command';
 import { makeModifierText } from './shared/editor-display';
 import {
     MAX_WIDTH_ACTION,
@@ -37,6 +41,7 @@ import { renderNumericEditor } from './shared/numeric-editor';
 
 const EDIT_COMMAND_ACTION = 'edit-command';
 const EDIT_TIMEOUT_ACTION = 'edit-timeout';
+const EDIT_REFRESH_ACTION = 'edit-refresh';
 const TOGGLE_PRESERVE_ACTION = 'toggle-preserve';
 const PREVIEW_COMMAND_CHARS = 20;
 
@@ -74,6 +79,9 @@ export class CustomCommandWidget implements Widget {
         if (item.timeout !== undefined && item.timeout !== DEFAULT_TIMEOUT_MS) {
             modifiers.push(`timeout:${resolveTimeout(item)}ms`);
         }
+        if (item.refreshMs !== undefined) {
+            modifiers.push(`refresh: ${item.refreshMs}ms`);
+        }
         if (item.preserveColors) {
             modifiers.push('preserve');
         }
@@ -98,6 +106,7 @@ export class CustomCommandWidget implements Widget {
             { key: 'e', label: '(e)dit cmd', action: EDIT_COMMAND_ACTION },
             getMaxWidthKeybind(),
             { key: 't', label: '(t)imeout', action: EDIT_TIMEOUT_ACTION },
+            { key: 'f', label: 're(f)resh', action: EDIT_REFRESH_ACTION },
             { key: 'p', label: '(p)reserve colors', action: TOGGLE_PRESERVE_ACTION }
         ];
     }
@@ -111,6 +120,13 @@ export class CustomCommandWidget implements Widget {
                 field: 'timeout',
                 prompt: `Enter timeout in ms (${MIN_TIMEOUT_MS}-${MAX_TIMEOUT_MS}, default ${DEFAULT_TIMEOUT_MS}, blank for default): `,
                 hint: 'Values outside the range are clamped. Press Enter to save, ESC to cancel'
+            });
+        }
+        if (props.action === EDIT_REFRESH_ACTION) {
+            return renderNumericEditor(props, {
+                field: 'refreshMs',
+                prompt: `Enter refresh interval in ms (${MIN_REFRESH_MS}-${MAX_REFRESH_MS}, blank for uncached): `,
+                hint: 'Output is shared by every session in the same directory. Press Enter to save, ESC to cancel'
             });
         }
         return <CommandEditor {...props} />;
