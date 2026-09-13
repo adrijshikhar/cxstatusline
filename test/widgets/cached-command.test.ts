@@ -12,6 +12,7 @@ import {
   type CacheDocument,
 } from "../../src/widgets/shared/cached-command";
 import { tmpEnv } from "../helpers";
+import { writeFileAtomic } from "../../src/atomic";
 import type { WidgetItem } from "../../src/types/Widget";
 
 describe("cacheKey", () => {
@@ -86,6 +87,14 @@ describe("readDocument", () => {
     };
     writeDocument(file, populated);
     expect(readDocument(file)).toEqual(populated);
+
+    // Invalid producedAt:
+    writeFileAtomic(file, JSON.stringify({ ...populated, producedAt: "x" }));
+    expect(readDocument(file)).toBe("miss");
+
+    // Invalid result.stdout:
+    writeFileAtomic(file, JSON.stringify({ ...populated, result: { ...populated.result, stdout: 12345 } }));
+    expect(readDocument(file)).toBe("miss");
   });
 });
 
@@ -460,6 +469,81 @@ describe("resolveCommandText cached render path and throttling", () => {
 
     expect(resolveCommandText(item, ctx, runner.runner, deps)).toBe("[Loading]");
     expect(calls.length).toBe(0);
+  });
+
+  test("document with producedAt 'x' renders as a cold miss and spawns exactly once across five renders", () => {
+    const { root } = tmpEnv();
+    const cacheDir = join(root, "commands");
+    const key = cacheKey("date", "/my/repo");
+    const docPath = join(cacheDir, `${key}.json`);
+    const { writeFileAtomic } = require("../../src/atomic");
+    const { mkdirSync } = require("node:fs");
+    mkdirSync(cacheDir, { recursive: true });
+    writeFileAtomic(
+      docPath,
+      JSON.stringify({
+        version: CACHE_VERSION,
+        command: "date",
+        cwd: "/my/repo",
+        input: "{}",
+        requestedAt: 100_000,
+        result: null,
+        producedAt: "x",
+      })
+    );
+
+    const ctx = liveContext(cacheDir);
+    const item = makeItem({ refreshMs: 5000 });
+    const runner = fakeRunner();
+    const { spawn, calls } = fakeSpawnHarness();
+    let nowTime = 100_000;
+    const deps: CacheDeps = { spawn, scriptPath: "/bin/cxstatusline", now: () => nowTime };
+
+    for (let i = 0; i < 5; i++) {
+      nowTime += 1000;
+      const rendered = resolveCommandText(item, ctx, runner.runner, deps);
+      expect(rendered).toBe("[Loading]");
+    }
+    expect(calls.length).toBe(1);
+  });
+
+  test("document with result.stdout 12345 renders as a cold miss rather than throwing", () => {
+    const { root } = tmpEnv();
+    const cacheDir = join(root, "commands");
+    const key = cacheKey("date", "/my/repo");
+    const docPath = join(cacheDir, `${key}.json`);
+    const { writeFileAtomic } = require("../../src/atomic");
+    const { mkdirSync } = require("node:fs");
+    mkdirSync(cacheDir, { recursive: true });
+    writeFileAtomic(
+      docPath,
+      JSON.stringify({
+        version: CACHE_VERSION,
+        command: "date",
+        cwd: "/my/repo",
+        input: "{}",
+        requestedAt: 100_000,
+        result: {
+          stdout: 12345,
+          status: 0,
+          signal: null,
+          timedOut: false,
+        },
+        producedAt: 100_000,
+      })
+    );
+
+    const ctx = liveContext(cacheDir);
+    const item = makeItem({ refreshMs: 5000 });
+    const runner = fakeRunner();
+    const { spawn, calls } = fakeSpawnHarness();
+    const deps: CacheDeps = { spawn, scriptPath: "/bin/cxstatusline", now: () => 101_000 };
+
+    expect(() => {
+      const rendered = resolveCommandText(item, ctx, runner.runner, deps);
+      expect(rendered).toBe("[Loading]");
+    }).not.toThrow();
+    expect(calls.length).toBe(1);
   });
 });
 

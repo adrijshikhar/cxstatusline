@@ -87,9 +87,27 @@ export function readDocument(filePath: string): CacheDocument | 'miss' {
             typeof data.command !== 'string' ||
             typeof data.cwd !== 'string' ||
             typeof data.input !== 'string' ||
-            typeof data.requestedAt !== 'number'
+            typeof data.requestedAt !== 'number' ||
+            !Number.isFinite(data.requestedAt)
         ) {
             return 'miss';
+        }
+        if (data.producedAt !== null && (typeof data.producedAt !== 'number' || !Number.isFinite(data.producedAt))) {
+            return 'miss';
+        }
+        if (data.result !== null) {
+            if (typeof data.result !== 'object' || data.result === null) {
+                return 'miss';
+            }
+            if (typeof data.result.stdout !== 'string') {
+                return 'miss';
+            }
+            if (data.result.status !== null && (typeof data.result.status !== 'number' || !Number.isFinite(data.result.status))) {
+                return 'miss';
+            }
+            if (data.result.signal !== null && typeof data.result.signal !== 'string') {
+                return 'miss';
+            }
         }
         return data as CacheDocument;
     } catch {
