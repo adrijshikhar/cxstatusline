@@ -82,5 +82,8 @@ jobs:
           gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1 || gh release create "$TAG" --repo "$REPO" --title "cxstatusline $TAG" --notes "Source release; the packed CLI and its checksum are attached." --verify-tag
           gh release upload "$TAG" --repo "$REPO" "$RUNNER_TEMP"/cxstatusline-*.tgz "$RUNNER_TEMP"/SHA256SUMS --clobber
 
+      - name: Upgrade npm for native OIDC Trusted Publishing
+        run: npm install -g npm@latest
+
       - name: Publish to npm (OIDC Trusted Publishing)
         run: npm publish "$RUNNER_TEMP"/cxstatusline-*.tgz --provenance --access public
