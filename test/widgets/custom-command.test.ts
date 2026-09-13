@@ -73,7 +73,7 @@ describe("CustomCommandWidget.render", () => {
     const before = calls.length;
     expect(truncateCommand("git status -s | wc -l")).toBe("git status -s | w...");
     expect(truncateCommand("short")).toBe("short");
-    expect(widget.render(item({ commandPath: "git status -s | wc -l" }), { ...live(), isPreview: true }, DEFAULT_SETTINGS)).toBe("[cmd: git status -s | w...]");
+    expect(widget.render(item({ commandPath: "git status -s | wc -l" }), { ...live(), isPreview: true }, DEFAULT_SETTINGS)).toBe("[cmd: git status -s | wc -...]");
     expect(widget.render(item({ commandPath: "date" }), { ...live(), isPreview: true }, DEFAULT_SETTINGS)).toBe("[cmd: date]");
     expect(widget.render(item({ commandPath: undefined }), { ...live(), isPreview: true }, DEFAULT_SETTINGS)).toBe("[No command]");
     expect(calls.length).toBe(before);

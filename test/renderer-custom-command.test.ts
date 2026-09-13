@@ -29,7 +29,7 @@ test.skipIf(process.platform === "win32")("without preserveColors the command's 
 
 test("preview never executes and shows the command placeholder", () => {
   const [row] = renderStatusLines(settings(false), { ...live, isPreview: true });
-  expect(getVisibleText(row!)).toBe("[cmd: printf '\\033[31mr...]");
+  expect(getVisibleText(row!)).toBe("[cmd: printf '\\033[31mred\\...]");
 });
 
 test.skipIf(process.platform === "win32")("overrideForegroundColor wins over preserveColors (gradient and solid)", () => {

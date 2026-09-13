@@ -95,7 +95,8 @@ export class CustomCommandWidget implements Widget {
             if (!item.commandPath) {
                 return '[No command]';
             }
-            return `[cmd: ${truncateCommand(item.commandPath)}]`;
+            const shown = item.commandPath.substring(0, PREVIEW_COMMAND_CHARS);
+            return `[cmd: ${shown}${item.commandPath.length > PREVIEW_COMMAND_CHARS ? '...' : ''}]`;
         }
         if (!item.commandPath) {
             return null;
