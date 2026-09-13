@@ -231,8 +231,10 @@ function runCached(
         return LOADING_TOKEN;
     }
 
+    const since = (now: number, t: number) => (t > now ? Number.POSITIVE_INFINITY : Math.max(0, now - t));
+
     const inFlight = doc.requestedAt > (doc.producedAt ?? -1)
-                  && (now - doc.requestedAt) <= REQUEST_STALE_MS;
+                  && since(now, doc.requestedAt) <= REQUEST_STALE_MS;
 
     if (inFlight) {
         if (doc.result === null) {
@@ -257,7 +259,7 @@ function runCached(
         return ERROR_TOKEN;
     }
 
-    const age = now - (doc.producedAt ?? 0);
+    const age = since(now, doc.producedAt ?? 0);
     if (age <= refreshMs) {
         return processResult(doc.result, item, doc.result.timedOut ?? false);
     }

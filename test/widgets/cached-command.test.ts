@@ -545,6 +545,62 @@ describe("resolveCommandText cached render path and throttling", () => {
     }).not.toThrow();
     expect(calls.length).toBe(1);
   });
+
+  test("producedAt one hour in the future with a result present must schedule a refresh", () => {
+    const { root } = tmpEnv();
+    const cacheDir = join(root, "commands");
+    const key = cacheKey("date", "/my/repo");
+    const docPath = join(cacheDir, `${key}.json`);
+    const nowTime = 100_000;
+    const doc: CacheDocument = {
+      version: CACHE_VERSION,
+      command: "date",
+      cwd: "/my/repo",
+      input: "{}",
+      requestedAt: nowTime - 10_000,
+      result: { stdout: "future output\n", status: 0, signal: null, errorCode: undefined, timedOut: false },
+      producedAt: nowTime + 3_600_000, // 1 hour in the future
+    };
+    writeDocument(docPath, doc);
+
+    const ctx = liveContext(cacheDir);
+    const item = makeItem({ refreshMs: 5000 });
+    const runner = fakeRunner();
+    const { spawn, calls } = fakeSpawnHarness();
+    const deps: CacheDeps = { spawn, scriptPath: "/bin/cxstatusline", now: () => nowTime };
+
+    const rendered = resolveCommandText(item, ctx, runner.runner, deps);
+    expect(rendered).toBe("future output");
+    expect(calls.length).toBe(1);
+  });
+
+  test("requestedAt one hour in the future with a null result must be treated as stale after REQUEST_STALE_MS rather than pinned in-flight", () => {
+    const { root } = tmpEnv();
+    const cacheDir = join(root, "commands");
+    const key = cacheKey("date", "/my/repo");
+    const docPath = join(cacheDir, `${key}.json`);
+    const nowTime = 100_000;
+    const doc: CacheDocument = {
+      version: CACHE_VERSION,
+      command: "date",
+      cwd: "/my/repo",
+      input: "{}",
+      requestedAt: nowTime + 3_600_000, // 1 hour in the future
+      result: null,
+      producedAt: null,
+    };
+    writeDocument(docPath, doc);
+
+    const ctx = liveContext(cacheDir);
+    const item = makeItem({ refreshMs: 5000 });
+    const runner = fakeRunner();
+    const { spawn, calls } = fakeSpawnHarness();
+    const deps: CacheDeps = { spawn, scriptPath: "/bin/cxstatusline", now: () => nowTime };
+
+    const rendered = resolveCommandText(item, ctx, runner.runner, deps);
+    expect(rendered).toBe("[Error]");
+    expect(calls.length).toBe(1);
+  });
 });
 
 describe("scheduleRefresh error resilience", () => {
