@@ -6,6 +6,7 @@ import {
   cacheKey,
   readDocument,
   resolveCommandText,
+  scheduleRefresh,
   writeDocument,
   type CacheDeps,
   type CacheDocument,
@@ -143,6 +144,7 @@ describe("resolveCommandText cached render path and throttling", () => {
       const rec = { command: cmd, args, options, unrefCalled: false };
       calls.push(rec);
       return {
+        on: () => {},
         unref: () => { rec.unrefCalled = true; },
       };
     };
@@ -431,6 +433,66 @@ describe("resolveCommandText cached render path and throttling", () => {
 
     expect(resolveCommandText(item, ctx, runner.runner, deps)).toBe("[Loading]");
     expect(calls.length).toBe(0);
+  });
+});
+
+describe("scheduleRefresh error resilience", () => {
+  test("registers an error handler on the spawned child before unref() and does not crash when error is emitted", async () => {
+    const { EventEmitter } = require("node:events");
+    let errorListenerRegistered = false;
+    let registeredBeforeUnref = false;
+    let unrefCount = 0;
+    const emitter = new EventEmitter();
+    emitter.unref = () => {
+      unrefCount++;
+      registeredBeforeUnref = errorListenerRegistered;
+    };
+    emitter.on("newListener", (event: string) => {
+      if (event === "error") {
+        errorListenerRegistered = true;
+      }
+    });
+
+    const spawn = () => emitter;
+    const deps: CacheDeps = {
+      spawn: spawn as any,
+      scriptPath: "/bin/cxstatusline",
+      now: () => 1000,
+    };
+
+    expect(() => {
+      scheduleRefresh("0123456789abcdef", deps);
+    }).not.toThrow();
+
+    expect(errorListenerRegistered).toBe(true);
+    expect(registeredBeforeUnref).toBe(true);
+
+    await new Promise<void>((resolve) => {
+      process.nextTick(() => {
+        expect(() => {
+          emitter.emit("error", new Error("spawn ENOENT"));
+        }).not.toThrow();
+        resolve();
+      });
+    });
+  });
+
+  test("unref() is called exactly once on the spawned child", () => {
+    let unrefCalls = 0;
+    const spawn = () => ({
+      on: () => {},
+      unref: () => {
+        unrefCalls++;
+      },
+    });
+    const deps: CacheDeps = {
+      spawn: spawn as any,
+      scriptPath: "/bin/cxstatusline",
+      now: () => 1000,
+    };
+
+    scheduleRefresh("0123456789abcdef", deps);
+    expect(unrefCalls).toBe(1);
   });
 });
 

@@ -44,11 +44,13 @@ export function scheduleRefresh(key: string, deps: CacheDeps): void {
         return;
     }
     try {
-        deps.spawn(
+        const child = deps.spawn(
             process.execPath,
             [deps.scriptPath, '--internal-refresh-command', key],
             { detached: true, stdio: 'ignore', windowsHide: true }
-        ).unref();
+        );
+        child.on('error', () => {});
+        child.unref();
     } catch {
         // Ignored; requestedAt throttle protects against repeated spawn storms
     }
