@@ -1173,11 +1173,22 @@ export function renderStatusLine(
             }
 
             if (widgetText) {
+                let content: string;
+                if (isStyled) {
+                    const bg = (settings.overrideBackgroundColor && settings.overrideBackgroundColor !== 'none')
+                        ? settings.overrideBackgroundColor
+                        : widget.backgroundColor;
+                    if (bg) {
+                        const bgCode = getColorAnsiCode(bg, colorLevel, true);
+                        content = `${bgCode}${reapplyBackground(widgetText, bgCode)}\x1b[0m`;
+                    } else {
+                        content = `${widgetText}\x1b[0m`;
+                    }
+                } else {
+                    content = applyColorsWithOverride(widgetText, widget.color ?? defaultColor, widget.backgroundColor, widget.bold, widget.dim);
+                }
                 elements.push({
-                    // Styled content owns its colours; reset after it so nothing leaks into the next element.
-                    content: isStyled
-                        ? `${widgetText}\x1b[0m`
-                        : applyColorsWithOverride(widgetText, widget.color ?? defaultColor, widget.backgroundColor, widget.bold, widget.dim),
+                    content,
                     type: widget.type,
                     widget
                 });

@@ -66,3 +66,16 @@ test.skipIf(process.platform === "win32")("plain diagnostic tokens from preserve
   expect(row).toContain(redCode);
   expect(getVisibleText(row!)).toBe("[Exit: 3]");
 });
+
+test.skipIf(process.platform === "win32")("styled widgets apply background in non-Powerline mode and reapply across resets", () => {
+  const bgCode = getColorAnsiCode("bgRed", "truecolor", true);
+  const bgSettings: Settings = {
+    ...DEFAULT_SETTINGS,
+    colorLevel: 3,
+    lines: [[{ id: "c", type: "custom-command", commandPath: "printf '\\033[31mred\\033[0m tail'", preserveColors: true, backgroundColor: "bgRed" }]],
+  };
+  const [row] = renderStatusLines(bgSettings, live);
+  expect(row).toContain(bgCode + "\x1b[31mred");
+  expect(row).toContain("\x1b[0m" + bgCode + " tail");
+});
+
