@@ -62,7 +62,7 @@ describe("CustomCommandWidget.render", () => {
     const { runner } = fakeRunner(() => ({ stdout }));
     const widget = new CustomCommandWidget(runner);
     expect(widget.render(item(), live(), DEFAULT_SETTINGS)).toBe("red link");
-    expect(widget.render(item({ preserveColors: true }), live(), DEFAULT_SETTINGS)).toBe("\x1b[31mred\x1b[0m ]8;;http://x\\link]8;;\\");
+    expect(widget.render(item({ preserveColors: true }), live(), DEFAULT_SETTINGS)).toBe("\x1b[31mred\x1b[0m link");
   });
 
   test("returns null for empty output, unset command, and never executes in preview", () => {

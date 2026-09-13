@@ -561,7 +561,6 @@ export function applyLineGradient(
     return `${result.text}\x1b[39m`;
 }
 
-const KEEP_SGR_PREFIX = /^\x1b\[[0-9;]*m/;
 const KEEP_SGR_CONTROL = /[\u0000-\u001F\u007F-\u009F]/;
 
 /**
@@ -570,17 +569,30 @@ const KEEP_SGR_CONTROL = /[\u0000-\u001F\u007F-\u009F]/;
  * write itself (command output) and for every finished row.
  */
 export function keepSgrOnly(text: string): string {
-    let safe = '';
-    for (let index = 0; index < text.length;) {
-        const sgr = text.slice(index).match(KEEP_SGR_PREFIX)?.[0];
-        if (sgr) {
-            safe += sgr;
-            index += sgr.length;
+    let result = '';
+    let index = 0;
+
+    while (index < text.length) {
+        const escape = parseEscapeSequence(text, index);
+        if (escape) {
+            const isCsi = escape.sequence.startsWith(`${ESC}[`) || escape.sequence.startsWith(C1_CSI);
+            if (isCsi && escape.sequence.endsWith('m')) {
+                result += escape.sequence;
+            }
+            index = escape.nextIndex;
             continue;
         }
-        const char = text[index]!;
-        if (!KEEP_SGR_CONTROL.test(char)) safe += char;
-        index += 1;
+
+        const codePoint = text.codePointAt(index);
+        if (codePoint === undefined) {
+            break;
+        }
+        const character = String.fromCodePoint(codePoint);
+        if (!KEEP_SGR_CONTROL.test(character)) {
+            result += character;
+        }
+        index += character.length;
     }
-    return safe;
+
+    return result;
 }
