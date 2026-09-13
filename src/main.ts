@@ -2,6 +2,7 @@ import type { Env } from "./env";
 import { freemem, platform, totalmem } from "node:os";
 import { execFileSync } from "node:child_process";
 import { runRender } from "./commands/render";
+import { runRefreshCommand } from "./commands/refresh-command";
 import { VERSION } from "./version-info";
 import { resolvePaths } from "./paths";
 import { realContext, type Context } from "./context";
@@ -152,6 +153,10 @@ function hookAdminCommand(sub: string | undefined, io: MainIo, deps: MainDeps): 
 
 export async function main(argv: readonly string[], io: MainIo, deps: MainDeps = {}): Promise<number> {
   const [cmd] = argv;
+  if (cmd === "--internal-refresh-command") {
+    const key = argv[1];
+    return key ? runRefreshCommand(key, { env: io.env }) : 2;
+  }
   if (cmd === undefined) {
     if (io.isTTY === false) {
       io.stderr(USAGE);
