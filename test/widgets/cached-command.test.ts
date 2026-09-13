@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
   CACHE_VERSION,
   cacheKey,
+  productionCacheDeps,
   readDocument,
   resolveCommandText,
   scheduleRefresh,
@@ -14,6 +15,9 @@ import {
 import { tmpEnv } from "../helpers";
 import { writeFileAtomic } from "../../src/atomic";
 import type { WidgetItem } from "../../src/types/Widget";
+import { renderStatusLines } from "../../src/utils/renderer";
+import { DEFAULT_SETTINGS, type Settings } from "../../src/types/Settings";
+import { getWidget } from "../../src/utils/widgets";
 
 describe("cacheKey", () => {
   test("returns 16 lowercase hex characters; stable for same (command, cwd); changes when either changes", () => {
@@ -231,6 +235,19 @@ describe("resolveCommandText cached render path and throttling", () => {
       expect(doc.requestedAt).toBe(100_000);
       expect(doc.command).toBe("date");
       expect(doc.cwd).toBe("/my/repo");
+      expect(JSON.parse(doc.input)).toEqual({ ...ctx.data, terminal_width: 80 });
+      expect(JSON.parse(doc.input).terminal_width).toBe(80);
+    }
+
+    // Cold cache with terminalWidth null omits terminal_width from doc.input:
+    const ctxNull = { ...ctx, terminalWidth: null };
+    const itemNoWidth = makeItem({ id: "c-null", commandPath: "date -u", refreshMs: 5000 });
+    resolveCommandText(itemNoWidth, ctxNull, runner.runner, deps);
+    const docNull = readDocument(join(cacheDir, `${cacheKey("date -u", "/my/repo")}.json`));
+    expect(docNull).not.toBe("miss");
+    if (docNull !== "miss") {
+      expect(JSON.parse(docNull.input)).toEqual(ctx.data);
+      expect(JSON.parse(docNull.input).terminal_width).toBeUndefined();
     }
   });
 
@@ -600,6 +617,86 @@ describe("resolveCommandText cached render path and throttling", () => {
     const rendered = resolveCommandText(item, ctx, runner.runner, deps);
     expect(rendered).toBe("[Error]");
     expect(calls.length).toBe(1);
+  });
+
+  test("benchmark: renderStatusLines with populated cache for three 3-second commands finishes under 200ms and never calls runner", () => {
+    const { root } = tmpEnv();
+    const cacheDir = join(root, "commands");
+    const cwd = "/my/repo";
+    const nowTime = Date.now();
+    const cmds = ["sleep 3 # 1", "sleep 3 # 2", "sleep 3 # 3"];
+    for (const cmd of cmds) {
+      const key = cacheKey(cmd, cwd);
+      writeDocument(join(cacheDir, `${key}.json`), {
+        version: CACHE_VERSION,
+        command: cmd,
+        cwd,
+        input: "{}",
+        requestedAt: nowTime,
+        result: {
+          stdout: `output of ${cmd}\n`,
+          status: 0,
+          signal: null,
+          errorCode: undefined,
+          timedOut: false,
+        },
+        producedAt: nowTime,
+      });
+    }
+
+    const settings: Settings = {
+      ...DEFAULT_SETTINGS,
+      lines: [
+        cmds.map((cmd, i) => ({
+          id: `item-${i}`,
+          type: "custom-command" as const,
+          commandPath: cmd,
+          refreshMs: 5000,
+        })),
+      ],
+    };
+
+    const ctx = {
+      data: { payload_version: 1, session: { cwd } },
+      now: new Date(101_000),
+      terminalWidth: 200,
+      freeMemoryBytes: 1024 * 1024 * 1024,
+      memoryUsage: { used: 1024, total: 2048 },
+      isPreview: false,
+      commandCacheDir: cacheDir,
+    };
+
+    const widget = getWidget("custom-command") as any;
+    const originalRunner = widget.runner;
+    let runnerCalled = 0;
+    widget.runner = () => {
+      runnerCalled++;
+      throw new Error("Runner should never be called when cache is populated");
+    };
+
+    const originalSpawn = productionCacheDeps.spawn;
+    let spawnCalled = 0;
+    productionCacheDeps.spawn = ((...args: any[]) => {
+      spawnCalled++;
+      return { on: () => {}, unref: () => {} } as any;
+    }) as any;
+
+    try {
+      const start = performance.now();
+      const rows = renderStatusLines(settings, ctx as any);
+      const elapsedMs = performance.now() - start;
+
+      expect(elapsedMs).toBeLessThan(200);
+      expect(runnerCalled).toBe(0);
+      expect(spawnCalled).toBe(0);
+      expect(rows.length).toBeGreaterThan(0);
+      for (const cmd of cmds) {
+        expect(rows[0]).toContain(`output of ${cmd}`);
+      }
+    } finally {
+      widget.runner = originalRunner;
+      productionCacheDeps.spawn = originalSpawn;
+    }
   });
 });
 
