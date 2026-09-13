@@ -1,7 +1,7 @@
 import type { Env } from "../env";
 import { resolvePaths } from "../paths";
 import { PayloadError, parsePayload } from "../payload";
-import { getVisibleText } from "../utils/ansi";
+import { getVisibleText, keepSgrOnly } from "../utils/ansi";
 import { renderStatusLines } from "../utils/renderer";
 import { loadSettings } from "../utils/config";
 
@@ -17,26 +17,6 @@ export interface RenderDeps {
   readonly terminalWidth: number | null;
   readonly freeMemoryBytes: number;
   readonly memoryUsage?: { used: number; total: number };
-}
-
-const CONTROL = /[\u0000-\u001F\u007F-\u009F]/;
-const SGR = /^\x1b\[[0-9;]*m/;
-
-/** Keep renderer-owned SGR styling while removing every other control character from one row. */
-function sanitizeRow(row: string): string {
-  let safe = "";
-  for (let index = 0; index < row.length;) {
-    const sgr = row.slice(index).match(SGR)?.[0];
-    if (sgr) {
-      safe += sgr;
-      index += sgr.length;
-      continue;
-    }
-    const char = row[index]!;
-    if (!CONTROL.test(char)) safe += char;
-    index += 1;
-  }
-  return safe;
 }
 
 /** stdin payload -> one to three lines. Exit 2 on a bad payload with nothing on stdout. */
@@ -60,7 +40,7 @@ export async function runRender(stdin: string, deps: RenderDeps): Promise<Render
         weeklyResetAt: payload.usage?.weekly?.resets_at,
       },
       isPreview: false,
-    }).map(sanitizeRow).filter((row) => getVisibleText(row).trim().length > 0);
+    }).map(keepSgrOnly).filter((row) => getVisibleText(row).trim().length > 0);
     return { stdout: `${(rows.length ? rows : ["codex"]).join("\n")}\n`, stderr: warnings.join(""), code: 0 };
   } catch (e) {
     const message = e instanceof PayloadError ? e.message : `unexpected error: ${String(e)}`;
