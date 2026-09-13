@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { DEFAULT_SETTINGS } from "../../src/types/Settings";
 import type { RenderContext } from "../../src/types/RenderContext";
 import type { WidgetItem } from "../../src/types/Widget";
-import { CustomCommandWidget, firstLine } from "../../src/widgets/CustomCommand";
+import { CustomCommandWidget, firstLine, truncateCommand } from "../../src/widgets/CustomCommand";
 import type { CommandRequest, CommandResult, CommandRunner } from "../../src/widgets/shared/command-runner";
 import { DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS, RENDER_BUDGET_MS } from "../../src/widgets/shared/command-runner";
 
@@ -71,7 +71,9 @@ describe("CustomCommandWidget.render", () => {
     expect(widget.render(item(), live(), DEFAULT_SETTINGS)).toBeNull();
     expect(widget.render(item({ commandPath: undefined }), live(), DEFAULT_SETTINGS)).toBeNull();
     const before = calls.length;
-    expect(widget.render(item({ commandPath: "git status -s | wc -l" }), { ...live(), isPreview: true }, DEFAULT_SETTINGS)).toBe("[cmd: git status -s | wc -...]");
+    expect(truncateCommand("git status -s | wc -l")).toBe("git status -s | w...");
+    expect(truncateCommand("short")).toBe("short");
+    expect(widget.render(item({ commandPath: "git status -s | wc -l" }), { ...live(), isPreview: true }, DEFAULT_SETTINGS)).toBe("[cmd: git status -s | w...]");
     expect(widget.render(item({ commandPath: "date" }), { ...live(), isPreview: true }, DEFAULT_SETTINGS)).toBe("[cmd: date]");
     expect(widget.render(item({ commandPath: undefined }), { ...live(), isPreview: true }, DEFAULT_SETTINGS)).toBe("[No command]");
     expect(calls.length).toBe(before);

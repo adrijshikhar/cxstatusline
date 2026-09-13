@@ -45,8 +45,8 @@ function isLayout(type: WidgetType): boolean {
 
 /** Catalog rows come from the widgets themselves (upstream parity); separators stay under Layout. */
 function buildCatalog(): WidgetCatalogEntry[] {
-  return WIDGET_MANIFEST.map(({ type, create }) => {
-    const impl = isLayout(type) ? null : create();
+  return WIDGET_MANIFEST.map(({ type }) => {
+    const impl = isLayout(type) ? null : getWidgetImpl(type);
     const displayName = impl ? impl.getDisplayName() : displayWidgetType(type);
     const description = impl ? impl.getDescription() : displayName;
     const category = impl ? impl.getCategory() : "Layout";

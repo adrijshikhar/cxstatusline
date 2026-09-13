@@ -36,11 +36,16 @@ import {
     getMaxWidthModifier,
     renderMaxWidthEditor
 } from './shared/max-width';
+import { renderNumericEditor } from './shared/numeric-editor';
 
 const EDIT_COMMAND_ACTION = 'edit-command';
 const EDIT_TIMEOUT_ACTION = 'edit-timeout';
 const TOGGLE_PRESERVE_ACTION = 'toggle-preserve';
 const PREVIEW_COMMAND_CHARS = 20;
+
+export function truncateCommand(cmd: string): string {
+    return cmd.length > PREVIEW_COMMAND_CHARS ? `${cmd.substring(0, PREVIEW_COMMAND_CHARS - 3)}...` : cmd;
+}
 
 /** First visibly non-empty line of stdout, trimmed. Codex rejects frames with blank or extra rows. */
 export function firstLine(stdout: string): string {
@@ -63,7 +68,7 @@ export class CustomCommandWidget implements Widget {
 
     getEditorDisplay(item: WidgetItem): WidgetEditorDisplay {
         const cmd = item.commandPath ?? 'No command';
-        const truncatedCmd = cmd.length > PREVIEW_COMMAND_CHARS ? `${cmd.substring(0, 17)}...` : cmd;
+        const truncatedCmd = truncateCommand(cmd);
         const modifiers: string[] = [];
         const maxWidth = getMaxWidthModifier(item);
         if (maxWidth) {
@@ -90,8 +95,7 @@ export class CustomCommandWidget implements Widget {
             if (!item.commandPath) {
                 return '[No command]';
             }
-            const shown = item.commandPath.substring(0, PREVIEW_COMMAND_CHARS);
-            return `[cmd: ${shown}${item.commandPath.length > PREVIEW_COMMAND_CHARS ? '...' : ''}]`;
+            return `[cmd: ${truncateCommand(item.commandPath)}]`;
         }
         if (!item.commandPath) {
             return null;
@@ -142,7 +146,11 @@ export class CustomCommandWidget implements Widget {
             return renderMaxWidthEditor(props);
         }
         if (props.action === EDIT_TIMEOUT_ACTION) {
-            return <TimeoutEditor {...props} />;
+            return renderNumericEditor(props, {
+                field: 'timeout',
+                prompt: `Enter timeout in ms (${MIN_TIMEOUT_MS}-${MAX_TIMEOUT_MS}, default ${DEFAULT_TIMEOUT_MS}, blank for default): `,
+                hint: 'Values outside the range are clamped. Press Enter to save, ESC to cancel'
+            });
         }
         return <CommandEditor {...props} />;
     }
@@ -196,40 +204,6 @@ const CommandEditor: React.FC<WidgetEditorProps> = ({ widget, onComplete, onCanc
                 {command.slice(cursor + 1)}
             </Text>
             <Text dimColor>Runs in your shell on every redraw. ←→ move cursor, Enter save, ESC cancel</Text>
-        </Box>
-    );
-};
-
-const TimeoutEditor: React.FC<WidgetEditorProps> = ({ widget, onComplete, onCancel }) => {
-    const [value, setValue] = useState(widget.timeout?.toString() ?? '');
-
-    useInput((input, key) => {
-        if (key.return) {
-            const timeout = parseInt(value, 10);
-            if (!isNaN(timeout) && timeout > 0) {
-                onComplete({ ...widget, timeout });
-            } else {
-                const { timeout: removed, ...rest } = widget;
-                void removed;
-                onComplete(rest);
-            }
-        } else if (key.escape) {
-            onCancel();
-        } else if (key.backspace) {
-            setValue(value.slice(0, -1));
-        } else if (shouldInsertInput(input, key) && /\d/.test(input)) {
-            setValue(value + input);
-        }
-    });
-
-    return (
-        <Box flexDirection='column'>
-            <Box>
-                <Text>{`Enter timeout in ms (${MIN_TIMEOUT_MS}-${MAX_TIMEOUT_MS}, default ${DEFAULT_TIMEOUT_MS}, blank for default): `}</Text>
-                <Text>{value}</Text>
-                <Text backgroundColor='gray' color='black'>{' '}</Text>
-            </Box>
-            <Text dimColor>Values outside the range are clamped. Press Enter to save, ESC to cancel</Text>
         </Box>
     );
 };
