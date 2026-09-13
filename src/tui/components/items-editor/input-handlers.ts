@@ -1,4 +1,4 @@
-import type { WidgetItem, WidgetType } from "../../../types/Widget";
+import type { CustomKeybind, Widget, WidgetItem, WidgetType } from "../../../types/Widget";
 
 export type WidgetPickerAction = "change" | "add" | "insert";
 export type WidgetPickerLevel = "category" | "widget";
@@ -18,6 +18,18 @@ export interface WidgetPickerState {
   categoryQuery: string;
   widgetQuery: string;
   selectedType: WidgetType | null;
+}
+
+/** A widget's own editor is open for the selected item (upstream ccstatusline shape). */
+export interface CustomEditorWidgetState {
+  widget: WidgetItem;
+  impl: Widget;
+  action?: string;
+}
+
+export function customKeybindsFor(impl: Widget | null, item: WidgetItem | undefined): CustomKeybind[] {
+  if (!impl || !item || item.type === "separator" || item.type === "flex-separator") return [];
+  return impl.getCustomKeybinds?.(item) ?? [];
 }
 
 export interface InputKey {
@@ -208,6 +220,8 @@ export interface HandleNormalInputModeArgs {
   setMoveMode: (moveMode: boolean) => void;
   setShowClearConfirm: (show: boolean) => void;
   openWidgetPicker: (action: WidgetPickerAction) => void;
+  getWidgetImpl: (type: WidgetType) => Widget | null;
+  setCustomEditorWidget: (state: CustomEditorWidgetState | null) => void;
 }
 
 export function handleNormalInputMode({
@@ -222,6 +236,8 @@ export function handleNormalInputMode({
   setMoveMode,
   setShowClearConfirm,
   openWidgetPicker,
+  getWidgetImpl,
+  setCustomEditorWidget,
 }: HandleNormalInputModeArgs): void {
   if (key.upArrow && widgets.length) {
     setSelectedIndex(selectedIndex === 0 ? widgets.length - 1 : selectedIndex - 1);
@@ -286,6 +302,19 @@ export function handleNormalInputMode({
         }
         return { ...widget, excludeFromAutoAlign: true };
       }));
+    }
+  } else if (input && !key.ctrl && !key.meta && widgets.length) {
+    // Widget-specific keys come last so reserved keys always win.
+    const current = widgets[selectedIndex];
+    if (!current) return;
+    const impl = getWidgetImpl(current.type);
+    const keybind = customKeybindsFor(impl, current).find((entry) => entry.key === input);
+    if (!impl || !keybind) return;
+    const updated = impl.handleEditorAction?.(keybind.action, current) ?? null;
+    if (updated) {
+      onUpdate(widgets.map((widget, index) => index === selectedIndex ? updated : widget));
+    } else if (impl.renderEditor) {
+      setCustomEditorWidget({ widget: current, impl, action: keybind.action });
     }
   } else if (key.escape) {
     onBack();

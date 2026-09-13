@@ -101,10 +101,37 @@ cxstatusline
 The bare command opens the configuration TUI in an interactive terminal. Choose widgets, colors
 and themes, preview, then save explicitly or press Ctrl+S. Settings live at
 `~/.config/cxstatusline/settings.json` (or your XDG config location).
-Custom command/weather widgets and unsupported Claude-only widgets are not included.
+Claude-only widgets without a Codex data source are not included; see the widget inventory in the
+project notes for the full list and reasons.
 
 For scripts, `cxstatusline render` reads a versioned JSON payload on stdin and prints ANSI rows;
 it never opens the TUI.
+
+## Custom widgets
+
+Three widgets show your own content, with the same settings fields as ccstatusline so presets import unchanged:
+
+| Widget | Field | Shows |
+|---|---|---|
+| Custom Text | `customText` | A fixed label such as `[PROD]` |
+| Custom Symbol | `customSymbol` | One glyph or emoji such as `⚡` |
+| Custom Command | `commandPath` | The first line a shell command prints |
+
+Custom Command runs `commandPath` through your shell (`/bin/sh -c`) with Codex's environment, in
+the session's working directory, on **every footer redraw** (up to five times a second while Codex
+streams). It receives the Codex status payload as JSON on stdin plus `terminal_width`. Keep
+commands cheap and local: `git status -s | wc -l` and `date +%H:%M` are good fits; network calls
+are not.
+
+Codex kills the whole statusline renderer after one second and keeps the previous frame, so
+cxstatusline caps each command at **300 ms by default, 600 ms maximum** (`timeout`, editor key
+`t`), and all commands on a render share a 600 ms budget. Over budget shows `[Budget]`; a slow
+command shows `[Timeout]`, a failing one `[Exit: N]` or `[Cmd not found]`. Commands terminated by external signals before the deadline report `[Signal: <name>]` rather than `[Timeout]`. Only the first
+non-empty line is shown; stderr is discarded. Set `preserveColors` (key `p`) to keep the command's
+own colour codes; other escape sequences and control characters are always removed. Configured background colours apply in both render modes and survive resets within the command output. `maxWidth`
+(key `w`) truncates with an ellipsis. The TUI preview never runs commands. A killed command's
+pipeline children may outlive it; avoid long-running pipelines. Imported presets list their
+commands before you confirm.
 
 ## Update
 

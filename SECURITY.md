@@ -21,6 +21,11 @@ implicitly compatible. Maintainer response is best effort; this is not an OpenAI
 - `CXSTATUSLINE_COMMAND` selects executable code: use a trusted local renderer. Rust splits
   the command into program/arguments rather than invoking a shell. Payload control characters
   are filtered before rendering; renderer-owned ANSI styling is retained.
+- `custom-command` widgets execute the shell command stored in `settings.json` (`commandPath`)
+  with the user's environment on every render. That string is user-configured, at the same trust
+  level as a shell rc file; cxstatusline never generates it. Imported presets show every command
+  in the preview before they are applied. Output is bounded (64 KiB, first line only, control
+  characters removed, SGR kept only when `preserveColors` is set).
 
 ## Download trust boundary
 

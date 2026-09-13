@@ -49,4 +49,7 @@ export const WIDGET_MANIFEST: readonly WidgetManifestEntry[] = [
   { type: "sandbox-status", create: () => new widgets.SandboxStatusWidget() },
   { type: "terminal-width", create: () => new widgets.TerminalWidthWidget() },
   { type: "free-memory", create: () => new widgets.FreeMemoryWidget() },
+  { type: "custom-text", create: () => new widgets.CustomTextWidget() },
+  { type: "custom-symbol", create: () => new widgets.CustomSymbolWidget() },
+  { type: "custom-command", create: () => new widgets.CustomCommandWidget() },
 ];
