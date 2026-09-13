@@ -30,6 +30,7 @@ export const MIN_REFRESH_MS = 1_000;
 export const MAX_REFRESH_MS = 86_400_000;
 export const REFRESH_TIMEOUT_MS = 10_000;
 export const REQUEST_STALE_MS = 60_000;
+export const MAX_FUTURE_SKEW_MS = 60_000;
 export const CACHE_MAX_AGE_MS = 604_800_000;
 export const LOADING_TOKEN = '[Loading]';
 export const ERROR_TOKEN = '[Error]';
@@ -55,12 +56,16 @@ export function scheduleRefresh(key: string, deps: CacheDeps): void {
         const child = deps.spawn(
             process.execPath,
             [deps.scriptPath, '--internal-refresh-command', key],
-            { detached: true, stdio: 'ignore', windowsHide: true }
+            {
+                detached: true,
+                stdio: 'ignore',
+                windowsHide: true
+            }
         );
         child.on('error', () => {});
         child.unref();
     } catch {
-        // Ignored; requestedAt throttle protects against repeated spawn storms
+        // Ignore spawn failures; cache remains cold and will retry on next render
     }
 }
 
@@ -85,7 +90,7 @@ export function cacheKey(command: string, cwd?: string): string {
 }
 
 /** Reads a cache document from disk, returning 'miss' on absent, unreadable, or invalid files */
-export function readDocument(filePath: string): CacheDocument | 'miss' {
+export function readDocument(filePath: string, now: number | (() => number) = Date.now): CacheDocument | 'miss' {
     try {
         const raw = readFileSync(filePath, 'utf8');
         const data = JSON.parse(raw);
@@ -101,7 +106,11 @@ export function readDocument(filePath: string): CacheDocument | 'miss' {
         ) {
             return 'miss';
         }
-        if (data.producedAt !== null && (typeof data.producedAt !== 'number' || !Number.isFinite(data.producedAt))) {
+        const nowMs = typeof now === 'function' ? now() : now;
+        if (data.requestedAt > nowMs + MAX_FUTURE_SKEW_MS) {
+            return 'miss';
+        }
+        if (data.producedAt !== null && (typeof data.producedAt !== 'number' || !Number.isFinite(data.producedAt) || data.producedAt > nowMs + MAX_FUTURE_SKEW_MS)) {
             return 'miss';
         }
         if (
@@ -224,7 +233,7 @@ function runCached(
         ? { ...context.data, terminal_width: context.terminalWidth }
         : context.data);
 
-    const doc = readDocument(docPath);
+    const doc = readDocument(docPath, deps.now);
     const now = deps.now();
     const refreshMs = resolveRefresh(item);
 
@@ -248,10 +257,8 @@ function runCached(
         return LOADING_TOKEN;
     }
 
-    const since = (now: number, t: number) => (t > now ? Number.POSITIVE_INFINITY : Math.max(0, now - t));
-
     const inFlight = doc.requestedAt > (doc.producedAt ?? -1)
-                  && since(now, doc.requestedAt) <= REQUEST_STALE_MS;
+                  && Math.max(0, now - doc.requestedAt) <= REQUEST_STALE_MS;
 
     if (inFlight) {
         if (doc.result === null) {
@@ -277,7 +284,7 @@ function runCached(
         return ERROR_TOKEN;
     }
 
-    const age = since(now, doc.producedAt ?? 0);
+    const age = Math.max(0, now - (doc.producedAt ?? 0));
     if (age <= refreshMs) {
         return processResult(doc.result, item, doc.result.timedOut ?? false);
     }

@@ -47,7 +47,7 @@ export function runRefreshCommand(cacheKey: string, deps: RefreshCommandDeps): n
     const paths = resolvePaths(deps.env);
     const docPath = join(paths.commandCacheDir, `${cacheKey}.json`);
 
-    const doc = readDocument(docPath);
+    const doc = readDocument(docPath, deps.now ?? Date.now);
     if (doc === 'miss') {
         return 0;
     }
