@@ -1,3 +1,8 @@
+import { chmodSync, mkdirSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { dirname } from 'node:path';
+
+import { writeFileAtomic } from '../../atomic';
 import type { RenderContext } from '../../types/RenderContext';
 import type { WidgetItem } from '../../types/Widget';
 import { getVisibleText, keepSgrOnly } from '../../utils/ansi';
@@ -10,6 +15,58 @@ import {
     type CommandRunner
 } from './command-runner';
 import { applyMaxWidth } from './max-width';
+
+export const CACHE_VERSION = 1;
+
+export interface CacheDocument {
+    version: number;
+    command: string;
+    cwd: string;
+    input: string;
+    requestedAt: number;
+    result: (CommandResult & { timedOut: boolean }) | null;
+    producedAt: number | null;
+}
+
+/** 16-character lowercase hex digest uniquely identifying (command, cwd) */
+export function cacheKey(command: string, cwd?: string): string {
+    const normalizedCwd = cwd ?? '';
+    return createHash('sha256')
+        .update(command + '\0' + normalizedCwd)
+        .digest('hex')
+        .slice(0, 16);
+}
+
+/** Reads a cache document from disk, returning 'miss' on absent, unreadable, or invalid files */
+export function readDocument(filePath: string): CacheDocument | 'miss' {
+    try {
+        const raw = readFileSync(filePath, 'utf8');
+        const data = JSON.parse(raw);
+        if (
+            typeof data !== 'object' ||
+            data === null ||
+            data.version !== CACHE_VERSION ||
+            typeof data.command !== 'string' ||
+            typeof data.cwd !== 'string' ||
+            typeof data.input !== 'string' ||
+            typeof data.requestedAt !== 'number'
+        ) {
+            return 'miss';
+        }
+        return data as CacheDocument;
+    } catch {
+        return 'miss';
+    }
+}
+
+/** Writes a cache document to disk atomically, ensuring directory is 0700 and file is 0600 */
+export function writeDocument(filePath: string, doc: CacheDocument): void {
+    const dir = dirname(filePath);
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    chmodSync(dir, 0o700);
+    writeFileAtomic(filePath, JSON.stringify(doc, null, 2), { mode: 0o600 });
+}
+
 
 /** First visibly non-empty line of stdout, trimmed. Codex rejects frames with blank or extra rows. */
 export function firstLine(stdout: string): string {
