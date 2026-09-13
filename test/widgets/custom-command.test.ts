@@ -115,6 +115,7 @@ describe("CustomCommandWidget editor surface", () => {
 
   test("display text, modifiers and keys match the spec", () => {
     expect(widget.getEditorDisplay(item())).toEqual({ displayText: "Custom Command (date)", modifierText: undefined });
+    expect(widget.getEditorDisplay(item({ timeout: 300 }))).toEqual({ displayText: "Custom Command (date)", modifierText: undefined });
     expect(widget.getEditorDisplay(item({ commandPath: "git status --short | wc -l", maxWidth: 12, timeout: 4000, preserveColors: true })))
       .toEqual({ displayText: "Custom Command (git status --shor...)", modifierText: "(max:12, timeout:600ms, preserve)" });
     expect(widget.getEditorDisplay(item({ commandPath: undefined }))).toEqual({ displayText: "Custom Command (No command)", modifierText: undefined });
