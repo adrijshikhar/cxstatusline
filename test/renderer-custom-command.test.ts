@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { DEFAULT_SETTINGS, type Settings } from "../src/types/Settings";
 import type { RenderContext } from "../src/types/RenderContext";
 import { getVisibleText } from "../src/utils/ansi";
+import { getColorAnsiCode } from "../src/utils/colors";
 import { renderStatusLines } from "../src/utils/renderer";
 
 const live: RenderContext = { data: { payload_version: 1 }, now: new Date(0), terminalWidth: 80, isPreview: false };
@@ -52,4 +53,16 @@ test.skipIf(process.platform === "win32")("overrideForegroundColor wins over pre
   const [solidRow] = renderStatusLines(solidSettings, live);
   expect(solidRow).not.toContain("\x1b[32m");
   expect(getVisibleText(solidRow!)).toBe("green");
+});
+
+test.skipIf(process.platform === "win32")("plain diagnostic tokens from preserveColors widgets take item colour", () => {
+  const redCode = getColorAnsiCode("red", "truecolor", false);
+  const failSettings: Settings = {
+    ...DEFAULT_SETTINGS,
+    colorLevel: 3,
+    lines: [[{ id: "c", type: "custom-command", commandPath: "exit 3", preserveColors: true, color: "red" }]],
+  };
+  const [row] = renderStatusLines(failSettings, live);
+  expect(row).toContain(redCode);
+  expect(getVisibleText(row!)).toBe("[Exit: 3]");
 });

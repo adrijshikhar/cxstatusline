@@ -882,7 +882,7 @@ export function preRenderAllWidgets(
                 const widgetImpl = getWidget(widget.type);
                 const effectiveWidget = settings.minimalistMode ? { ...widget, rawValue: true } : widget;
                 const rawText = widgetImpl.render(effectiveWidget, context, settings) ?? '';
-                styled = widgetImpl.emitsStyledOutput?.(effectiveWidget) === true;
+                styled = widgetImpl.emitsStyledOutput?.(effectiveWidget) === true && rawText.includes('\x1b');
                 widgetText = styled ? keepSgrOnly(rawText) : sanitizeRawText(rawText);
             } catch {
                 // Preserve index alignment with the configured widgets while skipping unknown output.
