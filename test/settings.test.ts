@@ -23,7 +23,8 @@ describe("settings", () => {
   test("settings enforce one to three rows and the closed widget enum", () => {
     expect(SettingsSchema.safeParse({ version: 2, lines: [] }).success).toBe(false);
     expect(SettingsSchema.safeParse({ version: 2, lines: [[], [], [], []] }).success).toBe(false);
-    expect(SettingsSchema.safeParse({ version: 2, lines: [[{ id: "x", type: "custom-command" }]] }).success).toBe(false);
+    expect(SettingsSchema.safeParse({ version: 2, lines: [[{ id: "x", type: "weather" }]] }).success).toBe(false);
+    expect(SettingsSchema.safeParse({ version: 2, lines: [[{ id: "x", type: "custom-command", commandPath: "date" }]] }).success).toBe(true);
     expect(SettingsSchema.safeParse({ version: 1, lines: [[]] }).success).toBe(false);
   });
 

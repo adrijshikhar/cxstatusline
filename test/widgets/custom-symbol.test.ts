@@ -6,7 +6,7 @@ import { CustomSymbolWidget } from "../../src/widgets/CustomSymbol";
 
 const widget = new CustomSymbolWidget();
 const live: RenderContext = { data: { payload_version: 1 }, now: new Date(0), terminalWidth: 80, isPreview: false };
-const item = (customSymbol?: string): WidgetItem => ({ id: "s", type: "custom-symbol" as any, ...(customSymbol !== undefined && { customSymbol }) });
+const item = (customSymbol?: string): WidgetItem => ({ id: "s", type: "custom-symbol", ...(customSymbol !== undefined && { customSymbol }) });
 
 test("renders the symbol, or empty when unset", () => {
   expect(widget.render(item("⚡"), live, DEFAULT_SETTINGS)).toBe("⚡");

@@ -7,6 +7,7 @@ export const CANONICAL_WIDGET_TYPES = [
   "weekly-usage", "weekly-reset-timer",
   "session-clock", "session-name", "claude-session-id", "version",
   "current-working-dir", "sandbox-status", "terminal-width", "free-memory",
+  "custom-text", "custom-symbol", "custom-command",
 ] as const;
 
 export type CanonicalWidgetType = typeof CANONICAL_WIDGET_TYPES[number];

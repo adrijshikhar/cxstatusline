@@ -22,7 +22,7 @@ const live = (): RenderContext => ({
   terminalWidth: 100,
   isPreview: false,
 });
-const item = (overrides: Partial<WidgetItem> = {}): WidgetItem => ({ id: "c", type: "custom-command" as any, commandPath: "date", ...overrides });
+const item = (overrides: Partial<WidgetItem> = {}): WidgetItem => ({ id: "c", type: "custom-command", commandPath: "date", ...overrides });
 
 describe("firstLine", () => {
   test("returns the first visibly non-empty line, trimmed", () => {

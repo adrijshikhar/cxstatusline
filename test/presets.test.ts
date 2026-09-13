@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { DEFAULT_SETTINGS } from "../src/types/Settings";
+import type { WidgetItem } from "../src/types/Widget";
 import { exportPreset, normalizeImportedItems, previewImport } from "../src/utils/presets";
 
 const fixture = (name: string): unknown => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8"));
@@ -23,12 +24,12 @@ test("owner ccstatusline preset keeps canonical IDs and reports unsupported widg
 
   expect("aliases" in preview).toBe(false);
   expect(preview.omittedTypes).toEqual([
-    "session-cost", "session-usage", "custom-command", "skills",
+    "session-cost", "session-usage", "skills",
   ]);
   expect(preview.settings.lines.map((line) => line.map((item) => item.type))).toEqual([
     ["model", "separator", "thinking-effort", "separator", "context-bar", "separator", "current-working-dir", "separator", "git-branch", "separator", "git-changes"],
     ["weekly-usage", "separator", "session-clock", "separator", "input-speed", "separator", "output-speed", "separator", "tokens-cached"],
-    ["free-memory", "separator", "session-name", "separator", "claude-session-id"],
+    ["custom-command", "separator", "free-memory", "separator", "custom-command", "separator", "session-name", "separator", "claude-session-id"],
   ]);
 });
 
@@ -38,11 +39,22 @@ test("normalization strips unknown fields and orphaned separators", () => {
     { id: "model", type: "model", color: "cyan", weather: "/never-copied" },
     { id: "middle", type: "separator" },
     { id: "extra", type: "separator" },
-    { id: "deferred", type: "custom-command" },
+    { id: "deferred", type: "skills" },
     { id: "trailing", type: "separator" },
   ]);
 
   expect(normalized.items).toEqual([{ id: "model", type: "model", color: "cyan" }]);
-  expect(normalized.omittedTypes).toEqual(["custom-command"]);
+  expect(normalized.omittedTypes).toEqual(["skills"]);
   expect("aliases" in normalized).toBe(false);
+});
+
+test("normalization keeps user-defined widget fields", () => {
+  const items: WidgetItem[] = [
+    { id: "cmd", type: "custom-command", commandPath: "date +%H:%M", preserveColors: true, timeout: 4000 },
+    { id: "txt", type: "custom-text", customText: "[PROD]" },
+    { id: "sym", type: "custom-symbol", customSymbol: "⚡" },
+  ];
+  const normalized = normalizeImportedItems(items);
+  expect(normalized.items).toEqual(items);
+  expect(normalized.omittedTypes).toEqual([]);
 });

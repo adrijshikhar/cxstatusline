@@ -44,7 +44,12 @@ const fullContext: RenderContext = {
   isPreview: false,
 };
 
-const item = (type: WidgetType, rawValue = false): WidgetItem => ({ id: type, type, rawValue });
+// Fields the user-defined widgets need before they render anything.
+const CUSTOM_FIELDS: Partial<Record<WidgetType, Partial<WidgetItem>>> = {
+  "custom-text": { customText: "[PROD]" },
+  "custom-symbol": { customSymbol: "⚡" },
+};
+const item = (type: WidgetType, rawValue = false): WidgetItem => ({ id: type, type, rawValue, ...CUSTOM_FIELDS[type] });
 const render = (type: WidgetType, context = fullContext): string | null =>
   getWidget(type).render(item(type), context, DEFAULT_SETTINGS);
 
@@ -58,7 +63,8 @@ test("session clock uses the former block timer color by default", () => {
 
 test("every non-layout catalog widget renders from a full Codex context", () => {
   for (const { type } of WIDGET_MANIFEST) {
-    if (type === "separator" || type === "flex-separator") continue;
+    // custom-command spawns a process; covered with an injected runner in test/widgets/custom-command.test.ts
+    if (type === "separator" || type === "flex-separator" || type === "custom-command") continue;
     expect(render(type), type).not.toBeNull();
   }
 });

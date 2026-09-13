@@ -7,7 +7,7 @@ import { CustomTextWidget } from "../../src/widgets/CustomText";
 const widget = new CustomTextWidget();
 const live: RenderContext = { data: { payload_version: 1 }, now: new Date(0), terminalWidth: 80, isPreview: false };
 const preview: RenderContext = { ...live, isPreview: true };
-const item = (customText?: string): WidgetItem => ({ id: "t", type: "custom-text" as any, ...(customText !== undefined && { customText }) });
+const item = (customText?: string): WidgetItem => ({ id: "t", type: "custom-text", ...(customText !== undefined && { customText }) });
 
 test("renders the configured text in live and preview mode", () => {
   expect(widget.render(item("[PROD]"), live, DEFAULT_SETTINGS)).toBe("[PROD]");
