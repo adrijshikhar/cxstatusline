@@ -49,10 +49,8 @@ jobs:
         run: |
           if [ -n "${{ needs.release-please.outputs.tag_name }}" ]; then
             echo "ref=${{ needs.release-please.outputs.tag_name }}" >> "$GITHUB_OUTPUT"
-            echo "tag=${{ needs.release-please.outputs.tag_name }}" >> "$GITHUB_OUTPUT"
           else
             echo "ref=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
-            echo "tag=v$(bun -e 'console.log(require("./package.json").version)')" >> "$GITHUB_OUTPUT"
           fi
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -77,10 +75,10 @@ jobs:
 
       - name: Attach tarball to GitHub Release
         env:
-          TAG: ${{ steps.target.outputs.tag }}
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
+          TAG="v$(node -p 'require("./package.json").version')"
           gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1 || gh release create "$TAG" --repo "$REPO" --title "cxstatusline $TAG" --notes "Source release; the packed CLI and its checksum are attached." --verify-tag
           gh release upload "$TAG" --repo "$REPO" "$RUNNER_TEMP"/cxstatusline-*.tgz "$RUNNER_TEMP"/SHA256SUMS --clobber
 
