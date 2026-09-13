@@ -64,6 +64,7 @@ export interface CacheDocument {
     requestedAt: number;
     result: (CommandResult & { timedOut: boolean }) | null;
     producedAt: number | null;
+    failedAt?: number | null;
 }
 
 /** 16-character lowercase hex digest uniquely identifying (command, cwd) */
@@ -93,6 +94,13 @@ export function readDocument(filePath: string): CacheDocument | 'miss' {
             return 'miss';
         }
         if (data.producedAt !== null && (typeof data.producedAt !== 'number' || !Number.isFinite(data.producedAt))) {
+            return 'miss';
+        }
+        if (
+            data.failedAt !== undefined &&
+            data.failedAt !== null &&
+            (typeof data.failedAt !== 'number' || !Number.isFinite(data.failedAt))
+        ) {
             return 'miss';
         }
         if (data.result !== null) {
@@ -220,7 +228,8 @@ function runCached(
             input,
             requestedAt: now,
             result: null,
-            producedAt: null
+            producedAt: null,
+            failedAt: null
         };
         try {
             writeDocument(docPath, newDoc);
@@ -238,7 +247,7 @@ function runCached(
 
     if (inFlight) {
         if (doc.result === null) {
-            return LOADING_TOKEN;
+            return doc.failedAt !== null ? ERROR_TOKEN : LOADING_TOKEN;
         }
         return processResult(doc.result, item, doc.result.timedOut ?? false);
     }
@@ -248,7 +257,8 @@ function runCached(
         const updatedDoc: CacheDocument = {
             ...doc,
             input,
-            requestedAt: now
+            requestedAt: now,
+            failedAt: now
         };
         try {
             writeDocument(docPath, updatedDoc);

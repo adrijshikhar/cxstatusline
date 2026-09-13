@@ -71,7 +71,8 @@ export function runRefreshCommand(cacheKey: string, deps: RefreshCommandDeps): n
     const updatedDoc: CacheDocument = {
         ...doc,
         result: { ...result, timedOut },
-        producedAt: now
+        producedAt: now,
+        failedAt: null
     };
 
     try {

@@ -3,6 +3,7 @@ import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
   CACHE_VERSION,
+  REQUEST_STALE_MS,
   cacheKey,
   productionCacheDeps,
   readDocument,
@@ -74,6 +75,7 @@ describe("readDocument", () => {
       requestedAt: 1757740000000,
       result: null,
       producedAt: null,
+      failedAt: null,
     };
     writeDocument(file, doc);
     expect(readDocument(file)).toEqual(doc);
@@ -94,6 +96,10 @@ describe("readDocument", () => {
 
     // Invalid producedAt:
     writeFileAtomic(file, JSON.stringify({ ...populated, producedAt: "x" }));
+    expect(readDocument(file)).toBe("miss");
+
+    // Invalid failedAt:
+    writeFileAtomic(file, JSON.stringify({ ...populated, failedAt: "x" }));
     expect(readDocument(file)).toBe("miss");
 
     // Invalid result.stdout:
@@ -697,6 +703,37 @@ describe("resolveCommandText cached render path and throttling", () => {
       widget.runner = originalRunner;
       productionCacheDeps.spawn = originalSpawn;
     }
+  });
+
+  test("five consecutive renders of a stale null-result document all return [Error], with exactly one spawn", () => {
+    const { root } = tmpEnv();
+    const cacheDir = join(root, "commands");
+    const key = cacheKey("date", "/my/repo");
+    const docPath = join(cacheDir, `${key}.json`);
+    let nowTime = 100_000;
+    const doc: CacheDocument = {
+      version: CACHE_VERSION,
+      command: "date",
+      cwd: "/my/repo",
+      input: "{}",
+      requestedAt: nowTime - (REQUEST_STALE_MS + 5_000), // stale
+      result: null,
+      producedAt: null,
+    };
+    writeDocument(docPath, doc);
+
+    const ctx = liveContext(cacheDir);
+    const item = makeItem({ refreshMs: 5000 });
+    const runner = fakeRunner();
+    const { spawn, calls } = fakeSpawnHarness();
+    const deps: CacheDeps = { spawn, scriptPath: "/bin/cxstatusline", now: () => nowTime };
+
+    for (let i = 0; i < 5; i++) {
+      nowTime += 500;
+      const rendered = resolveCommandText(item, ctx, runner.runner, deps);
+      expect(rendered).toBe("[Error]");
+    }
+    expect(calls.length).toBe(1);
   });
 });
 
