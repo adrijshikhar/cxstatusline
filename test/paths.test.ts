@@ -42,7 +42,15 @@ describe("resolvePaths", () => {
     expect(p.currentGeneration.startsWith(`${p.libexecDir}/`)).toBe(true);
   });
 
+  test("commandCacheDir follows XDG_CACHE_HOME, else ~/.cache", () => {
+    expect(resolvePaths({ HOME: "/h", XDG_CACHE_HOME: "/xc" }).commandCacheDir)
+      .toBe("/xc/cxstatusline/commands");
+    expect(resolvePaths({ HOME: "/h" }).commandCacheDir)
+      .toBe("/h/.cache/cxstatusline/commands");
+  });
+
   test("throws without HOME", () => {
     expect(() => resolvePaths({})).toThrow(/HOME/);
   });
 });
+

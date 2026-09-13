@@ -216,4 +216,22 @@ describe("command dispatch", () => {
       expect(t.err.join("")).toMatch(/usage/i);
     });
   }
+  test("--internal-refresh-command is dispatched without reading stdin, produces no stdout, and is absent from USAGE", async () => {
+    const t = io("");
+    const throwingIo = {
+      ...t.io,
+      stdin: () => {
+        throw new Error("stdin must not be read");
+      },
+    };
+    // Missing key exits 2:
+    expect(await main(["--internal-refresh-command"], throwingIo)).toBe(2);
+    expect(t.out).toEqual([]);
+
+    // Valid key with absent document exits 0:
+    expect(await main(["--internal-refresh-command", "0123456789abcdef"], throwingIo)).toBe(0);
+    expect(t.out).toEqual([]);
+
+    expect(USAGE).not.toContain("--internal-refresh-command");
+  });
 });

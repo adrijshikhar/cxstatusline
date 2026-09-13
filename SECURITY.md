@@ -26,6 +26,15 @@ implicitly compatible. Maintainer response is best effort; this is not an OpenAI
   level as a shell rc file; cxstatusline never generates it. Imported presets show every command
   in the preview before they are applied. Output is bounded (64 KiB, first line only, control
   characters removed, SGR kept only when `preserveColors` is set).
+- Background cached custom commands (`refreshMs`) invoke `cxstatusline --internal-refresh-command <key>`.
+  The internal flag accepts exactly one 16-hex-character key validated against `/^[0-9a-f]{16}$/`
+  before any filesystem path is constructed. The command and working directory are never passed on
+  the command line; they are read from the on-disk cache document, whose key is re-derived and
+  verified against the argument before execution. Cache documents are created with mode `0600`
+  inside a directory with mode `0700` because they store raw command stdout and the render payload.
+  If the cache directory is a symbolic link, cxstatusline refuses to write into it and falls back to
+  synchronous execution rather than following symlinks or mutating target permissions.
+  The refresh process cannot schedule further refreshes (no spawn imports).
 
 ## Download trust boundary
 
@@ -52,8 +61,9 @@ implicitly compatible. Maintainer response is best effort; this is not an OpenAI
 | Generation metadata | `~/.local/libexec/cxstatusline/generations/<id>/installation.json` |
 | Wrapper and renderer link | `~/.local/bin/` |
 | Hook configuration | `$CODEX_HOME/hooks.json` or `~/.codex/hooks.json` |
+| Command cache | `~/.cache/cxstatusline/commands/` |
 
-XDG variables can relocate config/state/source directories. No administrator privileges are
+XDG variables can relocate config/state/cache/source directories. No administrator privileges are
 required; do not run with sudo. Files use account permissions and umask, not CX encryption.
 Settings and logs may contain personal paths and diagnostics; protect/redact them accordingly.
 

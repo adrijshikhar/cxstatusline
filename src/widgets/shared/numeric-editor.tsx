@@ -12,7 +12,7 @@ import type {
 import { shouldInsertInput } from '../../utils/input-guards';
 
 export interface NumericEditorOptions {
-    field: 'maxWidth' | 'timeout';
+    field: 'maxWidth' | 'timeout' | 'refreshMs';
     prompt: string;
     hint: string;
 }

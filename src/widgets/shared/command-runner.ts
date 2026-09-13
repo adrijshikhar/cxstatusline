@@ -51,9 +51,13 @@ export const spawnCommand: CommandRunner = ({ command, input, timeoutMs, cwd }) 
     };
 };
 
-export function resolveTimeout(item: WidgetItem): number {
+export function resolveTimeout(item: { timeout?: number | undefined }): number {
     const requested = item.timeout ?? DEFAULT_TIMEOUT_MS;
     return Math.min(MAX_TIMEOUT_MS, Math.max(MIN_TIMEOUT_MS, requested));
+}
+
+export function wasTimeout(result: CommandResult, elapsedMs: number, timeoutMs: number): boolean {
+    return result.errorCode === 'ETIMEDOUT' || elapsedMs >= timeoutMs;
 }
 
 // One budget per render, keyed by the RenderContext object: every renderer process starts fresh,

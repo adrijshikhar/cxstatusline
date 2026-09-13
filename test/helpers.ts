@@ -12,6 +12,7 @@ export function tmpEnv(prefix = "cxstatusline-test-"): { env: Env; root: string 
   const env: Env = {
     HOME: root,
     XDG_CONFIG_HOME: join(root, ".config"),
+    XDG_CACHE_HOME: join(root, ".cache"),
     XDG_STATE_HOME: join(root, ".local", "state"),
     XDG_DATA_HOME: join(root, ".local", "share"),
     CODEX_HOME: join(root, ".codex"),
