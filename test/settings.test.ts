@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { DEFAULT_SETTINGS, SettingsSchema } from "../src/types/Settings";
+import { CURRENT_VERSION, DEFAULT_SETTINGS, SettingsSchema } from "../src/types/Settings";
 import { WidgetItemSchema } from "../src/types/Widget";
 import { loadSettings, saveSettings } from "../src/utils/config";
 import { tmpEnv } from "./helpers";
@@ -33,11 +33,11 @@ describe("settings", () => {
 
 
   test("settings enforce one to three rows and the closed widget enum", () => {
-    expect(SettingsSchema.safeParse({ version: 2, lines: [] }).success).toBe(false);
-    expect(SettingsSchema.safeParse({ version: 2, lines: [[], [], [], []] }).success).toBe(false);
-    expect(SettingsSchema.safeParse({ version: 2, lines: [[{ id: "x", type: "weather" }]] }).success).toBe(false);
-    expect(SettingsSchema.safeParse({ version: 2, lines: [[{ id: "x", type: "custom-command", commandPath: "date" }]] }).success).toBe(true);
-    expect(SettingsSchema.safeParse({ version: 1, lines: [[]] }).success).toBe(false);
+    expect(SettingsSchema.safeParse({ version: CURRENT_VERSION, lines: [] }).success).toBe(false);
+    expect(SettingsSchema.safeParse({ version: CURRENT_VERSION, lines: [[], [], [], []] }).success).toBe(false);
+    expect(SettingsSchema.safeParse({ version: CURRENT_VERSION, lines: [[{ id: "x", type: "weather" }]] }).success).toBe(false);
+    expect(SettingsSchema.safeParse({ version: CURRENT_VERSION, lines: [[{ id: "x", type: "custom-command", commandPath: "date" }]] }).success).toBe(true);
+    expect(SettingsSchema.safeParse({ version: CURRENT_VERSION - 1, lines: [[]] }).success).toBe(false);
   });
 
   test("writes defaults only when the settings file is absent", async () => {
@@ -63,7 +63,7 @@ describe("settings", () => {
   test("invalid schema settings are preserved", async () => {
     const file = settingsFile();
     mkdirSync(join(file, ".."), { recursive: true });
-    const invalid = JSON.stringify({ version: 2, lines: [] });
+    const invalid = JSON.stringify({ version: CURRENT_VERSION, lines: [] });
     writeFileSync(file, invalid);
 
     const loaded = await loadSettings(file);

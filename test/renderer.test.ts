@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import type { Settings } from "../src/types";
+import { CURRENT_VERSION } from "../src/types/Settings";
 
 const { renderStatusLines } = await import("../src/utils/renderer");
 const { getVisibleText, getVisibleWidth } = await import("../src/utils/ansi");
@@ -19,7 +20,7 @@ const previewContext = {
 };
 
 const threeRowSettings: Settings = {
-  version: 2,
+  version: CURRENT_VERSION,
   lines: [
     [{ id: "1", type: "model", color: "cyan" }],
     [{ id: "2", type: "git-branch", color: "magenta" }],

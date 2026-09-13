@@ -4,7 +4,7 @@ import { FlexModeSchema } from "./FlexMode";
 import { PowerlineConfigSchema } from "./PowerlineConfig";
 import { WidgetItemSchema } from "./Widget";
 
-export const CURRENT_VERSION = 2;
+export const CURRENT_VERSION = 3;
 
 export const DefaultPaddingSideSchema = z.enum(["both", "left", "right"]);
 export type DefaultPaddingSide = z.infer<typeof DefaultPaddingSideSchema>;

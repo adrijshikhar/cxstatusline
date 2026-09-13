@@ -1,6 +1,7 @@
 import { lstat, mkdir, readFile, readlink, realpath, rename, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import { CURRENT_VERSION, DEFAULT_SETTINGS, SettingsSchema, type Settings } from "../types/Settings";
+import { migrateSettings } from "./migrations";
 
 interface AtomicWriteTarget {
   targetPath: string;
@@ -72,7 +73,12 @@ export async function loadSettings(file: string): Promise<{ settings: Settings; 
     return { settings: DEFAULT_SETTINGS, error: "settings.json is not valid JSON" };
   }
 
-  const parsed = SettingsSchema.safeParse(raw);
+  const migration = migrateSettings(raw);
+  if (migration.unknownVersion) {
+    return { settings: DEFAULT_SETTINGS, error: "settings.json is not in a valid format" };
+  }
+
+  const parsed = SettingsSchema.safeParse(migration.settings);
   return parsed.success
     ? { settings: parsed.data, error: null }
     : { settings: DEFAULT_SETTINGS, error: "settings.json is not in a valid format" };
