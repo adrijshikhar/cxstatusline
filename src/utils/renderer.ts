@@ -47,6 +47,10 @@ function sanitizeStringArray(value: unknown, fallback: string[]): string[] {
         : fallback;
 }
 
+function reapplyBackground(content: string, bgCode: string): string {
+    return content.replace(/\x1b\[(?:0|49)m/g, (m) => m + bgCode);
+}
+
 /**
  * Whether pre-rendered content keeps its own SGR styling. It does not when colour is off or when a
  * solid override foreground must win; then the widget's codes are stripped and the normal styling
@@ -575,6 +579,9 @@ function renderPowerlineStatusLine(
             );
             widgetContent += gradientResult.text;
             powerlineGradientColumn = gradientResult.nextColumn;
+        } else if (isStyled && widget.bgColor) {
+            const bgCode = getColorAnsiCode(widget.bgColor, colorLevel, true);
+            widgetContent += reapplyBackground(styledContent, bgCode);
         } else {
             widgetContent += styledContent;
         }
