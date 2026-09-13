@@ -16,18 +16,27 @@ export interface ImportPreviewDialogProps {
 /** Adapted from ccstatusline's import review, without merge or external widgets. */
 export function ImportPreviewDialog({ preview, terminalWidth, busy = false, onConfirm, onCancel }: ImportPreviewDialogProps): React.JSX.Element {
   const rows = renderStatusLines(preview.settings, { ...PREVIEW_CONTEXT, isPreview: true, terminalWidth });
-  const commands = preview.settings.lines.flat()
-    .filter((item) => item.type === "custom-command")
+  const allCustomCommands = preview.settings.lines.flat()
+    .filter((item) => item.type === "custom-command");
+  const uncachedCommands = allCustomCommands
+    .filter((item) => item.refreshMs === undefined)
     .map((item) => item.commandPath ?? "(no command)");
+  const cachedCommands = allCustomCommands
+    .filter((item) => item.refreshMs !== undefined)
+    .map((item) => `${item.commandPath ?? "(no command)"} (every ${item.refreshMs}ms)`);
   return (
     <Box flexDirection="column">
       <Text bold>Import Preview</Text>
       <Text dimColor>Preview rendered by the production statusline renderer:</Text>
       <Box marginTop={1} flexDirection="column">{rows.map((row, index) => <Text key={index}>{row}</Text>)}</Box>
       {preview.omittedTypes.length > 0 && <Text color="yellow">{`Deferred unsupported widgets: ${preview.omittedTypes.join(", ")}`}</Text>}
-      {commands.length > 0 && <Box flexDirection="column">
+      {uncachedCommands.length > 0 && <Box flexDirection="column">
         <Text color="yellow">Commands that will run on every render:</Text>
-        {commands.map((command, index) => <Text key={index} color="yellow">{`  ${command}`}</Text>)}
+        {uncachedCommands.map((command, index) => <Text key={index} color="yellow">{`  ${command}`}</Text>)}
+      </Box>}
+      {cachedCommands.length > 0 && <Box flexDirection="column">
+        <Text color="yellow">Cached commands (run in background):</Text>
+        {cachedCommands.map((command, index) => <Text key={index} color="yellow">{`  ${command}`}</Text>)}
       </Box>}
       {busy ? <Text dimColor>Applying imported configuration…</Text> : <>
         <Text>Apply this preset?</Text>

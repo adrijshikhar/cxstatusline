@@ -175,3 +175,23 @@ test("import preview lists every custom command before asking to apply", async (
     app.cleanup();
   }
 });
+
+test("import preview lists cached commands separately with their interval", async () => {
+  const { root } = tmpEnv();
+  const presetPath = join(root, "cached-commands.json");
+  writeFileSync(presetPath, exportPreset({
+    ...DEFAULT_SETTINGS,
+    lines: [[
+      { id: "a", type: "custom-command", commandPath: "sync-cmd" },
+      { id: "b", type: "custom-command", commandPath: "cached-cmd", refreshMs: 5000 },
+    ]],
+  }));
+  const app = createTui(<App initialSettings={initialSettings()} settingsPath={join(root, "settings.json")} />);
+  try {
+    await openImport(app, presetPath);
+    expect(app.lastFrame()).toContain("Commands that will run on every render:\n  sync-cmd");
+    expect(app.lastFrame()).toContain("Cached commands (run in background):\n  cached-cmd (every 5000ms)");
+  } finally {
+    app.cleanup();
+  }
+});

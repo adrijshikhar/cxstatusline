@@ -14,24 +14,24 @@ import type {
     WidgetEditorProps,
     WidgetItem
 } from '../types/Widget';
-import { getVisibleText, keepSgrOnly } from '../utils/ansi';
 import { shouldInsertInput } from '../utils/input-guards';
 
 import {
     DEFAULT_TIMEOUT_MS,
     MAX_TIMEOUT_MS,
     MIN_TIMEOUT_MS,
-    describeFailure,
-    refundBudget,
     resolveTimeout,
     spawnCommand,
-    takeBudget,
     type CommandRunner
 } from './shared/command-runner';
+import {
+    MIN_REFRESH_MS,
+    MAX_REFRESH_MS,
+    resolveCommandText
+} from './shared/cached-command';
 import { makeModifierText } from './shared/editor-display';
 import {
     MAX_WIDTH_ACTION,
-    applyMaxWidth,
     getMaxWidthKeybind,
     getMaxWidthModifier,
     renderMaxWidthEditor
@@ -40,6 +40,7 @@ import { renderNumericEditor } from './shared/numeric-editor';
 
 const EDIT_COMMAND_ACTION = 'edit-command';
 const EDIT_TIMEOUT_ACTION = 'edit-timeout';
+const EDIT_REFRESH_ACTION = 'edit-refresh';
 const TOGGLE_PRESERVE_ACTION = 'toggle-preserve';
 const PREVIEW_COMMAND_CHARS = 20;
 
@@ -47,17 +48,16 @@ export function truncateCommand(cmd: string): string {
     return cmd.length > PREVIEW_COMMAND_CHARS ? `${cmd.substring(0, PREVIEW_COMMAND_CHARS - 3)}...` : cmd;
 }
 
-/** First visibly non-empty line of stdout, trimmed. Codex rejects frames with blank or extra rows. */
-export function firstLine(stdout: string): string {
-    return stdout
-        .split(/\r?\n/)
-        .map(line => line.trim())
-        .find(line => getVisibleText(line).trim().length > 0) ?? '';
+export function previewText(item: WidgetItem): string {
+    if (!item.commandPath) {
+        return '[No command]';
+    }
+    const shown = item.commandPath.substring(0, PREVIEW_COMMAND_CHARS);
+    return `[cmd: ${shown}${item.commandPath.length > PREVIEW_COMMAND_CHARS ? '...' : ''}]`;
 }
 
-// Adapted from ccstatusline's CustomCommand: same fields, keys, preview and diagnostic tokens.
-// Departures for the Codex host: injectable runner, clamped timeout with a shared per-render
-// budget, first-line-only output, and SGR-only colour preservation.
+// Presentation only; execution lives in shared/cached-command.ts (cache policy) and
+// shared/command-runner.ts (spawn options, diagnostic tokens); route upstream execution hunks there.
 export class CustomCommandWidget implements Widget {
     constructor(private readonly runner: CommandRunner = spawnCommand) {}
 
@@ -77,6 +77,9 @@ export class CustomCommandWidget implements Widget {
         if (item.timeout !== undefined && item.timeout !== DEFAULT_TIMEOUT_MS) {
             modifiers.push(`timeout:${resolveTimeout(item)}ms`);
         }
+        if (item.refreshMs !== undefined) {
+            modifiers.push(`refresh: ${item.refreshMs}ms`);
+        }
         if (item.preserveColors) {
             modifiers.push('preserve');
         }
@@ -91,46 +94,9 @@ export class CustomCommandWidget implements Widget {
     }
 
     render(item: WidgetItem, context: RenderContext, _settings: Settings): string | null {
-        if (context.isPreview) {
-            if (!item.commandPath) {
-                return '[No command]';
-            }
-            const shown = item.commandPath.substring(0, PREVIEW_COMMAND_CHARS);
-            return `[cmd: ${shown}${item.commandPath.length > PREVIEW_COMMAND_CHARS ? '...' : ''}]`;
-        }
-        if (!item.commandPath) {
-            return null;
-        }
-
-        const timeoutMs = takeBudget(context, resolveTimeout(item));
-        if (timeoutMs === 0) {
-            return '[Budget]';
-        }
-
-        const input = JSON.stringify(typeof context.terminalWidth === 'number'
-            ? { ...context.data, terminal_width: context.terminalWidth }
-            : context.data);
-        const cwd = context.data.session?.cwd;
-        const start = performance.now();
-        const result = this.runner({
-            command: item.commandPath,
-            input,
-            timeoutMs,
-            cwd: cwd && cwd.length > 0 ? cwd : undefined
-        });
-        const elapsed = performance.now() - start;
-        refundBudget(context, timeoutMs - elapsed);
-
-        const timedOut = result.errorCode === 'ETIMEDOUT' || elapsed >= timeoutMs;
-        const failure = describeFailure(result, timedOut);
-        if (failure) {
-            return failure;
-        }
-
-        const line = firstLine(result.stdout);
-        const cleaned = item.preserveColors ? keepSgrOnly(line) : keepSgrOnly(getVisibleText(line));
-        const text = applyMaxWidth(cleaned, item.maxWidth);
-        return getVisibleText(text).trim().length > 0 ? text : null;
+        if (context.isPreview) return previewText(item);
+        if (!item.commandPath) return null;
+        return resolveCommandText(item, context, this.runner);
     }
 
     getCustomKeybinds(): CustomKeybind[] {
@@ -138,6 +104,7 @@ export class CustomCommandWidget implements Widget {
             { key: 'e', label: '(e)dit cmd', action: EDIT_COMMAND_ACTION },
             getMaxWidthKeybind(),
             { key: 't', label: '(t)imeout', action: EDIT_TIMEOUT_ACTION },
+            { key: 'f', label: 're(f)resh', action: EDIT_REFRESH_ACTION },
             { key: 'p', label: '(p)reserve colors', action: TOGGLE_PRESERVE_ACTION }
         ];
     }
@@ -151,6 +118,13 @@ export class CustomCommandWidget implements Widget {
                 field: 'timeout',
                 prompt: `Enter timeout in ms (${MIN_TIMEOUT_MS}-${MAX_TIMEOUT_MS}, default ${DEFAULT_TIMEOUT_MS}, blank for default): `,
                 hint: 'Values outside the range are clamped. Press Enter to save, ESC to cancel'
+            });
+        }
+        if (props.action === EDIT_REFRESH_ACTION) {
+            return renderNumericEditor(props, {
+                field: 'refreshMs',
+                prompt: `Enter refresh interval in ms (${MIN_REFRESH_MS}-${MAX_REFRESH_MS}, blank for uncached): `,
+                hint: 'Output is shared by every session in the same directory. Press Enter to save, ESC to cancel'
             });
         }
         return <CommandEditor {...props} />;

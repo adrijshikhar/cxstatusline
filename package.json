@@ -30,6 +30,7 @@
     "typecheck": "tsc --noEmit",
     "check:package": "bun run scripts/check-package.ts",
     "upstream:watch": "bun run scripts/upstream-watch.ts",
+    "probe:stdio": "bun run scripts/probe-detached-stdio.ts",
     "link:local": "bun run build && mkdir -p \"$HOME/.local/bin\" && ln -sfn \"$PWD/dist/cxstatusline.js\" \"$HOME/.local/bin/cxstatusline\" && cxstatusline --version"
   },
   "dependencies": {

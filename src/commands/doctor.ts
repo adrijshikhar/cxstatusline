@@ -1,4 +1,5 @@
-import { existsSync, lstatSync, readFileSync, readlinkSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readlinkSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import type { Context } from "../context";
 import { VERSION } from "../version-info";
 import { describeLookup, readUpstreamVersion, resolveUpstream } from "../codex/upstream";
@@ -7,6 +8,7 @@ import { lockHolder, pidAlive } from "../lock";
 import { isOurWrapper } from "../patch/wrapper";
 import { RELEASE_UNAVAILABLE, readState, type State } from "../state";
 import { behindWithinMinor, needsRepatch, parseSemver } from "../version";
+import { formatDuration } from "../utils/format";
 import { bookkeepingLine, classifyGeneration, generationDetailLines, legacyLine, toolchainLine } from "./doctor-generation";
 
 export interface DoctorLine {
@@ -75,6 +77,31 @@ function lastAttemptLine(state: State): DoctorLine {
   return line("last_attempt", `failed ${a.version} at ${a.at}${reasonPart}${backoff}`, false);
 }
 
+function commandCacheLine(ctx: Context): DoctorLine {
+  const dir = ctx.paths.commandCacheDir;
+  try {
+    const entries = readdirSync(dir).filter((f) => f.endsWith(".json"));
+    if (entries.length === 0) {
+      return line("command_cache", "0 entries");
+    }
+    const now = ctx.now().getTime();
+    let oldestMtime = Infinity;
+    for (const f of entries) {
+      try {
+        const st = lstatSync(join(dir, f));
+        if (st.mtimeMs < oldestMtime) oldestMtime = st.mtimeMs;
+      } catch {
+        // Ignore unreadable entries
+      }
+    }
+    const ageMs = oldestMtime < Infinity ? Math.max(0, now - oldestMtime) : 0;
+    const count = `${entries.length} ${entries.length === 1 ? "entry" : "entries"}`;
+    return line("command_cache", `${count} (oldest: ${formatDuration(ageMs)})`);
+  } catch {
+    return line("command_cache", "0 entries");
+  }
+}
+
 export function doctorReport(ctx: Context): DoctorLine[] {
   const { state, corrupt } = readState(ctx.paths.stateFile);
   const lookup = resolveUpstream(ctx.paths, ctx.env, isOurWrapper, state.upstream_bin);
@@ -115,6 +142,7 @@ export function doctorReport(ctx: Context): DoctorLine[] {
     lastAttemptLine(state),
     toolchainLine(ctx, source),
     lockLine(ctx),
+    commandCacheLine(ctx),
   ];
   return lines.filter((l): l is DoctorLine => l !== null);
 }

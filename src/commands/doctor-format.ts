@@ -27,7 +27,7 @@ const SECTIONS: readonly Section[] = [
   },
   {
     title: "State & Locks",
-    keys: ["state", "patched_from", "last_attempt", "lock"],
+    keys: ["state", "patched_from", "last_attempt", "lock", "command_cache"],
   },
 ];
 
