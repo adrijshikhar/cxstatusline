@@ -106,6 +106,21 @@ describe("widget editor dispatch", () => {
     }
   });
 
+  test("custom-text editor supports Ctrl+Left jump to start", async () => {
+    const app = open([[{ id: "t", type: "custom-text" }]]);
+    try {
+      await enterLineOne(app);
+      await app.write("e");
+      await app.write("abc");
+      await app.write("\x1b[1;5D");
+      await app.write("X");
+      await app.write("\r");
+      expect(app.lastFrame()).toContain("Custom Text (Xabc)");
+    } finally {
+      app.cleanup();
+    }
+  });
+
   test("custom-symbol is edited with e", async () => {
     const app = open([[{ id: "s", type: "custom-symbol" }]]);
     try {

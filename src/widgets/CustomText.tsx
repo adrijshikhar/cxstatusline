@@ -93,6 +93,11 @@ const CustomTextEditor: React.FC<WidgetEditorProps> = ({ widget, onComplete, onC
             onComplete({ ...widget, customText: text });
         } else if (key.escape) {
             onCancel();
+        // cxstatusline: Ink 6 reports arrows via key.leftArrow/rightArrow; upstream's input === 'ArrowLeft' never fires.
+        } else if (key.ctrl && key.leftArrow) {
+            setCursorPos(0);
+        } else if (key.ctrl && key.rightArrow) {
+            setCursorPos(text.length);
         } else if (key.leftArrow) {
             const currentGraphemeIndex = stringToGraphemeIndex(text, cursorPos);
             if (currentGraphemeIndex > 0) {
@@ -106,10 +111,6 @@ const CustomTextEditor: React.FC<WidgetEditorProps> = ({ widget, onComplete, onC
                 const newStringIndex = graphemeToStringIndex(text, currentGraphemeIndex + 1);
                 setCursorPos(newStringIndex);
             }
-        } else if (key.ctrl && input === 'ArrowLeft') {
-            setCursorPos(0);
-        } else if (key.ctrl && input === 'ArrowRight') {
-            setCursorPos(text.length);
         } else if (key.backspace) {
             if (cursorPos > 0) {
                 const currentGraphemeIndex = stringToGraphemeIndex(text, cursorPos);
