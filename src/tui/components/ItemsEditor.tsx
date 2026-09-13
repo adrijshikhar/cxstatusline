@@ -1,15 +1,18 @@
 import { Box, Text, useInput } from "ink";
 import React, { useMemo, useState } from "react";
 import type { Settings } from "../../types/Settings";
-import type { WidgetItem, WidgetType } from "../../types/Widget";
+import type { Widget, WidgetItem, WidgetType } from "../../types/Widget";
 import { WIDGET_MANIFEST } from "../../utils/widget-manifest";
+import { getWidget } from "../../utils/widgets";
 import { ConfirmDialog } from "./ConfirmDialog";
 import {
+  customKeybindsFor,
   filterWidgetCatalog,
   handleMoveInputMode,
   handleNormalInputMode,
   handlePickerInputMode,
   normalizePickerState,
+  type CustomEditorWidgetState,
   type WidgetCatalogEntry,
   type WidgetPickerAction,
   type WidgetPickerState,
@@ -28,20 +31,36 @@ export function displayWidgetType(type: WidgetType): string {
   return type.replace(/-/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function categoryFor(type: WidgetType): string {
-  if (type === "separator" || type === "flex-separator") return "Layout";
-  if (type.startsWith("git-")) return "Git";
-  if (type.includes("token") || type.includes("context") || type.includes("cache") || type.includes("speed")) return "Usage";
-  if (type.includes("five-hour") || type.includes("weekly")) return "Limits";
-  if (type === "model" || type === "thinking-effort") return "Model";
-  return "Session";
+function getWidgetImpl(type: WidgetType): Widget | null {
+  try {
+    return getWidget(type);
+  } catch {
+    return null;
+  }
 }
 
+function isLayout(type: WidgetType): boolean {
+  return type === "separator" || type === "flex-separator";
+}
+
+/** Catalog rows come from the widgets themselves (upstream parity); separators stay under Layout. */
 function buildCatalog(): WidgetCatalogEntry[] {
-  return WIDGET_MANIFEST.map(({ type }) => {
-    const displayName = displayWidgetType(type);
-    return { type, displayName, description: displayName, category: categoryFor(type), searchText: `${displayName} ${type}`.toLowerCase() };
+  return WIDGET_MANIFEST.map(({ type, create }) => {
+    const impl = isLayout(type) ? null : create();
+    const displayName = impl ? impl.getDisplayName() : displayWidgetType(type);
+    const description = impl ? impl.getDescription() : displayName;
+    const category = impl ? impl.getCategory() : "Layout";
+    return { type, displayName, description, category, searchText: `${displayName} ${type}`.toLowerCase() };
   });
+}
+
+/** One list row: separators show their character, widgets show their own editor display. */
+function rowLabel(widget: WidgetItem): string {
+  if (widget.type === "separator") return `${displayWidgetType(widget.type)} (${widget.character ?? "|"})`;
+  const impl = isLayout(widget.type) ? null : getWidgetImpl(widget.type);
+  if (!impl) return displayWidgetType(widget.type);
+  const { displayText, modifierText } = impl.getEditorDisplay(widget);
+  return modifierText ? `${displayText} ${modifierText}` : displayText;
 }
 
 function newWidget(type: WidgetType): WidgetItem {
@@ -57,6 +76,7 @@ export function ItemsEditor({ widgets, onUpdate, onBack, lineNumber, settings: _
   const [moveMode, setMoveMode] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [widgetPicker, setWidgetPicker] = useState<WidgetPickerState | null>(null);
+  const [customEditor, setCustomEditor] = useState<CustomEditorWidgetState | null>(null);
   const widgetCatalog = useMemo(buildCatalog, []);
   const widgetCategories = useMemo(() => ["All", ...new Set(widgetCatalog.map((entry) => entry.category))], [widgetCatalog]);
 
@@ -87,6 +107,7 @@ export function ItemsEditor({ widgets, onUpdate, onBack, lineNumber, settings: _
   };
 
   useInput((input, key) => {
+    if (customEditor) return;
     if (showClearConfirm) return;
     if (widgetPicker) {
       handlePickerInputMode({ input, key, widgetPicker, widgetCatalog, widgetCategories, setWidgetPicker, applyWidgetPickerSelection });
@@ -108,8 +129,23 @@ export function ItemsEditor({ widgets, onUpdate, onBack, lineNumber, settings: _
       setMoveMode,
       setShowClearConfirm,
       openWidgetPicker,
+      getWidgetImpl,
+      setCustomEditorWidget: setCustomEditor,
     });
   });
+
+  if (customEditor?.impl.renderEditor) {
+    const editor = customEditor.impl.renderEditor({
+      widget: customEditor.widget,
+      action: customEditor.action,
+      onComplete: (updated) => {
+        onUpdate(widgets.map((widget, index) => index === selectedIndex ? updated : widget));
+        setCustomEditor(null);
+      },
+      onCancel: () => setCustomEditor(null),
+    });
+    return editor ?? <Text>Unknown editor</Text>;
+  }
 
   if (showClearConfirm) {
     return (
@@ -140,13 +176,17 @@ export function ItemsEditor({ widgets, onUpdate, onBack, lineNumber, settings: _
     );
   }
 
+  const current = widgets[selectedIndex];
+  const customLabels = customKeybindsFor(current ? getWidgetImpl(current.type) : null, current).map((entry) => entry.label).join(", ");
+  const normalHelp = "↑↓ select, ←→ change, Enter move, (a)dd, (i)nsert, (d)elete, (k)opy, (c)lear, Escape back";
+
   return (
     <Box flexDirection="column">
       <Text bold>{`Edit Line ${lineNumber}`}{moveMode && <Text color="blue"> [MOVE MODE]</Text>}</Text>
-      <Text dimColor>{moveMode ? "↑↓ to move, Escape or Enter to finish" : "↑↓ select, ←→ change, Enter move, (a)dd, (i)nsert, (d)elete, (k)opy, (c)lear, Escape back"}</Text>
+      <Text dimColor>{moveMode ? "↑↓ to move, Escape or Enter to finish" : customLabels ? `${normalHelp}, ${customLabels}` : normalHelp}</Text>
       <Box marginTop={1} flexDirection="column">
         {widgets.length
-          ? widgets.map((widget, index) => <Text key={widget.id} {...(index === selectedIndex && { color: "green" })}>{index === selectedIndex ? "▶  " : "   "}{displayWidgetType(widget.type)}{widget.type === "separator" ? ` (${widget.character ?? "|"})` : ""}</Text>)
+          ? widgets.map((widget, index) => <Text key={widget.id} {...(index === selectedIndex && { color: "green" })}>{index === selectedIndex ? "▶  " : "   "}{rowLabel(widget)}</Text>)
           : <Text dimColor>No widgets yet. Press (a) to add one.</Text>}
       </Box>
     </Box>
