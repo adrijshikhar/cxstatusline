@@ -126,9 +126,9 @@ are not.
 Codex kills the whole statusline renderer after one second and keeps the previous frame, so
 cxstatusline caps each command at **300 ms by default, 600 ms maximum** (`timeout`, editor key
 `t`), and all commands on a render share a 600 ms budget. Over budget shows `[Budget]`; a slow
-command shows `[Timeout]`, a failing one `[Exit: N]` or `[Cmd not found]`. Only the first
+command shows `[Timeout]`, a failing one `[Exit: N]` or `[Cmd not found]`. Commands terminated by external signals before the deadline report `[Signal: <name>]` rather than `[Timeout]`. Only the first
 non-empty line is shown; stderr is discarded. Set `preserveColors` (key `p`) to keep the command's
-own colour codes; other escape sequences and control characters are always removed. `maxWidth`
+own colour codes; other escape sequences and control characters are always removed. Configured background colours apply in both render modes and survive resets within the command output. `maxWidth`
 (key `w`) truncates with an ellipsis. The TUI preview never runs commands. A killed command's
 pipeline children may outlive it; avoid long-running pipelines. Imported presets list their
 commands before you confirm.
