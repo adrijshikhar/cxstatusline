@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_SETTINGS, SettingsSchema } from "../src/types/Settings";
+import { WidgetItemSchema } from "../src/types/Widget";
 import { loadSettings, saveSettings } from "../src/utils/config";
 import { tmpEnv } from "./helpers";
 
@@ -11,6 +12,14 @@ function settingsFile(): string {
 }
 
 describe("settings", () => {
+  test("items accept the user-defined widget fields", () => {
+    expect(WidgetItemSchema.safeParse({
+      id: "c", type: "model", customText: "[PROD]", customSymbol: "⚡", commandPath: "date", preserveColors: true, timeout: 4000,
+    }).success).toBe(true);
+    expect(WidgetItemSchema.safeParse({ id: "c", type: "model", timeout: 0 }).success).toBe(false);
+    expect(WidgetItemSchema.safeParse({ id: "c", type: "model", timeout: 2.5 }).success).toBe(false);
+  });
+
   test("settings enforce one to three rows and the closed widget enum", () => {
     expect(SettingsSchema.safeParse({ version: 2, lines: [] }).success).toBe(false);
     expect(SettingsSchema.safeParse({ version: 2, lines: [[], [], [], []] }).success).toBe(false);

@@ -35,7 +35,7 @@ test("owner ccstatusline preset keeps canonical IDs and reports unsupported widg
 test("normalization strips unknown fields and orphaned separators", () => {
   const normalized = normalizeImportedItems([
     { id: "leading", type: "separator" },
-    { id: "model", type: "model", color: "cyan", commandPath: "/never-copied" },
+    { id: "model", type: "model", color: "cyan", weather: "/never-copied" },
     { id: "middle", type: "separator" },
     { id: "extra", type: "separator" },
     { id: "deferred", type: "custom-command" },

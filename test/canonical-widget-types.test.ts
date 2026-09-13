@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { CANONICAL_WIDGET_TYPES } from "../src/types/canonical-widget-types";
+import { WidgetTypeSchema } from "../src/types/Widget";
 
 describe("canonical widget catalog", () => {
+  test("the widget type schema is derived from the canonical list", () => {
+    expect(WidgetTypeSchema.options).toEqual([...CANONICAL_WIDGET_TYPES]);
+  });
   test("contains exactly the 31 Codex-supported types in order", () => {
     const expected = [
       "separator", "flex-separator", "model", "thinking-effort",
