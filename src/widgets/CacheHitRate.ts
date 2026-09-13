@@ -2,6 +2,7 @@ import type { RenderContext } from '../types/RenderContext';
 import type { Settings } from '../types/Settings';
 import type {
     CustomKeybind,
+    HideableState,
     Widget,
     WidgetEditorDisplay,
     WidgetItem
@@ -12,12 +13,13 @@ import {
     getCacheTokens
 } from './shared/cache-metrics';
 import {
-    getCacheKeybinds,
-    getCacheModifierText,
-    handleCacheOptionsAction,
-    isCacheHideWhenEmptyEnabled,
+    getCacheScopeKeybind,
+    getCacheScopeModifierText,
+    handleCacheScopeAction,
     isCacheSessionScope
 } from './shared/cache-scope';
+import { getHideKeybind, getHideModifierText, isHideStateEnabled, ZERO_HIDEABLE_STATE } from './shared/hideable';
+import { makeModifierText } from './shared/editor-display';
 import { formatRawOrLabeledValue } from './shared/raw-or-labeled';
 
 export class CacheHitRateWidget implements Widget {
@@ -25,12 +27,14 @@ export class CacheHitRateWidget implements Widget {
     getDescription(): string { return 'Shows prompt cache hit rate (cache reads vs cache writes)'; }
     getDisplayName(): string { return 'Cache Hit Rate'; }
     getCategory(): string { return 'Cache'; }
+    getHideableStates(): HideableState[] { return [ZERO_HIDEABLE_STATE]; }
     getEditorDisplay(item: WidgetItem): WidgetEditorDisplay {
-        return { displayText: this.getDisplayName(), modifierText: getCacheModifierText(item) };
+        const modifiers = [getCacheScopeModifierText(item), getHideModifierText(item, this.getHideableStates())].filter((value): value is string => value !== undefined);
+        return { displayText: this.getDisplayName(), modifierText: makeModifierText(modifiers) };
     }
 
     handleEditorAction(action: string, item: WidgetItem): WidgetItem | null {
-        return handleCacheOptionsAction(action, item);
+        return handleCacheScopeAction(action, item);
     }
 
     render(item: WidgetItem, context: RenderContext, settings: Settings): string | null {
@@ -38,7 +42,7 @@ export class CacheHitRateWidget implements Widget {
             return formatRawOrLabeledValue(item, 'Cache Hit: ', '87.0%');
         }
 
-        const hideWhenEmpty = isCacheHideWhenEmptyEnabled(item);
+        const hideWhenEmpty = isHideStateEnabled(item, ZERO_HIDEABLE_STATE);
         const tokens = getCacheTokens(context, isCacheSessionScope(item));
         if (!tokens) {
             return hideWhenEmpty ? null : formatRawOrLabeledValue(item, 'Cache Hit: ', 'n/a');
@@ -57,7 +61,7 @@ export class CacheHitRateWidget implements Widget {
     }
 
     getCustomKeybinds(item?: WidgetItem): CustomKeybind[] {
-        return getCacheKeybinds();
+        return [getCacheScopeKeybind(), getHideKeybind()];
     }
 
     supportsRawValue(): boolean { return true; }
