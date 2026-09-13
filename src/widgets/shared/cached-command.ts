@@ -1,6 +1,7 @@
 import { chmodSync, mkdirSync, readFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { writeFileAtomic } from '../../atomic';
 import type { RenderContext } from '../../types/RenderContext';
@@ -17,6 +18,41 @@ import {
 import { applyMaxWidth } from './max-width';
 
 export const CACHE_VERSION = 1;
+export const MIN_REFRESH_MS = 1_000;
+export const MAX_REFRESH_MS = 86_400_000;
+export const REFRESH_TIMEOUT_MS = 10_000;
+export const REQUEST_STALE_MS = 60_000;
+export const CACHE_MAX_AGE_MS = 604_800_000;
+export const LOADING_TOKEN = '[Loading]';
+export const ERROR_TOKEN = '[Error]';
+
+export interface CacheDeps {
+    spawn: typeof import('node:child_process').spawn;
+    scriptPath: string | undefined;   // production: process.argv[1]
+    now: () => number;                // so staleness needs no sleeping
+}
+
+export const productionCacheDeps: CacheDeps = { spawn, scriptPath: process.argv[1], now: Date.now };
+
+export function resolveRefresh(item: WidgetItem): number {
+    const raw = item.refreshMs ?? 0;
+    return Math.max(MIN_REFRESH_MS, Math.min(MAX_REFRESH_MS, raw));
+}
+
+export function scheduleRefresh(key: string, deps: CacheDeps): void {
+    if (!deps.scriptPath) {
+        return;
+    }
+    try {
+        deps.spawn(
+            process.execPath,
+            [deps.scriptPath, '--internal-refresh-command', key],
+            { detached: true, stdio: 'ignore', windowsHide: true }
+        ).unref();
+    } catch {
+        // Ignored; requestedAt throttle protects against repeated spawn storms
+    }
+}
 
 export interface CacheDocument {
     version: number;
@@ -126,11 +162,105 @@ export function runSynchronously(
     return processResult(result, item, timedOut);
 }
 
+function runCached(
+    item: WidgetItem,
+    context: RenderContext,
+    runner: CommandRunner,
+    deps: CacheDeps
+): string | null {
+    if (!item.commandPath || !context.commandCacheDir) {
+        return runSynchronously(item, context, runner);
+    }
+
+    const cwd = context.data.session?.cwd;
+    const cwdStr = cwd && cwd.length > 0 ? cwd : '';
+    const key = cacheKey(item.commandPath, cwdStr);
+    const docPath = join(context.commandCacheDir, `${key}.json`);
+    const input = JSON.stringify(typeof context.terminalWidth === 'number'
+        ? { ...context.data, terminal_width: context.terminalWidth }
+        : context.data);
+
+    const doc = readDocument(docPath);
+    const now = deps.now();
+    const refreshMs = resolveRefresh(item);
+
+    if (doc === 'miss') {
+        const newDoc: CacheDocument = {
+            version: CACHE_VERSION,
+            command: item.commandPath,
+            cwd: cwdStr,
+            input,
+            requestedAt: now,
+            result: null,
+            producedAt: null
+        };
+        try {
+            writeDocument(docPath, newDoc);
+        } catch {
+            return runSynchronously(item, context, runner);
+        }
+        scheduleRefresh(key, deps);
+        return LOADING_TOKEN;
+    }
+
+    const inFlight = doc.requestedAt > (doc.producedAt ?? -1)
+                  && (now - doc.requestedAt) <= REQUEST_STALE_MS;
+
+    if (inFlight) {
+        if (doc.result === null) {
+            return LOADING_TOKEN;
+        }
+        return processResult(doc.result, item, doc.result.timedOut ?? false);
+    }
+
+    // not in flight
+    if (doc.result === null) {
+        const updatedDoc: CacheDocument = {
+            ...doc,
+            input,
+            requestedAt: now
+        };
+        try {
+            writeDocument(docPath, updatedDoc);
+        } catch {
+            return runSynchronously(item, context, runner);
+        }
+        scheduleRefresh(key, deps);
+        return ERROR_TOKEN;
+    }
+
+    const age = now - (doc.producedAt ?? 0);
+    if (age <= refreshMs) {
+        return processResult(doc.result, item, doc.result.timedOut ?? false);
+    }
+
+    // not in flight, result present, age > refreshMs
+    const updatedDoc: CacheDocument = {
+        ...doc,
+        input,
+        requestedAt: now
+    };
+    try {
+        writeDocument(docPath, updatedDoc);
+    } catch {
+        return runSynchronously(item, context, runner);
+    }
+    scheduleRefresh(key, deps);
+    return processResult(doc.result, item, doc.result.timedOut ?? false);
+}
+
 /** Shared execution seam for CustomCommandWidget */
 export function resolveCommandText(
     item: WidgetItem,
     context: RenderContext,
-    runner: CommandRunner
+    runner: CommandRunner,
+    deps: CacheDeps = productionCacheDeps
 ): string | null {
-    return runSynchronously(item, context, runner);
+    if (!item.commandPath) {
+        return null;
+    }
+    if (item.refreshMs === undefined || !context.commandCacheDir || context.isPreview) {
+        return runSynchronously(item, context, runner);
+    }
+    return runCached(item, context, runner, deps);
 }

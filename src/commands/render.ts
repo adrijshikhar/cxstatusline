@@ -27,7 +27,8 @@ export async function runRender(stdin: string, deps: RenderDeps): Promise<Render
   };
   try {
     const payload = parsePayload(stdin);
-    const loaded = await loadSettings(resolvePaths(deps.env).settingsFile);
+    const paths = resolvePaths(deps.env);
+    const loaded = await loadSettings(paths.settingsFile);
     if (loaded.error) warn(`${loaded.error}; using defaults`);
     const rows = renderStatusLines(loaded.settings, {
       data: payload,
@@ -40,6 +41,7 @@ export async function runRender(stdin: string, deps: RenderDeps): Promise<Render
         weeklyResetAt: payload.usage?.weekly?.resets_at,
       },
       isPreview: false,
+      commandCacheDir: paths.commandCacheDir,
     }).map(keepSgrOnly).filter((row) => getVisibleText(row).trim().length > 0);
     return { stdout: `${(rows.length ? rows : ["codex"]).join("\n")}\n`, stderr: warnings.join(""), code: 0 };
   } catch (e) {

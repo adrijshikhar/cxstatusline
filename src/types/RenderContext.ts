@@ -22,4 +22,7 @@ export interface RenderContext {
   readonly globalSeparatorIndex?: number;
   readonly globalPowerlineThemeIndex?: number;
   readonly globalPowerlineStartCapIndex?: number;
+  /** Absence disables command caching, falling back to synchronous execution (used by TUI and tests). */
+  readonly commandCacheDir?: string;
 }
+
