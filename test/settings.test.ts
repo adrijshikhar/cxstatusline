@@ -20,6 +20,15 @@ describe("settings", () => {
     expect(WidgetItemSchema.safeParse({ id: "c", type: "model", timeout: 2.5 }).success).toBe(false);
   });
 
+  test("items accept refreshMs positive integer and reject invalid values", () => {
+    expect(WidgetItemSchema.safeParse({ id: "c", type: "custom-command", commandPath: "date", refreshMs: 5000 }).success).toBe(true);
+    expect(WidgetItemSchema.safeParse({ id: "c", type: "custom-command", commandPath: "date" }).success).toBe(true);
+    expect(WidgetItemSchema.safeParse({ id: "c", type: "custom-command", commandPath: "date", refreshMs: 0 }).success).toBe(false);
+    expect(WidgetItemSchema.safeParse({ id: "c", type: "custom-command", commandPath: "date", refreshMs: -100 }).success).toBe(false);
+    expect(WidgetItemSchema.safeParse({ id: "c", type: "custom-command", commandPath: "date", refreshMs: 2.5 }).success).toBe(false);
+  });
+
+
   test("settings enforce one to three rows and the closed widget enum", () => {
     expect(SettingsSchema.safeParse({ version: 2, lines: [] }).success).toBe(false);
     expect(SettingsSchema.safeParse({ version: 2, lines: [[], [], [], []] }).success).toBe(false);

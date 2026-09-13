@@ -21,6 +21,7 @@ export const WidgetItemSchema = z.object({
   preserveColors: z.boolean().optional(),
   // Any positive integer is stored; the widget clamps to its range at render time.
   timeout: z.number().int().positive().optional(),
+  refreshMs: z.number().int().positive().optional(),
   maxWidth: z.number().optional(),
   merge: z.union([z.boolean(), z.literal("no-padding")]).optional(),
   hide: z.boolean().optional(),
