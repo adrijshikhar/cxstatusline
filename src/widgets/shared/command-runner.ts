@@ -56,6 +56,10 @@ export function resolveTimeout(item: { timeout?: number | undefined }): number {
     return Math.min(MAX_TIMEOUT_MS, Math.max(MIN_TIMEOUT_MS, requested));
 }
 
+export function wasTimeout(result: CommandResult, elapsedMs: number, timeoutMs: number): boolean {
+    return result.errorCode === 'ETIMEDOUT' || elapsedMs >= timeoutMs;
+}
+
 // One budget per render, keyed by the RenderContext object: every renderer process starts fresh,
 // and the long-lived TUI process never executes commands so it never holds an entry.
 const budgets = new WeakMap<object, { remaining: number }>();

@@ -3,11 +3,22 @@ import type { RenderContext } from "../../src/types/RenderContext";
 import type { WidgetItem } from "../../src/types/Widget";
 import {
   DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS, MIN_TIMEOUT_MS, RENDER_BUDGET_MS,
-  describeFailure, refundBudget, resolveTimeout, spawnCommand, takeBudget,
+  describeFailure, refundBudget, resolveTimeout, spawnCommand, takeBudget, wasTimeout,
 } from "../../src/widgets/shared/command-runner";
 
 const item = (timeout?: number): WidgetItem => ({ id: "c", type: "model", ...(timeout !== undefined && { timeout }) });
 const context = (): RenderContext => ({ data: { payload_version: 1 }, now: new Date(0), terminalWidth: 80, isPreview: false });
+
+describe("wasTimeout", () => {
+  const base = { status: null, signal: null, stdout: "" } as const;
+
+  test("reports true for ETIMEDOUT or elapsed-at-deadline, and false for elapsed-under-deadline-with-SIGKILL", () => {
+    expect(wasTimeout({ ...base, errorCode: "ETIMEDOUT" }, 10, 300)).toBe(true);
+    expect(wasTimeout(base, 300, 300)).toBe(true);
+    expect(wasTimeout(base, 350, 300)).toBe(true);
+    expect(wasTimeout({ ...base, signal: "SIGKILL" }, 150, 300)).toBe(false);
+  });
+});
 
 describe("resolveTimeout", () => {
   test("defaults, clamps low and high, keeps in-range values", () => {

@@ -10,7 +10,7 @@ import {
     writeDocument,
     type CacheDocument
 } from '../widgets/shared/cached-command';
-import { spawnCommand, type CommandRunner } from '../widgets/shared/command-runner';
+import { spawnCommand, wasTimeout, type CommandRunner } from '../widgets/shared/command-runner';
 
 export interface RefreshCommandDeps {
     env: Env;
@@ -65,7 +65,7 @@ export function runRefreshCommand(cacheKey: string, deps: RefreshCommandDeps): n
         cwd: doc.cwd && doc.cwd.length > 0 ? doc.cwd : undefined
     });
     const elapsed = performance.now() - start;
-    const timedOut = result.errorCode === 'ETIMEDOUT' || elapsed >= REFRESH_TIMEOUT_MS;
+    const timedOut = wasTimeout(result, elapsed, REFRESH_TIMEOUT_MS);
 
     const now = (deps.now ?? Date.now)();
     const updatedDoc: CacheDocument = {

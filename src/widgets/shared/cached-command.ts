@@ -12,6 +12,7 @@ import {
     refundBudget,
     resolveTimeout,
     takeBudget,
+    wasTimeout,
     type CommandResult,
     type CommandRunner
 } from './command-runner';
@@ -194,7 +195,7 @@ export function runSynchronously(
     const elapsed = performance.now() - start;
     refundBudget(context, timeoutMs - elapsed);
 
-    const timedOut = result.errorCode === 'ETIMEDOUT' || elapsed >= timeoutMs;
+    const timedOut = wasTimeout(result, elapsed, timeoutMs);
     return processResult(result, item, timedOut);
 }
 
