@@ -152,3 +152,26 @@ test("import confirmation stays busy until its save completes", async () => {
     app.cleanup();
   }
 });
+
+test("import preview lists every custom command before asking to apply", async () => {
+  const { root } = tmpEnv();
+  const presetPath = join(root, "commands.json");
+  writeFileSync(presetPath, exportPreset({
+    ...DEFAULT_SETTINGS,
+    lines: [[
+      { id: "a", type: "custom-command", commandPath: "date +%H:%M" },
+      { id: "s", type: "separator" },
+      { id: "b", type: "custom-command", commandPath: "git status -s | wc -l", preserveColors: true },
+    ]],
+  }));
+  const app = createTui(<App initialSettings={initialSettings()} settingsPath={join(root, "settings.json")} />);
+  try {
+    await openImport(app, presetPath);
+    expect(app.lastFrame()).toContain("Commands that will run on every render:");
+    expect(app.lastFrame()).toContain("date +%H:%M");
+    expect(app.lastFrame()).toContain("git status -s | wc -l");
+    expect(app.lastFrame()).toContain("Apply this preset?");
+  } finally {
+    app.cleanup();
+  }
+});

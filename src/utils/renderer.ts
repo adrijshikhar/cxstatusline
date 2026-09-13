@@ -15,6 +15,8 @@ import {
     applyLineGradientSegment,
     getVisibleText,
     getVisibleWidth,
+    keepSgrOnly,
+    stripSgrCodes,
     truncateStyledText
 } from './ansi';
 import {
@@ -43,6 +45,29 @@ function sanitizeStringArray(value: unknown, fallback: string[]): string[] {
     return Array.isArray(value)
         ? value.filter((item): item is string => typeof item === 'string').map(sanitizeRawText)
         : fallback;
+}
+
+function reapplyBackground(content: string, bgCode: string): string {
+    return content.replace(/\x1b\[(?:0|49)m/g, (m) => m + bgCode);
+}
+
+/**
+ * Whether pre-rendered content keeps its own SGR styling. It does not when colour is off or when a
+ * solid override foreground must win; then the widget's codes are stripped and the normal styling
+ * path applies (upstream rule for custom-command with preserveColors). Exported for tests.
+ */
+export function resolveStyledText(
+    content: string,
+    styled: boolean | undefined,
+    settings: Settings,
+    colorLevel: ColorLevelString
+): { text: string; styled: boolean } {
+    if (!styled)
+        return { text: content, styled: false };
+    const fgOverride = settings.overrideForegroundColor;
+    if (colorLevel === 'none' || (fgOverride && fgOverride !== 'none'))
+        return { text: stripSgrCodes(content), styled: false };
+    return { text: content, styled: true };
 }
 
 /** Render the configured non-empty rows, keeping layout state continuous across them. */
@@ -231,6 +256,7 @@ function renderPowerlineStatusLine(
         mergesWithNext: boolean;
         originalIndex: number;
         widget: WidgetItem;
+        styled: boolean;
     }[] = [];
     let widgetColorIndex = continueThemeAcrossLines ? globalThemeColorOffset : 0;
 
@@ -297,8 +323,11 @@ function renderPowerlineStatusLine(
         const actualPreRenderedIndex = preRenderedIndices[i];
         const preRendered = actualPreRenderedIndex !== undefined ? preRenderedWidgets[actualPreRenderedIndex] : undefined;
         const widgetImpl = getWidget(widget.type);
+        let isStyled = false;
         if (preRendered?.content) {
-            widgetText = preRendered.content;
+            const resolved = resolveStyledText(preRendered.content, preRendered.styled, settings, colorLevel);
+            widgetText = resolved.text;
+            isStyled = resolved.styled;
             // Get default color from widget impl for consistency
             if (widgetImpl) {
                 defaultColor = widgetImpl.getDefaultColor();
@@ -332,7 +361,10 @@ function renderPowerlineStatusLine(
 
             // Apply theme colors if a theme is set (and not 'custom')
             if (themeColors) {
-                fgColor = themeColors.fg[widgetColorIndex % themeColors.fg.length] ?? fgColor;
+                // Styled content keeps its own foreground; the segment background still applies.
+                if (!isStyled) {
+                    fgColor = themeColors.fg[widgetColorIndex % themeColors.fg.length] ?? fgColor;
+                }
                 bgColor = themeColors.bg[widgetColorIndex % themeColors.bg.length] ?? bgColor;
 
                 // Only increment color index if this widget is not merged with the next one
@@ -356,7 +388,8 @@ function renderPowerlineStatusLine(
                 fgColor: fgColor,
                 mergesWithNext,
                 originalIndex: actualPreRenderedIndex ?? -1,
-                widget: widget
+                widget: widget,
+                styled: isStyled
             });
         }
     }
@@ -466,7 +499,7 @@ function renderPowerlineStatusLine(
 
     const gradientColorLevel = colorLevel === 'ansi256' || colorLevel === 'truecolor' ? colorLevel : null;
     const powerlineGradientWidth = overrideForegroundGradientStops && gradientColorLevel
-        ? widgetElements.reduce((sum, element) => sum + getVisibleWidth(element.content), 0)
+        ? widgetElements.reduce((sum, element) => element.styled ? sum : sum + getVisibleWidth(element.content), 0)
         : 0;
     let powerlineGradientColumn = 0;
 
@@ -514,21 +547,22 @@ function renderPowerlineStatusLine(
         }
 
         let widgetContent = '';
+        const isStyled = widget.styled;
 
-        if (shouldBold) {
+        if (shouldBold && !isStyled) {
             widgetContent += '\x1b[1m';
         }
-        if (shouldDim) {
+        if (shouldDim && !isStyled) {
             widgetContent += '\x1b[2m';
         }
-        const textGradientStops = powerlineGradientWidth > 1
+        const textGradientStops = !isStyled && powerlineGradientWidth > 1
             ? overrideForegroundGradientStops
             : null;
-        const styledContent = widget.widget.dim === 'parens'
+        const styledContent = widget.widget.dim === 'parens' && !isStyled
             ? applyParensDim(widget.content, shouldBold)
             : widget.content;
 
-        if (widget.fgColor && !textGradientStops) {
+        if (widget.fgColor && !isStyled && !textGradientStops) {
             widgetContent += getColorAnsiCode(widget.fgColor, colorLevel, false);
         }
         // Always apply background for consistency in powerline mode
@@ -545,18 +579,26 @@ function renderPowerlineStatusLine(
             );
             widgetContent += gradientResult.text;
             powerlineGradientColumn = gradientResult.nextColumn;
+        } else if (isStyled && widget.bgColor) {
+            const bgCode = getColorAnsiCode(widget.bgColor, colorLevel, true);
+            widgetContent += reapplyBackground(styledContent, bgCode);
         } else {
             widgetContent += styledContent;
         }
         // Reset colors after content.
-        widgetContent += '\x1b[49m\x1b[39m';
-        // Dim should be scoped to the widget text only. Reset before
-        // separators/end caps so faint intensity cannot leak forward.
-        const shouldRestoreBoldForBoundary = shouldDim && shouldBold && (needsSeparator || hasEndCapAfterWidget);
-        if (shouldRestoreBoldForBoundary) {
-            widgetContent += '\x1b[22;1m';
-        } else if (shouldDim || (shouldBold && !needsSeparator && !hasEndCapAfterWidget)) {
-            widgetContent += '\x1b[22m';
+        if (isStyled) {
+            // Command output may have set any attribute; a full reset is the only safe boundary.
+            widgetContent += '\x1b[0m';
+        } else {
+            widgetContent += '\x1b[49m\x1b[39m';
+            // Dim should be scoped to the widget text only. Reset before
+            // separators/end caps so faint intensity cannot leak forward.
+            const shouldRestoreBoldForBoundary = shouldDim && shouldBold && (needsSeparator || hasEndCapAfterWidget);
+            if (shouldRestoreBoldForBoundary) {
+                widgetContent += '\x1b[22;1m';
+            } else if (shouldDim || (shouldBold && !needsSeparator && !hasEndCapAfterWidget)) {
+                widgetContent += '\x1b[22m';
+            }
         }
 
         result += widgetContent;
@@ -773,6 +815,7 @@ export interface PreRenderedWidget {
     content: string;      // The rendered widget text (without padding)
     plainLength: number;  // Length without ANSI codes
     widget: WidgetItem;   // Original widget config
+    styled?: boolean;     // Content carries its own SGR; the renderer must not restyle it
 }
 
 export function countPowerlineStartCapSlots(
@@ -834,10 +877,13 @@ export function preRenderAllWidgets(
             }
 
             let widgetText: string;
+            let styled = false;
             try {
                 const widgetImpl = getWidget(widget.type);
                 const effectiveWidget = settings.minimalistMode ? { ...widget, rawValue: true } : widget;
-                widgetText = sanitizeRawText(widgetImpl.render(effectiveWidget, context, settings) ?? '');
+                const rawText = widgetImpl.render(effectiveWidget, context, settings) ?? '';
+                styled = widgetImpl.emitsStyledOutput?.(effectiveWidget) === true && rawText.includes('\x1b');
+                widgetText = styled ? keepSgrOnly(rawText) : sanitizeRawText(rawText);
             } catch {
                 // Preserve index alignment with the configured widgets while skipping unknown output.
                 preRenderedLine.push({
@@ -854,7 +900,8 @@ export function preRenderAllWidgets(
             preRenderedLine.push({
                 content: widgetText,
                 plainLength,
-                widget
+                widget,
+                styled
             });
         }
 
@@ -1113,8 +1160,11 @@ export function renderStatusLine(
 
             // Use pre-rendered content
             const preRendered = preRenderedWidgets[i];
+            let isStyled = false;
             if (preRendered?.content) {
-                widgetText = preRendered.content;
+                const resolved = resolveStyledText(preRendered.content, preRendered.styled, settings, colorLevel);
+                widgetText = resolved.text;
+                isStyled = resolved.styled;
                 // Get default color from widget impl for consistency
                 const widgetImpl = getWidget(widget.type);
                 if (widgetImpl) {
@@ -1123,8 +1173,22 @@ export function renderStatusLine(
             }
 
             if (widgetText) {
+                let content: string;
+                if (isStyled) {
+                    const bg = (settings.overrideBackgroundColor && settings.overrideBackgroundColor !== 'none')
+                        ? settings.overrideBackgroundColor
+                        : widget.backgroundColor;
+                    if (bg) {
+                        const bgCode = getColorAnsiCode(bg, colorLevel, true);
+                        content = `${bgCode}${reapplyBackground(widgetText, bgCode)}\x1b[0m`;
+                    } else {
+                        content = `${widgetText}\x1b[0m`;
+                    }
+                } else {
+                    content = applyColorsWithOverride(widgetText, widget.color ?? defaultColor, widget.backgroundColor, widget.bold, widget.dim);
+                }
                 elements.push({
-                    content: applyColorsWithOverride(widgetText, widget.color ?? defaultColor, widget.backgroundColor, widget.bold, widget.dim),
+                    content,
                     type: widget.type,
                     widget
                 });

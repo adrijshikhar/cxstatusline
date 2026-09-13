@@ -1,17 +1,9 @@
 import { z } from "zod";
+import { CANONICAL_WIDGET_TYPES } from "./canonical-widget-types";
 import type { RenderContext } from "./RenderContext";
 import type { Settings } from "./Settings";
 
-export const WidgetTypeSchema = z.enum([
-  "separator", "flex-separator", "model", "thinking-effort",
-  "git-branch", "git-changes", "git-review", "git-root-dir",
-  "context-bar", "context-length", "context-window", "context-percentage",
-  "context-percentage-usable", "tokens-input", "tokens-output", "tokens-cached",
-  "tokens-total", "cache-hit-rate", "input-speed", "output-speed", "total-speed",
-  "weekly-usage", "weekly-reset-timer",
-  "session-clock", "session-name", "claude-session-id", "version",
-  "current-working-dir", "sandbox-status", "terminal-width", "free-memory",
-]);
+export const WidgetTypeSchema = z.enum(CANONICAL_WIDGET_TYPES);
 
 export const WidgetItemSchema = z.object({
   id: z.string(),
@@ -22,6 +14,13 @@ export const WidgetItemSchema = z.object({
   dim: z.union([z.boolean(), z.literal("parens")]).optional(),
   character: z.string().optional(),
   rawValue: z.boolean().optional(),
+  // User-defined widgets (upstream ccstatusline field names, kept so presets import unchanged).
+  customText: z.string().optional(),
+  customSymbol: z.string().optional(),
+  commandPath: z.string().optional(),
+  preserveColors: z.boolean().optional(),
+  // Any positive integer is stored; the widget clamps to its range at render time.
+  timeout: z.number().int().positive().optional(),
   maxWidth: z.number().optional(),
   merge: z.union([z.boolean(), z.literal("no-padding")]).optional(),
   hide: z.boolean().optional(),
@@ -63,4 +62,6 @@ export interface Widget {
   renderEditor?(props: WidgetEditorProps): React.ReactElement | null;
   handleEditorAction?(action: string, item: WidgetItem): WidgetItem | null;
   getNumericValue?(context: RenderContext, item: WidgetItem): number | null;
+  /** True when render() returns text carrying its own SGR styling that the renderer must keep. */
+  emitsStyledOutput?(item: WidgetItem): boolean;
 }

@@ -560,3 +560,39 @@ export function applyLineGradient(
 
     return `${result.text}\x1b[39m`;
 }
+
+const KEEP_SGR_CONTROL = /[\u0000-\u001F\u007F-\u009F]/;
+
+/**
+ * Keeps SGR colour/attribute sequences (`ESC [ … m`) and drops every other control character:
+ * OSC hyperlinks, cursor movement, bells, newlines. The boundary for styled text a widget did not
+ * write itself (command output) and for every finished row.
+ */
+export function keepSgrOnly(text: string): string {
+    let result = '';
+    let index = 0;
+
+    while (index < text.length) {
+        const escape = parseEscapeSequence(text, index);
+        if (escape) {
+            const isCsi = escape.sequence.startsWith(`${ESC}[`) || escape.sequence.startsWith(C1_CSI);
+            if (isCsi && escape.sequence.endsWith('m')) {
+                result += escape.sequence;
+            }
+            index = escape.nextIndex;
+            continue;
+        }
+
+        const codePoint = text.codePointAt(index);
+        if (codePoint === undefined) {
+            break;
+        }
+        const character = String.fromCodePoint(codePoint);
+        if (!KEEP_SGR_CONTROL.test(character)) {
+            result += character;
+        }
+        index += character.length;
+    }
+
+    return result;
+}
