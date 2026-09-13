@@ -32,6 +32,8 @@ implicitly compatible. Maintainer response is best effort; this is not an OpenAI
   the command line; they are read from the on-disk cache document, whose key is re-derived and
   verified against the argument before execution. Cache documents are created with mode `0600`
   inside a directory with mode `0700` because they store raw command stdout and the render payload.
+  If the cache directory is a symbolic link, cxstatusline refuses to write into it and falls back to
+  synchronous execution rather than following symlinks or mutating target permissions.
   The refresh process cannot schedule further refreshes (no spawn imports).
 
 ## Download trust boundary

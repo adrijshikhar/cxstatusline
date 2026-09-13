@@ -149,7 +149,8 @@ For commands that take longer or should not run on every redraw, configure `refr
 - **Cold start:** On the very first render before the initial background run completes, the widget shows
   `[Loading]`.
 - **Failures and timeouts:** A failing background command caches its exit code or error token; if a
-  background refresh stays outstanding or fails beyond 30 seconds, the widget displays `[Error]`.
+  background refresh stays outstanding or fails beyond 60 seconds, the widget settles on `[Error]` and
+  keeps showing `[Error]` across subsequent renders until a refresh succeeds.
 - **Cache location:** Cached documents live under `~/.cache/cxstatusline/commands/` (or
   `$XDG_CACHE_HOME/cxstatusline/commands/`). Deleting this cache directory at any time is completely
   safe; entries are re-created automatically.
