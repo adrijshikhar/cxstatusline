@@ -86,4 +86,6 @@ jobs:
           gh release upload "$TAG" --repo "$REPO" "$RUNNER_TEMP"/cxstatusline-*.tgz "$RUNNER_TEMP"/SHA256SUMS --clobber
 
       - name: Publish to npm (OIDC Trusted Publishing)
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish "$RUNNER_TEMP"/cxstatusline-*.tgz --provenance --access public
