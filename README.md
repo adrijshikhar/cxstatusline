@@ -101,8 +101,7 @@ cxstatusline
 The bare command opens the configuration TUI in an interactive terminal. Choose widgets, colors
 and themes, preview, then save explicitly or press Ctrl+S. Settings live at
 `~/.config/cxstatusline/settings.json` (or your XDG config location).
-Claude-only widgets without a Codex data source are not included; see the widget inventory in the
-project notes for the full list and reasons.
+Widgets that depend on Claude-only data have no Codex equivalent and are not included.
 
 For scripts, `cxstatusline render` reads a versioned JSON payload on stdin and prints ANSI rows;
 it never opens the TUI.
