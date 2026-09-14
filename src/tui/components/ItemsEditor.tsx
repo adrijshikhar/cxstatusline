@@ -5,6 +5,9 @@ import type { Widget, WidgetItem, WidgetType } from "../../types/Widget";
 import { WIDGET_MANIFEST } from "../../utils/widget-manifest";
 import { getWidget } from "../../utils/widgets";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { HideStatesEditor } from "./HideStatesEditor";
+import { EDIT_HIDE_STATES_ACTION, getHideModifierText } from "../../widgets/shared/hideable";
+import { getNumberFormatModifierText } from "../../utils/number-format";
 import {
   customKeybindsFor,
   filterWidgetCatalog,
@@ -60,7 +63,13 @@ function rowLabel(widget: WidgetItem): string {
   const impl = isLayout(widget.type) ? null : getWidgetImpl(widget.type);
   if (!impl) return displayWidgetType(widget.type);
   const { displayText, modifierText } = impl.getEditorDisplay(widget);
-  return modifierText ? `${displayText} ${modifierText}` : displayText;
+  const numberFormatModifierText = impl.supportsNumberFormat?.() ? getNumberFormatModifierText(widget) : undefined;
+  const hideModifierText = impl ? getHideModifierText(widget, impl.getHideableStates?.() ?? []) : undefined;
+  const parts = [displayText];
+  if (modifierText) parts.push(modifierText);
+  if (numberFormatModifierText) parts.push(numberFormatModifierText);
+  if (hideModifierText) parts.push(hideModifierText);
+  return parts.join(" ");
 }
 
 function newWidget(type: WidgetType): WidgetItem {
@@ -133,6 +142,20 @@ export function ItemsEditor({ widgets, onUpdate, onBack, lineNumber, settings: _
       setCustomEditorWidget: setCustomEditor,
     });
   });
+
+  if (customEditor?.action === EDIT_HIDE_STATES_ACTION) {
+    return (
+      <HideStatesEditor
+        widget={customEditor.widget}
+        states={customEditor.impl.getHideableStates?.() ?? []}
+        onComplete={(updated) => {
+          onUpdate(widgets.map((widget, index) => index === selectedIndex ? updated : widget));
+          setCustomEditor(null);
+        }}
+        onCancel={() => setCustomEditor(null)}
+      />
+    );
+  }
 
   if (customEditor?.impl.renderEditor) {
     const editor = customEditor.impl.renderEditor({

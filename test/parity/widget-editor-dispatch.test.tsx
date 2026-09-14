@@ -183,4 +183,27 @@ describe("widget editor dispatch", () => {
       app.cleanup();
     }
   });
+
+  test("git-branch hide states editor: h opens checklist, space toggles, enter saves, escape cancels", async () => {
+    const app = open([[{ id: "b", type: "git-branch" }]]);
+    try {
+      await enterLineOne(app);
+      expect(app.lastFrame()).toContain("(h)ide…");
+      await app.write("h");
+      expect(app.lastFrame()).toContain("when not in a git repo");
+      await app.write(" ");
+      expect(app.lastFrame()).toContain("[x] when not in a git repo");
+      await app.write("\r");
+      expect(app.lastFrame()).toContain("Git Branch (hide: no-git)");
+
+      await app.write("h");
+      expect(app.lastFrame()).toContain("[x] when not in a git repo");
+      await app.write(" ");
+      expect(app.lastFrame()).toContain("[ ] when not in a git repo");
+      await app.write("\x1b");
+      expect(app.lastFrame()).toContain("Git Branch (hide: no-git)");
+    } finally {
+      app.cleanup();
+    }
+  });
 });

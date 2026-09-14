@@ -133,3 +133,53 @@ test("speed widgets omit unavailable counters instead of rendering null", () => 
   expect(render("output-speed", context)).toBeNull();
   expect(render("total-speed", context)).toBeNull();
 });
+
+test("git-branch, git-changes, git-root-dir each declare exactly one hideable state with key 'no-git'", () => {
+  for (const type of ["git-branch", "git-changes", "git-root-dir"] as const) {
+    const w = getWidget(type);
+    const states = w.getHideableStates?.();
+    expect(states, type).toBeDefined();
+    expect(states!.length, type).toBe(1);
+    expect(states![0]!.key, type).toBe("no-git");
+  }
+});
+
+test("cache-hit-rate declares exactly one hideable state with key 'zero'", () => {
+  const w = getWidget("cache-hit-rate");
+  const states = w.getHideableStates?.();
+  expect(states).toBeDefined();
+  expect(states!.length).toBe(1);
+  expect(states![0]!.key).toBe("zero");
+});
+
+test("git widgets with no-git state enabled and no git data render null", () => {
+  const noGitContext: RenderContext = { ...fullContext, data: { payload_version: 1 } };
+  for (const type of ["git-branch", "git-changes", "git-root-dir"] as const) {
+    const w = getWidget(type);
+    const hideItem: WidgetItem = { id: type, type, metadata: { hide: "no-git" } };
+    expect(w.render(hideItem, noGitContext, DEFAULT_SETTINGS), `${type} hidden`).toBeNull();
+  }
+});
+
+test("git widgets without no-git state enabled and no git data render their fallback", () => {
+  const noGitContext: RenderContext = { ...fullContext, data: { payload_version: 1 } };
+  for (const type of ["git-branch", "git-changes", "git-root-dir"] as const) {
+    const w = getWidget(type);
+    const showItem: WidgetItem = { id: type, type };
+    expect(w.render(showItem, noGitContext, DEFAULT_SETTINGS), `${type} shown`).not.toBeNull();
+  }
+});
+
+test("cache-hit-rate with zero state enabled and zero data renders null", () => {
+  const w = getWidget("cache-hit-rate");
+  const emptyContext: RenderContext = { ...fullContext, data: { payload_version: 1 } };
+  const hideItem: WidgetItem = { id: "c", type: "cache-hit-rate", metadata: { hide: "zero" } };
+  expect(w.render(hideItem, emptyContext, DEFAULT_SETTINGS)).toBeNull();
+});
+
+test("cache-hit-rate without zero state enabled renders 'Cache Hit: n/a'", () => {
+  const w = getWidget("cache-hit-rate");
+  const emptyContext: RenderContext = { ...fullContext, data: { payload_version: 1 } };
+  const showItem: WidgetItem = { id: "c", type: "cache-hit-rate" };
+  expect(w.render(showItem, emptyContext, DEFAULT_SETTINGS)).toBe("Cache Hit: n/a");
+});

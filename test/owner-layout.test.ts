@@ -4,11 +4,13 @@ import { getVisibleText } from "../src/utils/ansi";
 import { renderStatusLines } from "../src/utils/renderer";
 import { parsePayload } from "../src/payload";
 import { SettingsSchema } from "../src/types/Settings";
+import { migrateSettings } from "../src/utils/migrations";
 
 const fixture = (name: string): string => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
 
 function renderFixture(settingsName: string, payloadName: string): string {
-  const settings = SettingsSchema.parse(JSON.parse(fixture(settingsName)));
+  const raw = JSON.parse(fixture(settingsName));
+  const settings = SettingsSchema.parse(migrateSettings(raw).settings);
   const data = parsePayload(fixture(payloadName));
   return `${renderStatusLines(settings, {
     data,

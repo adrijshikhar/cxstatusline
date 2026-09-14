@@ -1,18 +1,21 @@
 import type { RenderContext } from "../../types/RenderContext";
+import type { Settings } from "../../types/Settings";
 import type { CustomKeybind, WidgetEditorDisplay, WidgetEditorProps, WidgetItem } from "../../types/Widget";
+import { renderMagnitude, resolveNumberFormat } from "../../utils/number-format";
 import { formatRawOrLabeledValue } from "./raw-or-labeled";
 
 type SpeedKind = "input" | "output" | "total";
 
-const config: Record<SpeedKind, { label: string; preview: string }> = {
-  input: { label: "In: ", preview: "85.2 t/s" },
-  output: { label: "Out: ", preview: "42.5 t/s" },
-  total: { label: "Total: ", preview: "127.7 t/s" },
+const config: Record<SpeedKind, { label: string; previewVal: number }> = {
+  input: { label: "In: ", previewVal: 85.2 },
+  output: { label: "Out: ", previewVal: 42.5 },
+  total: { label: "Total: ", previewVal: 127.7 },
 };
 
-export function renderSpeed(kind: SpeedKind, item: WidgetItem, context: RenderContext): string | null {
-  const { label, preview } = config[kind];
-  if (context.isPreview) return formatRawOrLabeledValue(item, label, preview);
+export function renderSpeed(kind: SpeedKind, item: WidgetItem, context: RenderContext, settings?: Settings): string | null {
+  const { label, previewVal } = config[kind];
+  const format = settings ? resolveNumberFormat("speed", item, settings) : (item.numberFormat ?? {});
+  if (context.isPreview) return formatRawOrLabeledValue(item, label, `${renderMagnitude(previewVal, format, 1)} t/s`);
 
   const startedAt = Date.parse(context.data.session?.started_at ?? "");
   if (Number.isNaN(startedAt)) return null;
@@ -27,7 +30,8 @@ export function renderSpeed(kind: SpeedKind, item: WidgetItem, context: RenderCo
   if (tokens === undefined) return null;
 
   const elapsedSeconds = Math.max(1, (context.now.getTime() - startedAt) / 1000);
-  return formatRawOrLabeledValue(item, label, `${(tokens / elapsedSeconds).toFixed(1)} t/s`);
+  const speed = tokens / elapsedSeconds;
+  return formatRawOrLabeledValue(item, label, `${renderMagnitude(speed, format, 1)} t/s`);
 }
 
 export function getSpeedWidgetDescription(kind: SpeedKind): string { return `Shows ${kind === 'total' ? 'total' : kind} session-average token speed (tokens/sec).`; }
@@ -35,4 +39,4 @@ export function getSpeedWidgetDisplayName(kind: SpeedKind): string { return kind
 export function getSpeedWidgetEditorDisplay(kind: SpeedKind, _item: WidgetItem): WidgetEditorDisplay { return { displayText: getSpeedWidgetDisplayName(kind) }; }
 export function getSpeedWidgetCustomKeybinds(): CustomKeybind[] { return []; }
 export function renderSpeedWidgetEditor(_props: WidgetEditorProps): null { return null; }
-export function renderSpeedWidgetValue(kind: SpeedKind, item: WidgetItem, context: RenderContext): string | null { return renderSpeed(kind, item, context); }
+export function renderSpeedWidgetValue(kind: SpeedKind, item: WidgetItem, context: RenderContext, settings?: Settings): string | null { return renderSpeed(kind, item, context, settings); }

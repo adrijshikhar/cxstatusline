@@ -25,4 +25,18 @@ describe("writeFileAtomic", () => {
     const source = readFileSync(join(import.meta.dir, "../src/atomic.ts"), "utf8");
     expect(source).not.toContain("chmod");
   });
+
+  test("cleans up temp file when rename fails", () => {
+    const { root } = tmpEnv();
+    const dir = join(root, "subdir");
+    const target = join(dir, "target-dir");
+    const { mkdirSync, readdirSync } = require("node:fs");
+    mkdirSync(target, { recursive: true });
+
+    // Renaming a file over an existing directory fails with EISDIR
+    expect(() => writeFileAtomic(target, "will fail")).toThrow();
+
+    const tmpFiles = readdirSync(dir).filter((name: string) => name.endsWith(".tmp"));
+    expect(tmpFiles).toHaveLength(0);
+  });
 });

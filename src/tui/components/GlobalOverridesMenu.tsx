@@ -1,9 +1,11 @@
 import { Box, Text, useInput } from "ink";
 import React, { useState } from "react";
-import { getColorLevelString } from "../../types/ColorLevel";
+import { ColorLevelSchema, getColorLevelString } from "../../types/ColorLevel";
+import { NUMBER_KINDS, type GlobalNumberFormat, type NumberFormat, type NumberKind } from "../../types/NumberFormat";
 import { DefaultPaddingSideSchema, type Settings } from "../../types/Settings";
 import { applyColors, getAvailableBackgroundColorsForUI, getAvailableColorsForUI } from "../../utils/colors";
 import { GRADIENT_PRESET_NAMES } from "../../utils/gradient";
+import { getNextNumberStyle } from "../../utils/number-format";
 import { ConfirmDialog } from "./ConfirmDialog";
 
 export interface GlobalOverridesMenuProps {
@@ -23,10 +25,35 @@ function cycle(values: readonly string[], current: string | undefined): string |
   return values[(index + 1) % values.length] || undefined;
 }
 
+function cycleGlobalNumberStyle(settings: Settings, kind: NumberKind): Settings {
+  const current = settings.numberFormat?.[kind]?.style;
+  const nextStyle = getNextNumberStyle(current);
+
+  const kindFormat: NumberFormat = { ...settings.numberFormat?.[kind] };
+  if (nextStyle === undefined) {
+    delete kindFormat.style;
+  } else {
+    kindFormat.style = nextStyle;
+  }
+
+  const { [kind]: removedKind, ...restGlobal } = settings.numberFormat ?? {};
+  void removedKind;
+  const nextGlobal: GlobalNumberFormat = Object.keys(kindFormat).length > 0
+    ? { ...restGlobal, [kind]: kindFormat }
+    : restGlobal;
+
+  return {
+    ...settings,
+    numberFormat: Object.keys(nextGlobal).length > 0 ? nextGlobal : undefined,
+  };
+}
+
 export function GlobalOverridesMenu({ settings, onUpdate, onBack }: GlobalOverridesMenuProps): React.JSX.Element {
   const [editing, setEditing] = useState<EditField>(null);
   const [value, setValue] = useState("");
   const [confirmSeparator, setConfirmSeparator] = useState(false);
+  const [numberFormatMode, setNumberFormatMode] = useState(false);
+  const [numberFormatKindIndex, setNumberFormatKindIndex] = useState(0);
   const [gradientMode, setGradientMode] = useState(false);
   const [gradientIndex, setGradientIndex] = useState(0);
   const [gradientStep, setGradientStep] = useState<"start" | "end" | null>(null);
@@ -92,6 +119,19 @@ export function GlobalOverridesMenu({ settings, onUpdate, onBack }: GlobalOverri
       }
       return;
     }
+    if (numberFormatMode) {
+      if (key.escape) {
+        setNumberFormatMode(false);
+      } else if (key.upArrow) {
+        setNumberFormatKindIndex((i) => (i - 1 + NUMBER_KINDS.length) % NUMBER_KINDS.length);
+      } else if (key.downArrow) {
+        setNumberFormatKindIndex((i) => (i + 1) % NUMBER_KINDS.length);
+      } else if (key.leftArrow || key.rightArrow) {
+        const kind = NUMBER_KINDS[numberFormatKindIndex];
+        if (kind) onUpdate(cycleGlobalNumberStyle(settings, kind));
+      }
+      return;
+    }
     if (editing) {
       if (key.escape) {
         setEditing(null);
@@ -105,6 +145,7 @@ export function GlobalOverridesMenu({ settings, onUpdate, onBack }: GlobalOverri
       return;
     }
     if (key.escape) onBack();
+    else if (input.toLowerCase() === "n") { setNumberFormatMode(true); setNumberFormatKindIndex(0); }
     else if (input.toLowerCase() === "p") { setValue(settings.defaultPadding ?? ""); setEditing("padding"); }
     else if (input.toLowerCase() === "s" && !powerline) { setValue(settings.defaultSeparator ?? ""); setEditing("separator"); }
     else if (input.toLowerCase() === "i" && !powerline) onUpdate({ ...settings, inheritSeparatorColors: !settings.inheritSeparatorColors });
@@ -160,6 +201,33 @@ export function GlobalOverridesMenu({ settings, onUpdate, onBack }: GlobalOverri
     );
   }
 
+  if (numberFormatMode) {
+    const width = Math.max(...NUMBER_KINDS.map((kind) => kind.length));
+    return (
+      <Box flexDirection="column">
+        <Text bold>Global Number Formatting</Text>
+        <Text dimColor>↑↓ to select a number type, ←→ to cycle its style, ESC to go back</Text>
+        <Box marginTop={1} flexDirection="column">
+          {NUMBER_KINDS.map((kind, idx) => {
+            const style = settings.numberFormat?.[kind]?.style ?? "precise (default)";
+            return (
+              <Text key={kind} {...(idx === numberFormatKindIndex && { color: "cyan" })}>
+                {idx === numberFormatKindIndex ? "▶ " : "  "}
+                {kind.padStart(width)}
+                {": "}
+                {style}
+              </Text>
+            );
+          })}
+        </Box>
+        <Box marginTop={1} flexDirection="column">
+          <Text dimColor>precise = keep trailing zeros (1.0M), compact = trim them (1M / 1.1M), whole = no decimals (1M).</Text>
+          <Text dimColor>A global style forces that type across every widget. Decimal places are set per-widget or in settings.json.</Text>
+        </Box>
+      </Box>
+    );
+  }
+
   if (editing) {
     return (
       <Box flexDirection="column">
@@ -176,6 +244,7 @@ export function GlobalOverridesMenu({ settings, onUpdate, onBack }: GlobalOverri
       <Text dimColor>Configure rendering-wide padding, separators, and styling.</Text>
       <Text>{`Global Bold: ${settings.globalBold ? "Enabled" : "Disabled"} (o)`}</Text>
       <Text>{`Minimalist Mode: ${settings.minimalistMode ? "Enabled" : "Disabled"} (m)`}</Text>
+      <Text>{`Number Formatting: ${settings.numberFormat ? "customized" : "(defaults)"} (n)`}</Text>
       <Text>{`Default Padding: ${settings.defaultPadding ? JSON.stringify(settings.defaultPadding) : "none"} (p)`}</Text>
       <Text>{`Padding Side: ${settings.defaultPaddingSide} (d)`}</Text>
       <Text>{`Override FG: ${settings.overrideForegroundColor ?? "none"} (f cycle, g gradient, x clear)`}</Text>

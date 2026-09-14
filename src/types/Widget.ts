@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CANONICAL_WIDGET_TYPES } from "./canonical-widget-types";
+import { NumberFormatSchema } from "./NumberFormat";
 import type { RenderContext } from "./RenderContext";
 import type { Settings } from "./Settings";
 
@@ -24,9 +25,9 @@ export const WidgetItemSchema = z.object({
   refreshMs: z.number().int().optional(),
   maxWidth: z.number().optional(),
   merge: z.union([z.boolean(), z.literal("no-padding")]).optional(),
-  hide: z.boolean().optional(),
   excludeFromAutoAlign: z.boolean().optional(),
   metadata: z.record(z.string(), z.string()).optional(),
+  numberFormat: NumberFormatSchema.optional(),
 });
 
 export type WidgetItem = z.infer<typeof WidgetItemSchema>;
@@ -50,6 +51,15 @@ export interface CustomKeybind {
   action: string;
 }
 
+// A condition under which a widget can hide instead of rendering placeholder
+// output (e.g. 'no-git', 'zero'). Stored in metadata.hide as a comma-separated
+// list of enabled state keys; defaultEnabled states apply when metadata.hide is absent.
+export interface HideableState {
+  key: string;
+  label: string;
+  defaultEnabled?: boolean;
+}
+
 export interface Widget {
   getDefaultColor(): string;
   getDescription(): string;
@@ -59,10 +69,13 @@ export interface Widget {
   render(item: WidgetItem, context: RenderContext, settings: Settings): string | null;
   supportsRawValue(): boolean;
   supportsColors(item: WidgetItem): boolean;
+  supportsNumberFormat?(): boolean;
   getCustomKeybinds?(item?: WidgetItem): CustomKeybind[];
+  getHideableStates?(): HideableState[];
   renderEditor?(props: WidgetEditorProps): React.ReactElement | null;
   handleEditorAction?(action: string, item: WidgetItem): WidgetItem | null;
   getNumericValue?(context: RenderContext, item: WidgetItem): number | null;
   /** True when render() returns text carrying its own SGR styling that the renderer must keep. */
   emitsStyledOutput?(item: WidgetItem): boolean;
 }
+
