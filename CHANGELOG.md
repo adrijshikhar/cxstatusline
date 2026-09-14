@@ -3,6 +3,20 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.3.0...v0.4.0) (2026-09-14)
+
+
+### Features
+
+* add user-defined widgets (custom text, symbol, command) ([06796b7](https://github.com/adrijshikhar/cxstatusline/commit/06796b7ea4573ed22ccb0193081b9f263c717b63))
+* cache custom command output and refresh it in the background ([#17](https://github.com/adrijshikhar/cxstatusline/issues/17)) ([46f7841](https://github.com/adrijshikhar/cxstatusline/commit/46f78417e7c84d4044c0d954359b94d2594ae785))
+* upstream parity catch-up to ccstatusline v2.2.29 ([#21](https://github.com/adrijshikhar/cxstatusline/issues/21)) ([a1a4f56](https://github.com/adrijshikhar/cxstatusline/commit/a1a4f563aaefee638ea15fc6a9cf5415575fa3b2))
+
+
+### Bug Fixes
+
+* **tui:** keep widget edits when navigating back ([#18](https://github.com/adrijshikhar/cxstatusline/issues/18)) ([a663f6a](https://github.com/adrijshikhar/cxstatusline/commit/a663f6af78dd031a1eb0608070a4dcdb1b8bbb00))
+
 ## [0.3.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.2.0...v0.3.0) (2026-09-12)
 
 
