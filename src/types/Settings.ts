@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ColorLevelSchema } from "./ColorLevel";
 import { FlexModeSchema } from "./FlexMode";
+import { GlobalNumberFormatSchema } from "./NumberFormat";
 import { PowerlineConfigSchema } from "./PowerlineConfig";
 import { WidgetItemSchema } from "./Widget";
 
@@ -35,6 +36,7 @@ export const SettingsSchema = z.object({
   overrideForegroundColor: z.string().optional(),
   globalBold: z.boolean().default(false),
   minimalistMode: z.boolean().default(false),
+  numberFormat: GlobalNumberFormatSchema.optional(),
   powerline: PowerlineConfigSchema.default({
     enabled: false,
     separators: ["\uE0B0"],

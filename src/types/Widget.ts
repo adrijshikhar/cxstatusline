@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CANONICAL_WIDGET_TYPES } from "./canonical-widget-types";
+import { NumberFormatSchema } from "./NumberFormat";
 import type { RenderContext } from "./RenderContext";
 import type { Settings } from "./Settings";
 
@@ -26,6 +27,7 @@ export const WidgetItemSchema = z.object({
   merge: z.union([z.boolean(), z.literal("no-padding")]).optional(),
   excludeFromAutoAlign: z.boolean().optional(),
   metadata: z.record(z.string(), z.string()).optional(),
+  numberFormat: NumberFormatSchema.optional(),
 });
 
 export type WidgetItem = z.infer<typeof WidgetItemSchema>;
@@ -67,6 +69,7 @@ export interface Widget {
   render(item: WidgetItem, context: RenderContext, settings: Settings): string | null;
   supportsRawValue(): boolean;
   supportsColors(item: WidgetItem): boolean;
+  supportsNumberFormat?(): boolean;
   getCustomKeybinds?(item?: WidgetItem): CustomKeybind[];
   getHideableStates?(): HideableState[];
   renderEditor?(props: WidgetEditorProps): React.ReactElement | null;

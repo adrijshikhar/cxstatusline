@@ -19,6 +19,7 @@ import {
     isCacheSessionScope
 } from './shared/cache-scope';
 import { isHideStateEnabled, ZERO_HIDEABLE_STATE } from './shared/hideable';
+import { formatPercent, resolveNumberFormat } from '../utils/number-format';
 import { formatRawOrLabeledValue } from './shared/raw-or-labeled';
 
 export class CacheHitRateWidget implements Widget {
@@ -36,8 +37,9 @@ export class CacheHitRateWidget implements Widget {
     }
 
     render(item: WidgetItem, context: RenderContext, settings: Settings): string | null {
+        const format = resolveNumberFormat('percent', item, settings);
         if (context.isPreview) {
-            return formatRawOrLabeledValue(item, 'Cache Hit: ', '87.0%');
+            return formatRawOrLabeledValue(item, 'Cache Hit: ', formatPercent(87, format));
         }
 
         const hideWhenEmpty = isHideStateEnabled(item, ZERO_HIDEABLE_STATE);
@@ -48,14 +50,14 @@ export class CacheHitRateWidget implements Widget {
 
         const hitRate = getCacheHitRate(tokens);
         if (hitRate === null) {
-            return hideWhenEmpty ? null : formatRawOrLabeledValue(item, 'Cache Hit: ', '0.0%');
+            return hideWhenEmpty ? null : formatRawOrLabeledValue(item, 'Cache Hit: ', formatPercent(0, format));
         }
 
         if (hitRate === 0 && hideWhenEmpty) {
             return null;
         }
 
-        return formatRawOrLabeledValue(item, 'Cache Hit: ', `${hitRate.toFixed(1)}%`);
+        return formatRawOrLabeledValue(item, 'Cache Hit: ', formatPercent(hitRate, format));
     }
 
     getCustomKeybinds(item?: WidgetItem): CustomKeybind[] {
@@ -64,4 +66,5 @@ export class CacheHitRateWidget implements Widget {
 
     supportsRawValue(): boolean { return true; }
     supportsColors(item: WidgetItem): boolean { return true; }
+    supportsNumberFormat(): boolean { return true; }
 }

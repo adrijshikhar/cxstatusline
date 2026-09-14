@@ -1,5 +1,10 @@
 import type { CustomKeybind, Widget, WidgetItem, WidgetType } from "../../../types/Widget";
 import { EDIT_HIDE_STATES_ACTION, getHideKeybind } from "../../../widgets/shared/hideable";
+import {
+  CYCLE_NUMBER_STYLE_ACTION,
+  cycleNumberStyle,
+  getNumberFormatKeybind,
+} from "../../../utils/number-format";
 
 export type WidgetPickerAction = "change" | "add" | "insert";
 export type WidgetPickerLevel = "category" | "widget";
@@ -31,6 +36,9 @@ export interface CustomEditorWidgetState {
 export function customKeybindsFor(impl: Widget | null, item: WidgetItem | undefined): CustomKeybind[] {
   if (!impl || !item || item.type === "separator" || item.type === "flex-separator") return [];
   const keybinds = impl.getCustomKeybinds ? [...impl.getCustomKeybinds(item)] : [];
+  if (impl.supportsNumberFormat?.()) {
+    keybinds.push(getNumberFormatKeybind());
+  }
   if ((impl.getHideableStates?.().length ?? 0) > 0 && !keybinds.some((k) => k.action === EDIT_HIDE_STATES_ACTION)) {
     keybinds.push(getHideKeybind());
   }
@@ -317,6 +325,10 @@ export function handleNormalInputMode({
     if (!impl || !keybind) return;
     if (keybind.action === EDIT_HIDE_STATES_ACTION) {
       setCustomEditorWidget({ widget: current, impl, action: keybind.action });
+      return;
+    }
+    if (keybind.action === CYCLE_NUMBER_STYLE_ACTION) {
+      onUpdate(widgets.map((widget, index) => index === selectedIndex ? cycleNumberStyle(widget) : widget));
       return;
     }
     const updated = impl.handleEditorAction?.(keybind.action, current) ?? null;

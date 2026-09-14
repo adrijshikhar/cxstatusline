@@ -7,6 +7,7 @@ import { getWidget } from "../../utils/widgets";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { HideStatesEditor } from "./HideStatesEditor";
 import { EDIT_HIDE_STATES_ACTION, getHideModifierText } from "../../widgets/shared/hideable";
+import { getNumberFormatModifierText } from "../../utils/number-format";
 import {
   customKeybindsFor,
   filterWidgetCatalog,
@@ -62,9 +63,11 @@ function rowLabel(widget: WidgetItem): string {
   const impl = isLayout(widget.type) ? null : getWidgetImpl(widget.type);
   if (!impl) return displayWidgetType(widget.type);
   const { displayText, modifierText } = impl.getEditorDisplay(widget);
+  const numberFormatModifierText = impl.supportsNumberFormat?.() ? getNumberFormatModifierText(widget) : undefined;
   const hideModifierText = impl ? getHideModifierText(widget, impl.getHideableStates?.() ?? []) : undefined;
   const parts = [displayText];
   if (modifierText) parts.push(modifierText);
+  if (numberFormatModifierText) parts.push(numberFormatModifierText);
   if (hideModifierText) parts.push(hideModifierText);
   return parts.join(" ");
 }

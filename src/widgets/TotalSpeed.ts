@@ -19,16 +19,15 @@ import {
 
 export class TotalSpeedWidget implements Widget {
     getDefaultColor(): string { return 'cyan'; }
-    getDescription(): string { return getSpeedWidgetDescription('total'); }
-    getDisplayName(): string { return getSpeedWidgetDisplayName('total'); }
+    getDescription(): string { return 'Shows total session-average token speed (tokens/sec).'; }
+    getDisplayName(): string { return 'Total Speed'; }
     getCategory(): string { return 'Token Speed'; }
     getEditorDisplay(item: WidgetItem): WidgetEditorDisplay {
         return getSpeedWidgetEditorDisplay('total', item);
     }
 
     render(item: WidgetItem, context: RenderContext, settings: Settings): string | null {
-        void settings;
-        return renderSpeedWidgetValue('total', item, context);
+        return renderSpeedWidgetValue('total', item, context, settings);
     }
 
     getCustomKeybinds(): CustomKeybind[] {
@@ -41,4 +40,5 @@ export class TotalSpeedWidget implements Widget {
 
     supportsRawValue(): boolean { return true; }
     supportsColors(item: WidgetItem): boolean { return true; }
+    supportsNumberFormat(): boolean { return true; }
 }
