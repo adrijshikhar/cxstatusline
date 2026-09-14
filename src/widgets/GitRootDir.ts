@@ -2,7 +2,7 @@ import type { RenderContext } from '../types/RenderContext';
 import type { Settings } from '../types/Settings';
 import type { HideableState, Widget, WidgetEditorDisplay, WidgetItem } from '../types/Widget';
 import { makeModifierText } from './shared/editor-display';
-import { getHideKeybind, getHideModifierText, isHideStateEnabled, NO_GIT_HIDEABLE_STATE } from './shared/hideable';
+import { isHideStateEnabled, NO_GIT_HIDEABLE_STATE } from './shared/hideable';
 import { MAX_WIDTH_ACTION, applyMaxWidth, getMaxWidthKeybind, getMaxWidthModifier, renderMaxWidthEditor } from './shared/max-width';
 
 function baseName(path: string): string {
@@ -17,7 +17,9 @@ export class GitRootDirWidget implements Widget {
   getCategory(): string { return 'Git'; }
   getHideableStates(): HideableState[] { return [NO_GIT_HIDEABLE_STATE]; }
   getEditorDisplay(item: WidgetItem): WidgetEditorDisplay {
-    const modifiers = [getHideModifierText(item, this.getHideableStates()), getMaxWidthModifier(item)].filter((value): value is string => value !== undefined);
+    const modifiers: string[] = [];
+    const maxWidthText = getMaxWidthModifier(item);
+    if (maxWidthText) modifiers.push(maxWidthText);
     return { displayText: this.getDisplayName(), modifierText: makeModifierText(modifiers) };
   }
   render(item: WidgetItem, context: RenderContext, _settings: Settings): string | null {
@@ -26,9 +28,8 @@ export class GitRootDirWidget implements Widget {
     if (!root) return isHideStateEnabled(item, NO_GIT_HIDEABLE_STATE) ? null : 'no git';
     return applyMaxWidth(baseName(root), item.maxWidth);
   }
-  getCustomKeybinds() { return [getHideKeybind(), getMaxWidthKeybind()]; }
+  getCustomKeybinds() { return [getMaxWidthKeybind()]; }
   renderEditor(props: import('../types/Widget').WidgetEditorProps) { return props.action === MAX_WIDTH_ACTION ? renderMaxWidthEditor(props) : null; }
   supportsRawValue(): boolean { return false; }
   supportsColors(_item: WidgetItem): boolean { return true; }
 }
-

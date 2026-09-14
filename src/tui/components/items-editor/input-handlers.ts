@@ -1,4 +1,5 @@
 import type { CustomKeybind, Widget, WidgetItem, WidgetType } from "../../../types/Widget";
+import { EDIT_HIDE_STATES_ACTION, getHideKeybind } from "../../../widgets/shared/hideable";
 
 export type WidgetPickerAction = "change" | "add" | "insert";
 export type WidgetPickerLevel = "category" | "widget";
@@ -29,7 +30,11 @@ export interface CustomEditorWidgetState {
 
 export function customKeybindsFor(impl: Widget | null, item: WidgetItem | undefined): CustomKeybind[] {
   if (!impl || !item || item.type === "separator" || item.type === "flex-separator") return [];
-  return impl.getCustomKeybinds?.(item) ?? [];
+  const keybinds = impl.getCustomKeybinds ? [...impl.getCustomKeybinds(item)] : [];
+  if ((impl.getHideableStates?.().length ?? 0) > 0 && !keybinds.some((k) => k.action === EDIT_HIDE_STATES_ACTION)) {
+    keybinds.push(getHideKeybind());
+  }
+  return keybinds;
 }
 
 export interface InputKey {
@@ -310,6 +315,10 @@ export function handleNormalInputMode({
     const impl = getWidgetImpl(current.type);
     const keybind = customKeybindsFor(impl, current).find((entry) => entry.key === input);
     if (!impl || !keybind) return;
+    if (keybind.action === EDIT_HIDE_STATES_ACTION) {
+      setCustomEditorWidget({ widget: current, impl, action: keybind.action });
+      return;
+    }
     const updated = impl.handleEditorAction?.(keybind.action, current) ?? null;
     if (updated) {
       onUpdate(widgets.map((widget, index) => index === selectedIndex ? updated : widget));

@@ -72,13 +72,46 @@ export function setHideStates(item: WidgetItem, keys: string[]): WidgetItem {
     };
 }
 
+export function getEnabledHideStates(item: WidgetItem, states: HideableState[]): string[] {
+    return states
+        .filter(state => isHideStateEnabled(item, state))
+        .map(state => state.key);
+}
+
+/**
+ * Writes the canonical hide list for an item; the hide key is omitted when the
+ * enabled set matches the widget's defaults (so untouched items keep minimal
+ * metadata).
+ */
+export function setEnabledHideStates(item: WidgetItem, states: HideableState[], enabledKeys: string[]): WidgetItem {
+    const orderedEnabled = states
+        .filter(state => enabledKeys.includes(state.key))
+        .map(state => state.key);
+    const defaults = states
+        .filter(state => state.defaultEnabled)
+        .map(state => state.key);
+    const matchesDefaults = orderedEnabled.length === defaults.length
+        && orderedEnabled.every(key => defaults.includes(key));
+
+    const cleaned = removeMetadataKeys(item, [HIDE_METADATA_KEY]);
+    if (matchesDefaults) {
+        return cleaned;
+    }
+
+    return {
+        ...cleaned,
+        metadata: {
+            ...cleaned.metadata,
+            [HIDE_METADATA_KEY]: orderedEnabled.join(',')
+        }
+    };
+}
+
 export function getHideKeybind(): CustomKeybind {
     return HIDE_KEYBIND;
 }
 
 export function getHideModifierText(item: WidgetItem, states: HideableState[]): string | undefined {
-    const enabled = states
-        .filter(state => isHideStateEnabled(item, state))
-        .map(state => state.key);
+    const enabled = getEnabledHideStates(item, states);
     return enabled.length > 0 ? `(hide: ${enabled.join(', ')})` : undefined;
 }

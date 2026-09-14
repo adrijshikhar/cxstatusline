@@ -18,8 +18,7 @@ import {
     handleCacheScopeAction,
     isCacheSessionScope
 } from './shared/cache-scope';
-import { getHideKeybind, getHideModifierText, isHideStateEnabled, ZERO_HIDEABLE_STATE } from './shared/hideable';
-import { makeModifierText } from './shared/editor-display';
+import { isHideStateEnabled, ZERO_HIDEABLE_STATE } from './shared/hideable';
 import { formatRawOrLabeledValue } from './shared/raw-or-labeled';
 
 export class CacheHitRateWidget implements Widget {
@@ -29,8 +28,7 @@ export class CacheHitRateWidget implements Widget {
     getCategory(): string { return 'Cache'; }
     getHideableStates(): HideableState[] { return [ZERO_HIDEABLE_STATE]; }
     getEditorDisplay(item: WidgetItem): WidgetEditorDisplay {
-        const modifiers = [getCacheScopeModifierText(item), getHideModifierText(item, this.getHideableStates())].filter((value): value is string => value !== undefined);
-        return { displayText: this.getDisplayName(), modifierText: makeModifierText(modifiers) };
+        return { displayText: this.getDisplayName(), modifierText: getCacheScopeModifierText(item) };
     }
 
     handleEditorAction(action: string, item: WidgetItem): WidgetItem | null {
@@ -61,7 +59,7 @@ export class CacheHitRateWidget implements Widget {
     }
 
     getCustomKeybinds(item?: WidgetItem): CustomKeybind[] {
-        return [getCacheScopeKeybind(), getHideKeybind()];
+        return [getCacheScopeKeybind()];
     }
 
     supportsRawValue(): boolean { return true; }
