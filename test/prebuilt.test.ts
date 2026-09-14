@@ -210,10 +210,16 @@ describe("detect CLI exit codes", () => {
   const root = join(import.meta.dir, "..");
 
   function runDetectCli(codexVersion: string): { status: number; stderr: string } {
+    // GITHUB_STEP_SUMMARY and GITHUB_OUTPUT are append-only paths the child writes to directly.
+    // Inheriting the runner's real ones makes a fixture version land on the live CI job summary.
+    const { GITHUB_STEP_SUMMARY, GITHUB_OUTPUT, ...env } = process.env;
+    void GITHUB_STEP_SUMMARY;
+    void GITHUB_OUTPUT;
     try {
       execFileSync(process.execPath, ["scripts/prebuilt.ts", "detect", "--codex-version", codexVersion], {
         cwd: root,
         encoding: "utf8",
+        env,
       });
       return { status: 0, stderr: "" };
     } catch (e) {
@@ -226,6 +232,22 @@ describe("detect CLI exit codes", () => {
     const { status, stderr } = runDetectCli("9.9.9");
     expect(status).toBe(3);
     expect(stderr).toContain("Prebuilt blocked: Codex 9.9.9");
+  });
+
+  test("the blocked summary never reaches an inherited GITHUB_STEP_SUMMARY", () => {
+    // This fixture version is not real. Before the env scrub it landed on the live CI job
+    // summary of whatever workflow ran the suite, reading as a genuine release blocker.
+    const summaryFile = join(tmp("summary-leak"), "summary.md");
+    writeFileSync(summaryFile, "");
+    const previous = process.env.GITHUB_STEP_SUMMARY;
+    process.env.GITHUB_STEP_SUMMARY = summaryFile;
+    try {
+      expect(runDetectCli("9.9.9").status).toBe(3);
+      expect(readFileSync(summaryFile, "utf8")).toBe("");
+    } finally {
+      if (previous === undefined) delete process.env.GITHUB_STEP_SUMMARY;
+      else process.env.GITHUB_STEP_SUMMARY = previous;
+    }
   });
 
   test("a malformed --codex-version exits 1 with a plain error and no blocked summary", () => {
