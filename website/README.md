@@ -12,4 +12,4 @@ Ink Web is pinned to 0.2.0. All application Ink imports resolve to its prebundle
 
 ## Cloudflare Pages
 
-The `cxstatusline` Pages project builds from the repository root with `bun install --frozen-lockfile && cd website && bun install --frozen-lockfile && bun run build` and publishes `website/dist`. Production deployments from `main` are disabled pending an intentional release. Preview deployments run only for branches matching `*preview*`; their `*.cxstatusline.pages.dev` URLs require Cloudflare Access sign-in as `adrijshikhar26@gmail.com`. The production custom domain is `cxstatusline.adrijshikhar.dev`.
+The `cxstatusline` Pages project builds from the repository root with `bun install --frozen-lockfile && cd website && bun install --frozen-lockfile && bun run build` and publishes `website/dist`. Production deployments from `main` are disabled pending an intentional release. Preview deployments are limited to `*preview*` and the slash-form companion `preview/*`; their `*.cxstatusline.pages.dev` URLs require Cloudflare Access sign-in as `adrijshikhar26@gmail.com`. The production custom domain is `cxstatusline.adrijshikhar.dev`.
