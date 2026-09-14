@@ -16,6 +16,9 @@ const terminalElement = document.querySelector<HTMLElement>("#terminal")!;
 const shell = document.querySelector<HTMLElement>(".terminal-shell")!;
 const chat = document.querySelector<HTMLElement>("#chat-preview")!;
 const composer = document.querySelector<HTMLTextAreaElement>("#demo-message")!;
+const copyInstallButton = document.querySelector<HTMLButtonElement>("#copy-install")!;
+const copyStatus = document.querySelector<HTMLElement>("#copy-status")!;
+const installCommands = document.querySelector<HTMLElement>("#install-commands")!;
 const sampleSettings = SettingsSchema.parse(preset);
 let savedSettings = cloneSettings(sampleSettings);
 let view: "editor" | "preview" = "editor";
@@ -94,5 +97,17 @@ downloadButton.addEventListener("click", () => {
   link.download = "cxstatusline-settings.json";
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 0);
+});
+copyInstallButton.addEventListener("click", async () => {
+  copyInstallButton.disabled = true;
+  copyStatus.textContent = "";
+  try {
+    await navigator.clipboard.writeText(installCommands.textContent ?? "");
+    copyStatus.textContent = "Copied";
+  } catch {
+    copyStatus.textContent = "Select and copy the commands.";
+  } finally {
+    copyInstallButton.disabled = false;
+  }
 });
 void boot();

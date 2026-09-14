@@ -1,5 +1,7 @@
 # Ink Web playground
 
+The landing page headings use Geist Sans, downloaded from the official [vercel/geist-font](https://github.com/vercel/geist-font) distribution at the current `main` revision (`fonts/Geist/webfonts/Geist[wght].woff2`). The upstream SIL Open Font License is included at `public/fonts/OFL.txt`.
+
 Local proof using the existing cxstatusline Ink App and preview renderer. No Node runtime boots in the browser.
 
 The first visit opens the editor with a sample. Save & Exit shows a local demo composer and the real saved footer; Edit statusline returns to the same saved configuration. Browser storage uses `cxstatusline.playground.settings.v1`; downloads always contain that saved snapshot. The composer is sample-only and sends nothing. Native path import/export remains unavailable in the browser.
