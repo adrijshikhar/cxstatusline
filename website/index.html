@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>cxstatusline playground</title>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+        <p class="eyebrow">cxstatusline / Ink Web proof</p>
+          <h1>Configure the real Ink TUI in your browser.</h1>
+          <p class="lede">The existing configuration app runs in a browser terminal. Saved changes stay in this browser until you download them.</p>
+        </div>
+        <div class="actions">
+          <button id="boot" type="button" hidden>Retry playground</button>
+          <button id="edit" type="button" hidden>Edit statusline</button>
+          <button id="download" type="button" disabled>Download saved settings</button>
+        </div>
+      </header>
+      <p id="status" class="status">Loading your sample layout…</p>
+      <section class="terminal-shell" aria-label="cxstatusline terminal">
+        <div id="chat-preview" hidden>
+          <div class="transcript"><p><strong>You</strong> How does this footer look?</p><p><strong>Codex</strong> It is shown below the demo composer.</p></div>
+          <label for="demo-message">Demo message</label>
+          <textarea id="demo-message" rows="3" placeholder="Type a message to preview the composer…"></textarea>
+          <p class="demo-note">Demo only · no messages are sent</p>
+        </div>
+        <div id="terminal"></div>
+      </section>
+      <p class="note">Preloaded with Adrij’s layout and sample session data. Save inside the TUI before downloading. Custom-command widgets are omitted from this demo preset.</p>
+    </main>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
