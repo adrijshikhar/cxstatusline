@@ -1,0 +1,26 @@
+:root { color: #e8eee8; background: #0b0e0e; font: 16px/1.5 ui-sans-serif, system-ui, sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 80% 10%, #24362d, transparent 40%), #0b0e0e; }
+main { width: min(1100px, calc(100% - 40px)); margin: 0 auto; padding: 64px 0; }
+header { display: flex; justify-content: space-between; gap: 32px; align-items: end; }
+.eyebrow { color: #9ac6a0; text-transform: uppercase; letter-spacing: .14em; font-size: 12px; }
+h1 { max-width: 720px; margin: 12px 0; font: 600 clamp(34px, 6vw, 68px)/.98 Georgia, serif; letter-spacing: -.04em; }
+.lede { max-width: 650px; color: #aab8ad; }
+.actions { display: flex; flex-direction: column; gap: 10px; min-width: 170px; }
+button { border: 1px solid #9ac6a0; border-radius: 999px; padding: 11px 16px; color: #071008; background: #b9e5bd; font-weight: 700; cursor: pointer; }
+button:disabled { cursor: wait; opacity: .45; }
+button + button { color: #dce8dd; background: transparent; }
+.status { margin: 34px 0 12px; color: #9ac6a0; font-family: ui-monospace, monospace; font-size: 13px; }
+.terminal-shell { min-height: 520px; padding: 14px; border: 1px solid #33443a; border-radius: 16px; background: #101315; box-shadow: 0 20px 80px #0008; }
+.terminal-shell.preview { min-height: 0; }
+#terminal { min-height: 490px; }
+.preview #terminal { min-height: 54px; height: 54px; overflow: hidden; margin-top: 6px; }
+#chat-preview { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.transcript { color: #b9c5bb; font-size: 13px; margin: 0 0 18px; }
+.transcript p { margin: 5px 0; }
+#chat-preview label { display: block; margin-bottom: 7px; color: #c9d5cc; font-size: 13px; }
+#demo-message { display: block; width: 100%; resize: vertical; border: 1px solid #526158; border-radius: 5px; padding: 12px; color: #e8eee8; background: #22282a; font: inherit; line-height: 1.45; }
+#demo-message:focus { outline: 2px solid #b9e5bd; outline-offset: 2px; }
+.demo-note { margin: 8px 0 0; color: #9ac6a0; font-size: 12px; }
+.note { color: #839188; font-size: 13px; }
+@media (max-width: 700px) { main { padding: 32px 0; } header { display: block; } .actions { margin-top: 24px; } }
