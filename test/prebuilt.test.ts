@@ -210,11 +210,11 @@ describe("detect CLI exit codes", () => {
   const root = join(import.meta.dir, "..");
 
   function runDetectCli(codexVersion: string): { status: number; stderr: string } {
-    // GITHUB_STEP_SUMMARY and GITHUB_OUTPUT are append-only paths the child writes to directly.
-    // Inheriting the runner's real ones makes a fixture version land on the live CI job summary.
-    const { GITHUB_STEP_SUMMARY, GITHUB_OUTPUT, ...env } = process.env;
-    void GITHUB_STEP_SUMMARY;
-    void GITHUB_OUTPUT;
+    // GITHUB_STEP_SUMMARY and GITHUB_OUTPUT are append-only paths the child writes to directly,
+    // so inheriting the runner's real ones lands a fixture version on the live CI job summary.
+    const env = { ...process.env };
+    delete env.GITHUB_STEP_SUMMARY;
+    delete env.GITHUB_OUTPUT;
     try {
       execFileSync(process.execPath, ["scripts/prebuilt.ts", "detect", "--codex-version", codexVersion], {
         cwd: root,
