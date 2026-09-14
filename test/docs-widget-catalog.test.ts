@@ -5,10 +5,6 @@ import { WIDGET_MANIFEST } from "../src/utils/widget-manifest";
 
 const usage = readFileSync(join(import.meta.dir, "..", "docs", "usage.md"), "utf8");
 
-/**
- * The catalog in docs/usage.md is generated from this manifest. Without this guard a widget added
- * later ships undocumented, which is how the previous catalog drifted out of the README.
- */
 test("every widget in the manifest appears in the usage guide", () => {
   const undocumented = WIDGET_MANIFEST
     .map(({ type }) => type)

@@ -210,8 +210,6 @@ describe("detect CLI exit codes", () => {
   const root = join(import.meta.dir, "..");
 
   function runDetectCli(codexVersion: string): { status: number; stderr: string } {
-    // GITHUB_STEP_SUMMARY and GITHUB_OUTPUT are append-only paths the child writes to directly,
-    // so inheriting the runner's real ones lands a fixture version on the live CI job summary.
     const env = { ...process.env };
     delete env.GITHUB_STEP_SUMMARY;
     delete env.GITHUB_OUTPUT;
@@ -235,8 +233,6 @@ describe("detect CLI exit codes", () => {
   });
 
   test("the blocked summary never reaches an inherited GITHUB_STEP_SUMMARY", () => {
-    // This fixture version is not real. Before the env scrub it landed on the live CI job
-    // summary of whatever workflow ran the suite, reading as a genuine release blocker.
     const summaryFile = join(tmp("summary-leak"), "summary.md");
     writeFileSync(summaryFile, "");
     const previous = process.env.GITHUB_STEP_SUMMARY;

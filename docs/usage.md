@@ -131,8 +131,10 @@ commands before you confirm.
 
 ### Synchronous execution (default)
 
-When `refreshMs` is unset (or `0`), commands run synchronously on **every footer redraw** (up to five
-times a second while Codex streams).
+When `refreshMs` is absent from the widget, commands run synchronously on **every footer redraw** (up
+to five times a second while Codex streams). Setting `refreshMs` to `0` does not mean synchronous: any
+value present selects background caching, and values below 1000 are raised to a 1 second interval.
+Remove the field to go back to synchronous execution.
 
 Codex kills the whole statusline renderer after one second and keeps the previous frame, so
 cxstatusline caps each synchronous command at **300 ms by default, 600 ms maximum** (`timeout`, editor key
