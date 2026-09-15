@@ -77,7 +77,7 @@ async function boot(): Promise<void> {
   try {
     mounted = mountInkInXterm(
       <App settingsPath="browser-memory/settings.json" initialSettings={cloneSettings(savedSettings)} writeSettings={writeSettings} onExit={showPreview} readImportFile={async () => { throw new Error("Path imports are unavailable in this browser demo."); }} />,
-      { container: terminalElement, focus: view === "editor", termOptions: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 14, screenReaderMode: true, theme: { background: "#101315", foreground: "#e8eee8" } }, onReady: () => { if (view === "preview") showPreview(); else status.textContent = loaded.error ?? "Edit the sample, then save when ready."; } },
+      { container: terminalElement, focus: view === "editor", termOptions: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 14, screenReaderMode: true, theme: { background: "#282c34", foreground: "#e6e9ef" } }, onReady: () => { if (view === "preview") showPreview(); else status.textContent = loaded.error ?? "Edit the sample, then save when ready."; } },
     );
     downloadButton.disabled = false;
   } catch (error) {
