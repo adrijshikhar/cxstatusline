@@ -6,7 +6,6 @@ const desktopPlayground = document.querySelector<HTMLElement>("#desktop-playgrou
 const featuresTitle = document.querySelector<HTMLElement>("#features-title")!;
 const bootButton = document.querySelector<HTMLButtonElement>("#boot")!;
 const status = document.querySelector<HTMLElement>("#status")!;
-const copyInstall = document.querySelector<HTMLButtonElement>("#copy-install")!;
 
 async function mountDevelopmentReviewTools(): Promise<void> {
   if (!import.meta.env.DEV || import.meta.env.PUBLIC_ENABLE_AGENTATION !== "1") return;
@@ -64,26 +63,56 @@ bootButton.addEventListener("click", () => {
   pending = undefined;
   void syncViewport();
 });
-copyInstall.addEventListener("click", async () => {
-  try {
-    await navigator.clipboard.writeText(copyInstall.dataset.commands!);
-    copyInstall.textContent = "Copied";
-  } catch {
-    copyInstall.textContent = "Copy failed";
-  }
-  setTimeout(() => { copyInstall.textContent = "Copy"; }, 1500);
-});
-
 setMobileVisibility(desktop.matches);
 void syncViewport();
 void mountDevelopmentReviewTools();
 
 if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-  animate(".intro-copy > *", {
-    opacity: [0.75, 1],
-    translateY: [12, 0],
-    duration: 650,
-    delay: stagger(90),
+  animate("#playground-skeleton [data-slot='skeleton']", {
+    opacity: [.3, 1],
+    duration: 900,
+    delay: stagger(120),
+    alternate: true,
+    loop: 3,
+    ease: "inOutSine",
+  });
+  animate(".intro > *", {
+    opacity: [0.55, 1],
+    translateY: [10, 0],
+    duration: 700,
+    delay: stagger(110),
     ease: "outExpo",
   });
+  animate(".prompt-line", {
+    clipPath: ["inset(0 100% 0 0)", "inset(0 0% 0 0)"],
+    duration: 850,
+    delay: 160,
+    ease: "outExpo",
+  });
+
+  const animations = new WeakMap<Element, ReturnType<typeof animate>>();
+  const reveal = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      reveal.unobserve(entry.target);
+      animations.get(entry.target)?.play();
+    }
+  }, { threshold: .12 });
+
+  const setupScrollReveals = () => {
+    document.querySelectorAll(".content-section, .site-footer").forEach((section) => {
+      const children = section.querySelectorAll(":scope > *");
+      animations.set(section, animate(children.length ? children : section, {
+        autoplay: false,
+        opacity: [0, 1],
+        translateY: [28, 0],
+        duration: 850,
+        delay: stagger(110),
+        ease: "outExpo",
+      }));
+      reveal.observe(section);
+    });
+  };
+  if (document.readyState === "complete") setupScrollReveals();
+  else window.addEventListener("load", setupScrollReveals, { once: true });
 }

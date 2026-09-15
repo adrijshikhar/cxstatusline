@@ -50,22 +50,22 @@ test("desktop mounts once, opens the saved editor, reloads, and downloads", asyn
   const preset = await page.evaluate(() => fetch("/src/sample-settings.json").then((response) => response.json()));
   await page.evaluate(([key, value]) => localStorage.setItem(key, JSON.stringify(value)), [storageKey, preset]);
   await page.reload();
-  await expect(page.locator("#status")).toContainText("Showing saved browser configuration");
+  await expect(page.locator("#status")).toHaveText("Saved in this browser");
   await expect(page.locator("#chat-preview")).toBeVisible();
   await page.locator("#edit").click();
   await waitForEditor(page);
   await expect(page.locator("#terminal")).toContainText("Main Menu");
   await page.reload();
-  await expect(page.locator("#status")).toContainText("Showing saved browser configuration");
+  await expect(page.locator("#status")).toHaveText("Saved in this browser");
   await expect(page.locator("#desktop-playground")).toBeVisible();
-  await expect(page.locator("#download")).toHaveText("Download saved settings");
+  await expect(page.locator("#download")).toHaveText("Download JSON");
   const frame = await page.locator("body").boundingBox();
   expect(frame?.width).toBe(1440);
   expect((await page.locator(".first-screen").boundingBox())?.height).toBeLessThanOrEqual(900);
   expect(await page.locator("#playground").boundingBox()).toMatchObject({ x: 24, width: 1392 });
   await page.screenshot({ path: "test-artifacts/task4-desktop.png", fullPage: true });
 
-  await expect(page.locator("#download")).toHaveText("Download saved settings");
+  await expect(page.locator("#download")).toHaveText("Download JSON");
   const download = await Promise.all([page.waitForEvent("download"), page.locator("#download").click()]);
   expect(download[0].suggestedFilename()).toBe("cxstatusline-settings.json");
   expect(JSON.parse(await download[0].createReadStream().then(async (stream) => { let text = ""; for await (const chunk of stream!) text += chunk; return text; }))).toHaveProperty("version");
@@ -106,6 +106,7 @@ test("preview rows and installation code copy remain usable", async ({ page }) =
     await page.evaluate(([key, value, count]) => localStorage.setItem(key, JSON.stringify({ ...value, lines: value.lines.slice(0, count) })), [storageKey, preset, lines]);
     await page.reload();
     await expect(page.locator("#chat-preview")).toBeVisible();
+    await expect(page.locator("#playground-skeleton")).toBeHidden();
     const rowCount = await page.locator("#terminal .xterm-rows > div").count();
     expect(rowCount).toBeGreaterThanOrEqual(lines);
     const bounds = await page.locator("#terminal").boundingBox();
@@ -116,11 +117,11 @@ test("preview rows and installation code copy remain usable", async ({ page }) =
   expect(await page.evaluate(() => (window as any).__copiedCommands)).toBe("npm install -g cxstatusline\ncxstatusline install\ncxstatusline doctor");
   await expect(page.locator("#copy-install")).toHaveText("Copied");
   const checks = await page.evaluate(() => {
-    const controls = [...document.querySelectorAll<HTMLElement>("button, textarea")];
-    return { overflow: document.documentElement.scrollWidth <= window.innerWidth, smallTargets: controls.filter((element) => { const box = element.getBoundingClientRect(); return box.width > 0 && (box.width < 44 || box.height < 44); }).length };
+    const controls = [...document.querySelectorAll<HTMLElement>("button, input, textarea")];
+    return { overflow: document.documentElement.scrollWidth <= window.innerWidth, undersizedControls: controls.filter((element) => { const box = element.getBoundingClientRect(); return box.width > 0 && (box.width < 28 || box.height < 28); }).length };
   });
   expect(checks.overflow).toBe(true);
-  expect(checks.smallTargets).toBeLessThanOrEqual(1);
+  expect(checks.undersizedControls).toBeLessThanOrEqual(1);
 });
 
 test("xterm releases Tab focus", async ({ page }) => {

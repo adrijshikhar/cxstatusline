@@ -6,14 +6,6 @@
   src: url("/fonts/InterVariable.woff2") format("woff2");
 }
 
-@font-face {
-  font-family: "IBM Plex Serif";
-  font-style: italic;
-  font-weight: 400;
-  font-display: swap;
-  src: url('/fonts/IBM-Plex-Serif-Italic.woff2') format('woff2');
-}
-
 :root {
   --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
   --font-mono: "SFMono-Regular", Consolas, monospace;
@@ -35,4 +27,23 @@
   background: var(--bg);
   font: 16px/1.55 var(--font-sans);
   color-scheme: dark;
+}
+
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--text);
+  --color-popover: var(--surface);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--accent-text);
+  --color-secondary: var(--surface-strong);
+  --color-secondary-foreground: var(--text);
+  --color-muted: var(--surface);
+  --color-muted-foreground: var(--muted);
+  --color-accent: var(--surface-strong);
+  --color-accent-foreground: var(--text);
+  --color-border: var(--line);
+  --color-input: var(--line);
+  --color-ring: var(--accent);
 }
