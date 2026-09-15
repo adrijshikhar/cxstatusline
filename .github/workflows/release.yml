@@ -31,18 +31,16 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-  publish-npm:
-    name: Build & Publish to npm
+  build-and-verify:
+    name: Build & Verify Release
     runs-on: macos-15
     needs: release-please
     if: |
       always() &&
       github.repository == 'adrijshikhar/cxstatusline' &&
       (needs.release-please.outputs.releases_created == 'true' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')
-    environment: npm
-    permissions:
-      contents: write
-      id-token: write
+    outputs:
+      tag_name: ${{ steps.tag.outputs.tag }}
     steps:
       - name: Determine Target Git Ref
         id: target
@@ -66,6 +64,15 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Resolve Release Tag
+        id: tag
+        run: |
+          if [ -n "${{ needs.release-please.outputs.tag_name }}" ]; then
+            echo "tag=${{ needs.release-please.outputs.tag_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=v$(node -p 'require("./package.json").version')" >> "$GITHUB_OUTPUT"
+          fi
+
       - run: bun install --frozen-lockfile
       - run: bun run typecheck && bun test
       - run: CXSTATUSLINE_RELEASE_BUILD=1 bun run build
@@ -73,17 +80,41 @@ jobs:
       - run: npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP"
       - run: cd "$RUNNER_TEMP" && shasum -a 256 cxstatusline-*.tgz > SHA256SUMS
 
+      - name: Save Release Tarball
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-tarball
+          path: |
+            ${{ runner.temp }}/cxstatusline-*.tgz
+            ${{ runner.temp }}/SHA256SUMS
+          if-no-files-found: error
+
+  publish-npm:
+    name: Publish to npm
+    runs-on: macos-15
+    needs: [release-please, build-and-verify]
+    environment: npm
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Download Release Tarball
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-tarball
+          path: release-tarball
+
       - name: Attach tarball to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          TAG: ${{ needs.build-and-verify.outputs.tag_name }}
         run: |
-          TAG="v$(node -p 'require("./package.json").version')"
           gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1 || gh release create "$TAG" --repo "$REPO" --title "cxstatusline $TAG" --notes "Source release; the packed CLI and its checksum are attached." --verify-tag
-          gh release upload "$TAG" --repo "$REPO" "$RUNNER_TEMP"/cxstatusline-*.tgz "$RUNNER_TEMP"/SHA256SUMS --clobber
+          gh release upload "$TAG" --repo "$REPO" release-tarball/cxstatusline-*.tgz release-tarball/SHA256SUMS --clobber
 
       - name: Upgrade npm for native OIDC Trusted Publishing
         run: npm install -g npm@latest
 
       - name: Publish to npm (OIDC Trusted Publishing)
-        run: npm publish "$RUNNER_TEMP"/cxstatusline-*.tgz --provenance --access public
+        run: npm publish release-tarball/cxstatusline-*.tgz --provenance --access public
