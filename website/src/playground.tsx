@@ -25,6 +25,14 @@ let hasSavedSettings = false;
 let savedDuringEdit = false;
 const storage = (): Storage => window.localStorage;
 
+function animateViewChange(): void {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  shell.animate(
+    [{ opacity: .72, transform: "translateY(6px)" }, { opacity: 1, transform: "translateY(0)" }],
+    { duration: 320, easing: "cubic-bezier(.22, 1, .36, 1)" },
+  );
+}
+
 function focusCurrentView(): void {
   setTimeout(() => {
     if (view === "editor") mounted?.term.focus();
@@ -38,6 +46,7 @@ function renderEditor(): void {
   chat.hidden = true;
   editButton.hidden = true;
   shell.classList.remove("preview");
+  animateViewChange();
   terminalElement.inert = false;
   terminalElement.style.height = "";
   if (mounted) {
@@ -65,6 +74,7 @@ function showPreview(focus = true): void {
   chat.hidden = false;
   editButton.hidden = false;
   shell.classList.add("preview");
+  animateViewChange();
   terminalElement.inert = true;
   const rows = Math.max(savedSettings.lines.length, 1);
   terminalElement.style.height = `${Math.ceil(rows * terminalLineHeight() + 4)}px`;
