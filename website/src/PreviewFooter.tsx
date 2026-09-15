@@ -11,5 +11,5 @@ export function PreviewFooter({ settings }: { settings: Settings }): React.JSX.E
     stdout.on("resize", update);
     return () => { stdout.off("resize", update); };
   }, [stdout]);
-  return <Box flexDirection="column"><StatusLinePreview settings={settings} terminalWidth={width} /></Box>;
+  return <Box flexDirection="column"><StatusLinePreview settings={{ ...settings, flexMode: "full" }} terminalWidth={width} /></Box>;
 }
