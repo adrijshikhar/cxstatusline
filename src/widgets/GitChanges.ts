@@ -1,6 +1,7 @@
 import type { RenderContext } from '../types/RenderContext';
 import type { Settings } from '../types/Settings';
 import type { HideableState, Widget, WidgetEditorDisplay, WidgetItem } from '../types/Widget';
+import { getGitDiffChanges } from '../utils/git';
 import { isHideStateEnabled, NO_GIT_HIDEABLE_STATE } from './shared/hideable';
 
 export class GitChangesWidget implements Widget {
@@ -12,7 +13,10 @@ export class GitChangesWidget implements Widget {
   getEditorDisplay(_item: WidgetItem): WidgetEditorDisplay { return { displayText: this.getDisplayName() }; }
   render(item: WidgetItem, context: RenderContext, _settings: Settings): string | null {
     if (context.isPreview) return '(+42,-10)';
-    const changes = context.data.git?.changes;
+    const cwd = context.data.session?.cwd ?? context.data.session?.project_root;
+    const shouldCheckLive = Boolean(context.commandCacheDir || context.liveGit || !context.data.git?.changes);
+    const liveChanges = shouldCheckLive ? getGitDiffChanges(cwd) : null;
+    const changes = liveChanges ?? context.data.git?.changes;
     if (!changes) return isHideStateEnabled(item, NO_GIT_HIDEABLE_STATE) ? null : '(no git)';
     return '(+' + changes.additions + ',-' + changes.deletions + ')';
   }
