@@ -37,7 +37,6 @@ function renderEditor(): void {
   chat.hidden = true;
   editButton.hidden = true;
   shell.classList.remove("preview");
-  terminalElement.style.height = "";
   if (mounted) {
     mounted.term.options.disableStdin = false;
     mounted.rerender(<App settingsPath="browser-memory/settings.json" initialSettings={cloneSettings(savedSettings)} writeSettings={writeSettings} onExit={showPreview} readImportFile={async () => { throw new Error("Path imports are unavailable in this browser demo."); }} />);
@@ -45,25 +44,11 @@ function renderEditor(): void {
   }
 }
 
-function terminalLineHeight(): number {
-  const term = mounted?.term;
-  const cellHeight = (term as unknown as { _core?: { _renderService?: { dimensions?: { css?: { cell?: { height?: number } } } } } })?._core?._renderService?.dimensions?.css?.cell?.height;
-  if (typeof cellHeight === "number" && cellHeight > 0) return cellHeight;
-  const screen = term?.element?.querySelector<HTMLElement>(".xterm-screen");
-  if (screen && term.rows > 0) {
-    const measuredHeight = screen.getBoundingClientRect().height / term.rows;
-    if (measuredHeight > 0) return measuredHeight;
-  }
-  return Math.max(1, (term?.options.fontSize ?? 14) * 1.5);
-}
-
 function showPreview(focus = true): void {
   view = "preview";
   chat.hidden = false;
   editButton.hidden = false;
   shell.classList.add("preview");
-  const rows = Math.max(savedSettings.lines.length, 1);
-  terminalElement.style.height = `${Math.ceil(rows * terminalLineHeight() + 4)}px`;
   if (mounted) {
     mounted.term.options.disableStdin = true;
     mounted.rerender(<PreviewFooter settings={savedSettings} />);
