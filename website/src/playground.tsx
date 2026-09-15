@@ -37,6 +37,8 @@ function renderEditor(): void {
   chat.hidden = true;
   editButton.hidden = true;
   shell.classList.remove("preview");
+  terminalElement.inert = false;
+  terminalElement.style.height = "";
   if (mounted) {
     mounted.term.options.disableStdin = false;
     mounted.rerender(<App settingsPath="browser-memory/settings.json" initialSettings={cloneSettings(savedSettings)} writeSettings={writeSettings} onExit={showPreview} readImportFile={async () => { throw new Error("Path imports are unavailable in this browser demo."); }} />);
@@ -44,11 +46,26 @@ function renderEditor(): void {
   }
 }
 
+function terminalLineHeight(): number {
+  const term = mounted?.term;
+  const cellHeight = (term as unknown as { _core?: { _renderService?: { dimensions?: { css?: { cell?: { height?: number } } } } } })?._core?._renderService?.dimensions?.css?.cell?.height;
+  if (typeof cellHeight === "number" && cellHeight > 0) return cellHeight;
+  const screen = term?.element?.querySelector<HTMLElement>(".xterm-screen");
+  if (screen && term.rows > 0) {
+    const measuredHeight = screen.getBoundingClientRect().height / term.rows;
+    if (measuredHeight > 0) return measuredHeight;
+  }
+  return Math.max(1, (term?.options.fontSize ?? 14) * 1.5);
+}
+
 function showPreview(focus = true): void {
   view = "preview";
   chat.hidden = false;
   editButton.hidden = false;
   shell.classList.add("preview");
+  terminalElement.inert = true;
+  const rows = Math.max(savedSettings.lines.length, 1);
+  terminalElement.style.height = `${Math.ceil(rows * terminalLineHeight() + 4)}px`;
   if (mounted) {
     mounted.term.options.disableStdin = true;
     mounted.term.reset();
@@ -64,8 +81,27 @@ const writeSettings = async (_path: string, settings: Settings): Promise<void> =
   savedSettings = persistSettings(storage(), settings);
   hasSavedSettings = true;
   savedDuringEdit = true;
-  downloadButton.disabled = false;
+  updateDownloadButton();
 };
+
+function updateDownloadButton(): void {
+  downloadButton.textContent = hasSavedSettings ? "Download saved settings" : "Download sample settings";
+  downloadButton.disabled = false;
+}
+
+function attachTerminalFocusHandler(): void {
+  if (!mounted) return;
+  mounted.term.attachCustomKeyEventHandler((event) => {
+    if (event.key !== "Tab" || event.ctrlKey || event.metaKey || event.altKey) return true;
+    if (event.type === "keydown") {
+      event.preventDefault();
+      const controls = [...document.querySelectorAll<HTMLButtonElement>("#desktop-playground .actions button:not([disabled]):not([hidden])")];
+      const target = event.shiftKey ? controls.at(-1) : document.querySelector<HTMLElement>("#continue-features");
+      target?.focus();
+    }
+    return false;
+  });
+}
 
 async function startBoot(): Promise<void> {
   let loaded: ReturnType<typeof loadSavedSettings>;
@@ -76,15 +112,21 @@ async function startBoot(): Promise<void> {
   }
   if (loaded.settings) { savedSettings = loaded.settings; view = "preview"; }
   hasSavedSettings = Boolean(loaded.settings);
+  updateDownloadButton();
   status.textContent = loaded.error ?? (view === "preview" ? "Loading saved browser configuration…" : "Mounting Ink Web…");
   try {
-    mounted = mountInkInXterm(
+    terminalElement.inert = true;
+    const candidate = mountInkInXterm(
       <App settingsPath="browser-memory/settings.json" initialSettings={cloneSettings(savedSettings)} writeSettings={writeSettings} onExit={showPreview} readImportFile={async () => { throw new Error("Path imports are unavailable in this browser demo."); }} />,
-      { container: terminalElement, focus: false, termOptions: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 14, screenReaderMode: true, theme: { background: "#282c34", foreground: "#e6e9ef" } }, onReady: () => { if (view === "preview") showPreview(false); else status.textContent = loaded.error ?? "Edit the sample, then save when ready."; } },
+      { container: terminalElement, focus: false, termOptions: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 14, screenReaderMode: true, theme: { background: "#282c34", foreground: "#e6e9ef" } }, onReady: () => { if (view === "preview") showPreview(false); else { terminalElement.inert = false; status.textContent = loaded.error ?? "Edit the sample, then save when ready."; } } },
     );
-    downloadButton.disabled = false;
+    mounted = candidate;
+    attachTerminalFocusHandler();
+    updateDownloadButton();
   } catch (error) {
+    if (mounted) await mounted.unmount();
     mounted = undefined;
+    terminalElement.replaceChildren();
     throw new Error(`Mount failed: ${String(error)}`);
   }
 }
