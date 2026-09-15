@@ -4,7 +4,7 @@ The landing page headings use Geist Sans Medium, downloaded from the official [v
 
 Local proof using the existing cxstatusline Ink App and preview renderer. No Node runtime boots in the browser.
 
-The first visit opens the editor with a sample. Save & Exit shows a local demo composer and the real saved footer; Edit statusline returns to the same saved configuration. Browser storage uses `cxstatusline.playground.settings.v1`; downloads always contain that saved snapshot. The composer is sample-only and sends nothing. Native path import/export remains unavailable in the browser.
+The first visit opens the editor with a sample. Save & Exit shows a local demo composer and the real saved footer; Edit statusline returns to the same saved configuration. Browser storage uses `cxstatusline.playground.settings.v2`; downloads always contain that saved snapshot. The composer is sample-only and sends nothing. Native path import/export remains unavailable in the browser.
 
 From `website/`, run `rtk bun install`, then `rtk bun run dev`. To serve the production build run `rtk bun run build` then `rtk bun run preview`.
 
