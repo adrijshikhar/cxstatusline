@@ -13,7 +13,6 @@
     "@xterm/xterm": "^5.3.0",
     "animejs": "^4.5.0",
     "astro": "^5.4.1",
-    "astro-expressive-code": "^0.44.2",
     "ink": "6.2.0",
     "ink-web": "0.2.0",
     "path-browserify": "^1.0.1",

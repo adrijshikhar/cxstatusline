@@ -6,6 +6,7 @@ const desktopPlayground = document.querySelector<HTMLElement>("#desktop-playgrou
 const featuresTitle = document.querySelector<HTMLElement>("#features-title")!;
 const bootButton = document.querySelector<HTMLButtonElement>("#boot")!;
 const status = document.querySelector<HTMLElement>("#status")!;
+const copyInstall = document.querySelector<HTMLButtonElement>("#copy-install")!;
 
 async function mountDevelopmentReviewTools(): Promise<void> {
   if (!import.meta.env.DEV || import.meta.env.PUBLIC_ENABLE_AGENTATION !== "1") return;
@@ -62,6 +63,15 @@ desktop.addEventListener("change", () => { void syncViewport(); });
 bootButton.addEventListener("click", () => {
   pending = undefined;
   void syncViewport();
+});
+copyInstall.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(copyInstall.dataset.commands!);
+    copyInstall.textContent = "Copied";
+  } catch {
+    copyInstall.textContent = "Copy failed";
+  }
+  setTimeout(() => { copyInstall.textContent = "Copy"; }, 1500);
 });
 
 setMobileVisibility(desktop.matches);

@@ -1,12 +1,10 @@
 import { defineConfig } from "astro/config";
-import expressiveCode from "astro-expressive-code";
 import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath } from "node:url";
 
 const local = (path) => fileURLToPath(new URL(path, import.meta.url));
 export default defineConfig({
   output: "static",
-  integrations: [expressiveCode({ themes: ["github-dark"], useDarkModeMediaQuery: false })],
   devToolbar: { enabled: false },
   vite: {
     plugins: [tailwindcss()],
