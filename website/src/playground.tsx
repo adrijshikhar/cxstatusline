@@ -97,7 +97,7 @@ function attachTerminalFocusHandler(): void {
     if (event.type === "keydown") {
       event.preventDefault();
       const controls = [...document.querySelectorAll<HTMLButtonElement>("#desktop-playground .actions button:not([disabled]):not([hidden])")];
-      const target = event.shiftKey ? controls.at(-1) : document.querySelector<HTMLElement>("#continue-features");
+      const target = event.shiftKey ? controls.at(-1) : document.querySelector<HTMLElement>('.site-header a[href="#features"]');
       target?.focus();
     }
     return false;
