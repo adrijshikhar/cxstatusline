@@ -31,7 +31,8 @@ test("mobile stays static and does not touch the playground runtime", async ({ p
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto("/");
   await expect(page.locator("#desktop-playground")).toBeHidden();
-  await expect(page.locator("#mobile-playground")).toBeVisible();
+  await expect(page.locator("#playground")).toBeHidden();
+  await expect(page.locator("#mobile-playground")).toHaveCount(0);
   ({ reads: storageReads, writes: storageWrites } = await page.evaluate(() => (window as any).__storageAudit));
   expect(storageReads).toBe(0);
   expect(storageWrites).toBe(0);
@@ -59,8 +60,8 @@ test("desktop mounts once, opens the saved editor, reloads, and downloads", asyn
   await expect(page.locator("#desktop-playground")).toBeVisible();
   await expect(page.locator("#download")).toHaveText("Download saved settings");
   const frame = await page.locator("body").boundingBox();
-  expect(frame?.width).toBe(1200);
-  expect(await page.locator("#playground").evaluate((element) => getComputedStyle(element).width)).toBe("1152px");
+  expect(frame?.width).toBe(1440);
+  expect(await page.locator("#playground").boundingBox()).toMatchObject({ x: 24, width: 1392 });
   await page.screenshot({ path: "test-artifacts/task4-desktop.png", fullPage: true });
 
   await expect(page.locator("#download")).toHaveText("Download saved settings");
@@ -92,9 +93,9 @@ test("desktop/mobile resize preserves the mounted editor without storage writes"
   expect(storageWrites).toBe(0);
 });
 
-test("preview rows, clipboard denial, and basic surface checks remain bounded", async ({ page }) => {
+test("preview rows and installation code copy remain usable", async ({ page }) => {
   await page.addInitScript(() => {
-    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async () => { throw new Error("denied"); } } });
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text: string) => { (window as any).__copiedCommands = text; } } });
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
@@ -110,8 +111,8 @@ test("preview rows, clipboard denial, and basic surface checks remain bounded", 
     const screenBounds = await page.locator("#terminal .xterm-screen").boundingBox();
     expect(screenBounds?.height).toBeLessThanOrEqual((bounds?.height ?? 0) + 2);
   }
-  await page.locator("#copy-install").click();
-  await expect(page.locator("#copy-status")).toHaveText("Select and copy the commands.");
+  await page.getByTitle("Copy to clipboard", { exact: true }).click();
+  expect(await page.evaluate(() => (window as any).__copiedCommands)).toBe("npm install -g cxstatusline\ncxstatusline install\ncxstatusline doctor");
   const checks = await page.evaluate(() => {
     const controls = [...document.querySelectorAll<HTMLElement>("button, textarea")];
     return { overflow: document.documentElement.scrollWidth <= window.innerWidth, smallTargets: controls.filter((element) => { const box = element.getBoundingClientRect(); return box.width > 0 && (box.width < 44 || box.height < 44); }).length };

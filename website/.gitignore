@@ -2,3 +2,7 @@ node_modules/
 dist/
 public/tui-entry.mjs
 public/tui-app.mjs
+
+.astro/
+test-artifacts/
+test-results/
