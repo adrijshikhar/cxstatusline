@@ -16,7 +16,6 @@ const shell = document.querySelector<HTMLElement>(".terminal-shell")!;
 const chat = document.querySelector<HTMLElement>("#chat-preview")!;
 const composer = document.querySelector<HTMLTextAreaElement>("#demo-message")!;
 const sampleSettings = SettingsSchema.parse(preset);
-const FALLBACK_TERMINAL_LINE_HEIGHT = 17;
 let savedSettings = cloneSettings(sampleSettings);
 let view: "editor" | "preview" = "editor";
 let mounted: ReturnType<typeof mountInkInXterm> | undefined;
@@ -46,15 +45,25 @@ function renderEditor(): void {
   }
 }
 
+function terminalLineHeight(): number {
+  const term = mounted?.term;
+  const cellHeight = (term as unknown as { _core?: { _renderService?: { dimensions?: { css?: { cell?: { height?: number } } } } } })?._core?._renderService?.dimensions?.css?.cell?.height;
+  if (typeof cellHeight === "number" && cellHeight > 0) return cellHeight;
+  const screen = term?.element?.querySelector<HTMLElement>(".xterm-screen");
+  if (screen && term.rows > 0) {
+    const measuredHeight = screen.getBoundingClientRect().height / term.rows;
+    if (measuredHeight > 0) return measuredHeight;
+  }
+  return Math.max(1, (term?.options.fontSize ?? 14) * 1.5);
+}
+
 function showPreview(focus = true): void {
   view = "preview";
   chat.hidden = false;
   editButton.hidden = false;
   shell.classList.add("preview");
   const rows = Math.max(savedSettings.lines.length, 1);
-  const rowElement = mounted?.term.element?.querySelector<HTMLElement>(".xterm-rows");
-  const lineHeight = rowElement ? Number.parseFloat(getComputedStyle(rowElement).lineHeight) : FALLBACK_TERMINAL_LINE_HEIGHT;
-  terminalElement.style.height = `${Math.ceil(rows * (Number.isFinite(lineHeight) ? lineHeight : FALLBACK_TERMINAL_LINE_HEIGHT) + 4)}px`;
+  terminalElement.style.height = `${Math.ceil(rows * terminalLineHeight() + 4)}px`;
   if (mounted) {
     mounted.term.options.disableStdin = true;
     mounted.rerender(<PreviewFooter settings={savedSettings} />);
