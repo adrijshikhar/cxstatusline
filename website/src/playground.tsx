@@ -8,6 +8,7 @@ import { loadSavedSettings, persistSettings } from "./settings-store";
 import preset from "./sample-settings.json";
 
 const desktopPlayground = document.querySelector<HTMLElement>("#desktop-playground")!;
+const featuresTitle = document.querySelector<HTMLElement>("#features-title")!;
 const downloadButton = document.querySelector<HTMLButtonElement>("#download")!;
 const editButton = document.querySelector<HTMLButtonElement>("#edit")!;
 const status = document.querySelector<HTMLElement>("#status")!;
@@ -97,7 +98,7 @@ function attachTerminalFocusHandler(): void {
     if (event.type === "keydown") {
       event.preventDefault();
       const controls = [...document.querySelectorAll<HTMLButtonElement>("#desktop-playground .actions button:not([disabled]):not([hidden])")];
-      const target = event.shiftKey ? controls.at(-1) : document.querySelector<HTMLElement>('.site-header a[href="#features"]');
+      const target = event.shiftKey ? controls.at(-1) : featuresTitle;
       target?.focus();
     }
     return false;

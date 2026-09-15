@@ -61,6 +61,7 @@ test("desktop mounts once, opens the saved editor, reloads, and downloads", asyn
   await expect(page.locator("#download")).toHaveText("Download saved settings");
   const frame = await page.locator("body").boundingBox();
   expect(frame?.width).toBe(1440);
+  expect((await page.locator(".first-screen").boundingBox())?.height).toBeLessThanOrEqual(900);
   expect(await page.locator("#playground").boundingBox()).toMatchObject({ x: 24, width: 1392 });
   await page.screenshot({ path: "test-artifacts/task4-desktop.png", fullPage: true });
 
@@ -111,8 +112,9 @@ test("preview rows and installation code copy remain usable", async ({ page }) =
     const screenBounds = await page.locator("#terminal .xterm-screen").boundingBox();
     expect(screenBounds?.height).toBeLessThanOrEqual((bounds?.height ?? 0) + 2);
   }
-  await page.getByTitle("Copy to clipboard", { exact: true }).click();
+  await page.locator("#copy-install").click();
   expect(await page.evaluate(() => (window as any).__copiedCommands)).toBe("npm install -g cxstatusline\ncxstatusline install\ncxstatusline doctor");
+  await expect(page.locator("#copy-install")).toHaveText("Copied");
   const checks = await page.evaluate(() => {
     const controls = [...document.querySelectorAll<HTMLElement>("button, textarea")];
     return { overflow: document.documentElement.scrollWidth <= window.innerWidth, smallTargets: controls.filter((element) => { const box = element.getBoundingClientRect(); return box.width > 0 && (box.width < 44 || box.height < 44); }).length };
@@ -127,7 +129,7 @@ test("xterm releases Tab focus", async ({ page }) => {
   await waitForEditor(page);
 
   await terminalKeys(page, ["Tab"]);
-  await expect(page.locator('.site-header a[href="#features"]')).toBeFocused();
+  await expect(page.locator("#features-title")).toBeFocused();
   await terminalKeys(page, ["Shift+Tab"]);
   await expect(page.locator("#download")).toBeFocused();
 });

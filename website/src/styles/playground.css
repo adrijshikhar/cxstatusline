@@ -1,4 +1,5 @@
-#playground { width: calc(100% - 2 * var(--page-gutter)); --terminal: var(--bg); padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; margin-block: 8px 0; margin-inline: auto; }
+#playground { width: min(calc(100% - 2 * var(--page-gutter)), 90rem); min-height: 0; align-self: stretch; --terminal: var(--bg); padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; margin-inline: auto; }
+#desktop-playground { height: 100%; display: flex; flex-direction: column; }
 .playground-heading { padding: 18px 20px 12px; }
 #status, .terminal-hint, .note { padding-inline: 24px; }
 .note { padding-bottom: 20px; }
@@ -6,9 +7,9 @@
 .playground-heading p { max-width: 65ch; color: var(--muted); }
 .status { margin: 0 0 4px; color: var(--positive); font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .terminal-hint { margin: 0 0 10px; color: var(--dim); font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
-.terminal-shell { min-height: 0; padding: 12px 20px 20px; border: 0; border-radius: 0; background: var(--terminal); }
-#terminal { min-height: 390px; max-width: 100%; }
-.terminal-shell.preview { min-height: 0; }
+.terminal-shell { min-height: 0; max-height: 32rem; padding: 12px 20px 20px; overflow: hidden; border: 0; border-radius: 0; background: var(--terminal); transition: max-height .45s cubic-bezier(.22, 1, .36, 1); }
+#terminal { min-height: clamp(18rem, 36svh, 24rem); max-width: 100%; }
+.terminal-shell.preview { min-height: 0; max-height: 14rem; }
 .preview #terminal { min-height: 0; overflow: hidden; margin-top: 6px; }
 #chat-preview { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 #chat-preview label { display: block; margin-bottom: 7px; color: var(--text); font-size: 13px; }
@@ -32,3 +33,4 @@
 #playground:has(.terminal-shell.preview) .note { display: none; }
 #chat-preview .composer-label { display: flex; align-items: baseline; gap: 1rem; margin-bottom: .75rem; font: 13px/1.5 var(--font-sans); }
 .composer-label span { color: var(--muted); font-size: 12px; }
+@media (prefers-reduced-motion: reduce) { .terminal-shell { transition: none; } }
