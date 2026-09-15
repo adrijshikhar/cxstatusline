@@ -24,5 +24,6 @@ export interface RenderContext {
   readonly globalPowerlineStartCapIndex?: number;
   /** Absence disables command caching, falling back to synchronous execution (used by TUI and tests). */
   readonly commandCacheDir?: string;
+  readonly liveGit?: boolean;
 }
 
