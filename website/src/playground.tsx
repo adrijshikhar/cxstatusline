@@ -51,6 +51,7 @@ function showPreview(focus = true): void {
   shell.classList.add("preview");
   if (mounted) {
     mounted.term.options.disableStdin = true;
+    mounted.term.reset();
     mounted.rerender(<PreviewFooter settings={savedSettings} />);
   }
   status.textContent = savedDuringEdit
