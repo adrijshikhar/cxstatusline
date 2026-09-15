@@ -16,6 +16,7 @@ const shell = document.querySelector<HTMLElement>(".terminal-shell")!;
 const chat = document.querySelector<HTMLElement>("#chat-preview")!;
 const composer = document.querySelector<HTMLTextAreaElement>("#demo-message")!;
 const sampleSettings = SettingsSchema.parse(preset);
+const FALLBACK_TERMINAL_LINE_HEIGHT = 17;
 let savedSettings = cloneSettings(sampleSettings);
 let view: "editor" | "preview" = "editor";
 let mounted: ReturnType<typeof mountInkInXterm> | undefined;
@@ -37,6 +38,7 @@ function renderEditor(): void {
   chat.hidden = true;
   editButton.hidden = true;
   shell.classList.remove("preview");
+  terminalElement.style.height = "";
   if (mounted) {
     mounted.term.options.disableStdin = false;
     mounted.rerender(<App settingsPath="browser-memory/settings.json" initialSettings={cloneSettings(savedSettings)} writeSettings={writeSettings} onExit={showPreview} readImportFile={async () => { throw new Error("Path imports are unavailable in this browser demo."); }} />);
@@ -49,6 +51,10 @@ function showPreview(focus = true): void {
   chat.hidden = false;
   editButton.hidden = false;
   shell.classList.add("preview");
+  const rows = Math.max(savedSettings.lines.length, 1);
+  const rowElement = mounted?.term.element?.querySelector<HTMLElement>(".xterm-rows");
+  const lineHeight = rowElement ? Number.parseFloat(getComputedStyle(rowElement).lineHeight) : FALLBACK_TERMINAL_LINE_HEIGHT;
+  terminalElement.style.height = `${Math.ceil(rows * (Number.isFinite(lineHeight) ? lineHeight : FALLBACK_TERMINAL_LINE_HEIGHT) + 4)}px`;
   if (mounted) {
     mounted.term.options.disableStdin = true;
     mounted.rerender(<PreviewFooter settings={savedSettings} />);
