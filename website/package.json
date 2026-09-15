@@ -19,5 +19,7 @@
     "vite": "^7.1.0",
     "react-dom": "19.2.8"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
 }
