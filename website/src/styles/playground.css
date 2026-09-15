@@ -3,7 +3,7 @@
 .terminal-shell { position: relative; min-height: 0; max-height: 32rem; overflow: hidden; background: var(--terminal); }
 #playground-skeleton { position: absolute; inset: auto 0 0; z-index: 1; height: 52px; background: var(--terminal); }
 .skeleton-status { display: grid; gap: 6px; height: 52px; align-content: center; }
-#terminal { min-height: clamp(18rem, 40svh, 24rem); max-width: 100%; }
+#terminal { min-height: 24rem; max-width: 100%; }
 .terminal-shell.preview { max-height: 15rem; overflow: visible; }
 .preview #terminal { min-height: 0; overflow: hidden; margin-top: 8px; }
 #chat-preview { display: grid; grid-template-columns: auto 1fr; align-items: center; min-height: 58px; padding: 0 16px; background: #303030; font-family: var(--font-mono); }
@@ -19,4 +19,3 @@
 .playground-meta .actions { justify-content: flex-end; gap: 4px; }
 .mobile-only { display: none; }
 #desktop-playground[hidden], [hidden] { display: none !important; }
-@media (max-height: 760px) and (min-width: 769px) { #terminal { min-height: 17rem; } }
