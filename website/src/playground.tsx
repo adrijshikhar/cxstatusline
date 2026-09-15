@@ -41,6 +41,7 @@ function renderEditor(): void {
   terminalElement.style.height = "";
   if (mounted) {
     mounted.term.options.disableStdin = false;
+    mounted.term.reset();
     mounted.rerender(<App settingsPath="browser-memory/settings.json" initialSettings={cloneSettings(savedSettings)} writeSettings={writeSettings} onExit={showPreview} readImportFile={async () => { throw new Error("Path imports are unavailable in this browser demo."); }} />);
     focusCurrentView();
   }
