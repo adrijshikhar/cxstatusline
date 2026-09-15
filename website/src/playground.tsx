@@ -1,5 +1,5 @@
-import React from "react";
 import { mountInkInXterm } from "ink-web";
+import type React from "react";
 import { App, cloneSettings } from "../../src/tui/App";
 import { SettingsSchema, type Settings } from "../../src/types/Settings";
 import "@xterm/xterm/css/xterm.css";
@@ -12,26 +12,20 @@ const featuresTitle = document.querySelector<HTMLElement>("#features-title")!;
 const downloadButton = document.querySelector<HTMLButtonElement>("#download")!;
 const editButton = document.querySelector<HTMLButtonElement>("#edit")!;
 const status = document.querySelector<HTMLElement>("#status")!;
+const hint = document.querySelector<HTMLElement>(".terminal-hint")!;
+const skeleton = document.querySelector<HTMLElement>("#playground-skeleton")!;
 const terminalElement = document.querySelector<HTMLElement>("#terminal")!;
 const shell = document.querySelector<HTMLElement>(".terminal-shell")!;
 const chat = document.querySelector<HTMLElement>("#chat-preview")!;
-const composer = document.querySelector<HTMLTextAreaElement>("#demo-message")!;
+const composer = document.querySelector<HTMLInputElement>("#demo-message")!;
 const sampleSettings = SettingsSchema.parse(preset);
+const previewRows = 3;
+const previewHeight = "52px";
 let savedSettings = cloneSettings(sampleSettings);
 let view: "editor" | "preview" = "editor";
 let mounted: ReturnType<typeof mountInkInXterm> | undefined;
 let bootPromise: Promise<void> | undefined;
 let hasSavedSettings = false;
-let savedDuringEdit = false;
-const storage = (): Storage => window.localStorage;
-
-function animateViewChange(): void {
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  shell.animate(
-    [{ opacity: .72, transform: "translateY(6px)" }, { opacity: 1, transform: "translateY(0)" }],
-    { duration: 320, easing: "cubic-bezier(.22, 1, .36, 1)" },
-  );
-}
 
 function focusCurrentView(): void {
   setTimeout(() => {
@@ -40,21 +34,24 @@ function focusCurrentView(): void {
   }, 0);
 }
 
-function renderEditor(): void {
+async function renderEditor(): Promise<void> {
   view = "editor";
-  savedDuringEdit = false;
   chat.hidden = true;
   editButton.hidden = true;
   shell.classList.remove("preview");
-  animateViewChange();
-  terminalElement.inert = false;
+  hint.textContent = "Arrow keys and Enter to edit · Tab to leave the terminal";
+  hint.hidden = false;
+  status.textContent = hasSavedSettings ? "Editing saved layout" : "Editing sample layout";
+  terminalElement.inert = true;
   terminalElement.style.height = "";
-  if (mounted) {
-    mounted.term.options.disableStdin = false;
-    mounted.term.reset();
-    mounted.rerender(<App settingsPath="browser-memory/settings.json" initialSettings={cloneSettings(savedSettings)} writeSettings={writeSettings} onExit={showPreview} readImportFile={async () => { throw new Error("Path imports are unavailable in this browser demo."); }} />);
+  if (!mounted) return;
+  await mounted.unmount();
+  terminalElement.replaceChildren();
+  if (view !== "editor") return;
+  mountView(editorView(), () => {
+    terminalElement.inert = false;
     focusCurrentView();
-  }
+  });
 }
 
 function terminalLineHeight(): number {
@@ -72,33 +69,57 @@ function terminalLineHeight(): number {
 function showPreview(focus = true): void {
   view = "preview";
   chat.hidden = false;
+  composer.disabled = false;
   editButton.hidden = false;
   shell.classList.add("preview");
-  animateViewChange();
+  hint.textContent = "";
+  hint.hidden = true;
   terminalElement.inert = true;
-  const rows = Math.max(savedSettings.lines.length, 1);
+  const rows = Math.max(savedSettings.lines.length, previewRows);
   terminalElement.style.height = `${Math.ceil(rows * terminalLineHeight() + 4)}px`;
   if (mounted) {
     mounted.term.options.disableStdin = true;
     mounted.term.reset();
     mounted.rerender(<PreviewFooter settings={savedSettings} />);
   }
-  status.textContent = savedDuringEdit
-    ? "Configuration saved in this browser."
-    : hasSavedSettings ? "Showing saved browser configuration." : "Showing the sample configuration.";
+  status.textContent = hasSavedSettings ? "Saved in this browser" : "Sample preview";
   if (focus) focusCurrentView();
 }
 
 const writeSettings = async (_path: string, settings: Settings): Promise<void> => {
-  savedSettings = persistSettings(storage(), settings);
+  savedSettings = persistSettings(window.localStorage, settings);
   hasSavedSettings = true;
-  savedDuringEdit = true;
-  updateDownloadButton();
+  downloadButton.disabled = false;
 };
 
-function updateDownloadButton(): void {
-  downloadButton.textContent = hasSavedSettings ? "Download saved settings" : "Download sample settings";
-  downloadButton.disabled = false;
+async function rejectBrowserImport(): Promise<never> {
+  throw new Error("Path imports are unavailable in this browser demo.");
+}
+
+function editorView() {
+  return <App settingsPath="browser-memory/settings.json" initialSettings={cloneSettings(savedSettings)} writeSettings={writeSettings} onExit={showPreview} readImportFile={rejectBrowserImport} />;
+}
+
+function mountView(element: React.ReactElement, onReady: () => void): void {
+  mounted = mountInkInXterm(element, {
+    container: terminalElement,
+    focus: false,
+    termOptions: {
+      fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+      fontSize: 14,
+      screenReaderMode: true,
+      theme: {
+        background: getComputedStyle(shell).getPropertyValue("--terminal").trim(),
+        foreground: getComputedStyle(shell).getPropertyValue("--text").trim(),
+        cursor: getComputedStyle(shell).getPropertyValue("--accent").trim(),
+        selectionBackground: getComputedStyle(shell).getPropertyValue("--line").trim(),
+      },
+    },
+    onReady,
+  });
+  // Fit xterm before Ink's first render so both start with the same column count.
+  window.dispatchEvent(new Event("resize"));
+  attachTerminalFocusHandler();
 }
 
 function attachTerminalFocusHandler(): void {
@@ -118,24 +139,42 @@ function attachTerminalFocusHandler(): void {
 async function startBoot(): Promise<void> {
   let loaded: ReturnType<typeof loadSavedSettings>;
   try {
-    loaded = loadSavedSettings(storage());
+    loaded = loadSavedSettings(window.localStorage);
   } catch {
     loaded = { settings: null, error: "Saved browser settings could not be loaded; using the sample." };
   }
-  if (loaded.settings) { savedSettings = loaded.settings; view = "preview"; }
+  if (loaded.settings) {
+    savedSettings = loaded.settings;
+    view = "preview";
+    chat.hidden = false;
+    editButton.hidden = false;
+    shell.classList.add("preview");
+    terminalElement.style.height = previewHeight;
+    hint.textContent = "";
+  } else {
+    chat.hidden = true;
+    shell.classList.remove("preview");
+    terminalElement.style.height = "";
+  }
   hasSavedSettings = Boolean(loaded.settings);
-  updateDownloadButton();
-  status.textContent = loaded.error ?? (view === "preview" ? "Loading saved browser configuration…" : "Mounting Ink Web…");
+  downloadButton.disabled = false;
+  status.textContent = loaded.error ?? (view === "preview" ? "Loading saved layout…" : "Opening editor…");
   try {
     terminalElement.inert = true;
-    const candidate = mountInkInXterm(
-      <App settingsPath="browser-memory/settings.json" initialSettings={cloneSettings(savedSettings)} writeSettings={writeSettings} onExit={showPreview} readImportFile={async () => { throw new Error("Path imports are unavailable in this browser demo."); }} />,
-      { container: terminalElement, focus: false, termOptions: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 14, screenReaderMode: true, theme: { background: getComputedStyle(shell).getPropertyValue("--terminal").trim(), foreground: getComputedStyle(shell).getPropertyValue("--text").trim(), cursor: getComputedStyle(shell).getPropertyValue("--accent").trim(), selectionBackground: getComputedStyle(shell).getPropertyValue("--line").trim() } }, onReady: () => { if (view === "preview") showPreview(false); else { terminalElement.inert = false; status.textContent = loaded.error ?? "Edit the sample, then save when ready."; } } },
-    );
-    mounted = candidate;
-    attachTerminalFocusHandler();
-    updateDownloadButton();
+    const initialView = view === "preview"
+      ? <PreviewFooter settings={savedSettings} />
+      : editorView();
+    mountView(initialView, () => {
+      if (view === "preview") showPreview(false);
+      else {
+        terminalElement.inert = false;
+        status.textContent = loaded.error ?? "Editing sample layout";
+        hint.hidden = false;
+      }
+      skeleton.hidden = true;
+    });
   } catch (error) {
+    skeleton.hidden = true;
     if (mounted) await mounted.unmount();
     mounted = undefined;
     terminalElement.replaceChildren();
@@ -161,7 +200,7 @@ export function setDesktopVisible(visible: boolean): void {
 
 export { focusCurrentView };
 
-editButton.addEventListener("click", renderEditor);
+editButton.addEventListener("click", () => { void renderEditor(); });
 downloadButton.addEventListener("click", () => {
   const link = document.createElement("a");
   const url = URL.createObjectURL(new Blob([JSON.stringify(savedSettings, null, 2)], { type: "application/json" }));

@@ -4,7 +4,7 @@ import Hero from "../components/Hero.astro";
 import Playground from "../components/Playground.astro";
 import Features from "../components/Features.astro";
 import Install from "../components/Install.astro";
-import Faq from "../components/Faq.astro";
+import Faq from "../components/Faq";
 import Footer from "../components/Footer.astro";
 ---
 <BaseLayout>
@@ -15,7 +15,7 @@ import Footer from "../components/Footer.astro";
     </div>
     <Features />
     <Install />
-    <Faq />
+    <Faq client:load />
   </main>
   <Footer />
 </BaseLayout>

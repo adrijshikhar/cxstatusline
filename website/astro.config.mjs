@@ -1,10 +1,12 @@
 import { defineConfig } from "astro/config";
+import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath } from "node:url";
 
 const local = (path) => fileURLToPath(new URL(path, import.meta.url));
 export default defineConfig({
   output: "static",
+  integrations: [react()],
   devToolbar: { enabled: false },
   vite: {
     plugins: [tailwindcss()],
