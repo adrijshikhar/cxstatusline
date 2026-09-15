@@ -1,6 +1,11 @@
-# Ink Web playground
+# cxstatusline website
 
-The landing page headings use Geist Sans Medium, downloaded from the official [vercel/geist-font](https://github.com/vercel/geist-font) `1.3.0` release at commit `63b548e95d4821c66fb74f9f93c7c8a693d48301` (`packages/next/dist/fonts/geist-sans/Geist-Medium.woff2`). The upstream SIL Open Font License is included at `public/fonts/OFL.txt`.
+Astro 5, Tailwind CSS 4, Anime.js 4, and TypeScript follow the Binsight website stack. `src/pages/index.astro` composes the page; `src/layouts/BaseLayout.astro` owns the document. Section markup belongs in `src/components/`. All authored appearance belongs in `src/styles/`: tokens, shared page styles, and playground styles. No inline styles or embedded style blocks in Astro components. The terminal library owns its runtime-measured geometry.
+
+Page order: hero, full-width desktop playground, explanation/features, local installation, FAQ, footer. Mobile hides the entire playground section and does not boot the editor. Enable the development-only Agentation toolbar with `PUBLIC_ENABLE_AGENTATION=1`.
+
+
+The landing page uses the approved system sans-serif stack and self-hosted IBM Plex Serif italic for the hero emphasis. Typography is declared in `src/styles/tokens.css`.
 
 Local proof using the existing cxstatusline Ink App and preview renderer. No Node runtime boots in the browser.
 

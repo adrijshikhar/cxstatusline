@@ -1,0 +1,28 @@
+---
+import { Code } from "astro-expressive-code/components";
+const commands = `npm install -g cxstatusline
+cxstatusline install
+cxstatusline doctor`;
+---
+<section id="install" class="marketing-section content-section install-section" aria-labelledby="install-title">
+<div class="install-heading">
+<h2 id="install-title">In your terminal.</h2>
+<p>Install cxstatusline, then configure your statusline in the terminal editor.</p>
+<p>The playground is an optional demo. You can create and edit your entire layout locally.</p>
+</div>
+<div class="install-grid">
+<Code code={commands} lang="bash" title="Terminal" />
+<div class="install-copy">
+<h3>What gets installed</h3>
+<p>cxstatusline installs a patched build matching your supported Codex version; Codex does not currently provide a native statusline extension hook. See the <a class="text-link" href="https://github.com/adrijshikhar/cxstatusline/blob/main/wiki.md">revert procedure</a>.</p>
+<h3>Open the terminal editor</h3>
+<p>Run <code>cxstatusline</code> to choose widgets, arrange rows, and set colors directly in your terminal.</p>
+<details><summary>Restore the stock Codex launcher</summary><p>To uninstall the patch, close Codex sessions and run <code>cxstatusline revert</code> to restore the stock launcher.</p></details>
+<p>Browser save affects only this browser. Downloading <code>cxstatusline-settings.json</code> does not modify the local CLI.</p>
+</div>
+</div>
+<details class="transfer">
+<summary>Optional: import a layout from the playground</summary>
+<p>In the native editor, choose <strong>Export</strong> to save a backup if you want to keep the current layout. Choose <strong>Import</strong>, enter the downloaded JSON path in <strong>Import Config</strong>, and press Enter. Inspect <strong>Import Preview</strong>, then choose <strong>Yes</strong> at “Apply this preset?”. Confirmation immediately saves and replaces native settings. Choose No or Escape to cancel without applying it.</p>
+</details>
+</section>

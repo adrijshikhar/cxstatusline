@@ -2,6 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./test",
+  testMatch: "**/*.spec.ts",
   timeout: 30_000,
   expect: { timeout: 15_000 },
   reporter: [["line"]],

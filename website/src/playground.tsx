@@ -119,7 +119,7 @@ async function startBoot(): Promise<void> {
     terminalElement.inert = true;
     const candidate = mountInkInXterm(
       <App settingsPath="browser-memory/settings.json" initialSettings={cloneSettings(savedSettings)} writeSettings={writeSettings} onExit={showPreview} readImportFile={async () => { throw new Error("Path imports are unavailable in this browser demo."); }} />,
-      { container: terminalElement, focus: false, termOptions: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 14, screenReaderMode: true, theme: { background: "#101419", foreground: "#f0f4f8", cursor: "#8bc4ff", selectionBackground: "#2a4158" } }, onReady: () => { if (view === "preview") showPreview(false); else { terminalElement.inert = false; status.textContent = loaded.error ?? "Edit the sample, then save when ready."; } } },
+      { container: terminalElement, focus: false, termOptions: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 14, screenReaderMode: true, theme: { background: getComputedStyle(shell).getPropertyValue("--terminal").trim(), foreground: getComputedStyle(shell).getPropertyValue("--text").trim(), cursor: getComputedStyle(shell).getPropertyValue("--accent").trim(), selectionBackground: getComputedStyle(shell).getPropertyValue("--line").trim() } }, onReady: () => { if (view === "preview") showPreview(false); else { terminalElement.inert = false; status.textContent = loaded.error ?? "Edit the sample, then save when ready."; } } },
     );
     mounted = candidate;
     attachTerminalFocusHandler();

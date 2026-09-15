@@ -1,17 +1,14 @@
-import "./style.css";
 import { createElement } from "react";
+import { animate, stagger } from "animejs";
 
 const desktop = window.matchMedia("(min-width: 769px)");
 const desktopPlayground = document.querySelector<HTMLElement>("#desktop-playground")!;
-const mobileTitle = document.querySelector<HTMLElement>("#mobile-playground-title")!;
+const featuresTitle = document.querySelector<HTMLElement>("#features-title")!;
 const bootButton = document.querySelector<HTMLButtonElement>("#boot")!;
 const status = document.querySelector<HTMLElement>("#status")!;
-const copyInstallButton = document.querySelector<HTMLButtonElement>("#copy-install")!;
-const copyStatus = document.querySelector<HTMLElement>("#copy-status")!;
-const installCommands = document.querySelector<HTMLElement>("#install-commands")!;
 
 async function mountDevelopmentReviewTools(): Promise<void> {
-  if (!import.meta.env.DEV || import.meta.env.VITE_ENABLE_AGENTATION !== "1") return;
+  if (!import.meta.env.DEV || import.meta.env.PUBLIC_ENABLE_AGENTATION !== "1") return;
 
   const [{ Agentation }, { createRoot }] = await Promise.all([
     import("agentation"),
@@ -29,7 +26,7 @@ function setMobileVisibility(visible: boolean): void {
   desktopPlayground.hidden = !visible;
   desktopPlayground.inert = !visible;
   if (!visible && desktopPlayground.contains(document.activeElement)) {
-    mobileTitle.focus();
+    featuresTitle.focus();
   }
   runtime?.setDesktopVisible(visible);
 }
@@ -67,19 +64,16 @@ bootButton.addEventListener("click", () => {
   void syncViewport();
 });
 
-copyInstallButton.addEventListener("click", async () => {
-  copyInstallButton.disabled = true;
-  copyStatus.textContent = "";
-  try {
-    await navigator.clipboard.writeText(installCommands.textContent ?? "");
-    copyStatus.textContent = "Copied";
-  } catch {
-    copyStatus.textContent = "Select and copy the commands.";
-  } finally {
-    copyInstallButton.disabled = false;
-  }
-});
-
 setMobileVisibility(desktop.matches);
 void syncViewport();
 void mountDevelopmentReviewTools();
+
+if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  animate(".intro-copy > *", {
+    opacity: [0.75, 1],
+    translateY: [12, 0],
+    duration: 650,
+    delay: stagger(90),
+    ease: "outExpo",
+  });
+}
