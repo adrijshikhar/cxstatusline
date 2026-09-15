@@ -7,7 +7,7 @@
 .playground-heading p { max-width: 65ch; color: var(--muted); }
 .status { margin: 0 0 4px; color: var(--positive); font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .terminal-hint { margin: 0 0 10px; color: var(--dim); font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
-.terminal-shell { min-height: 0; max-height: 32rem; padding: 12px 20px 20px; overflow: hidden; border: 0; border-radius: 0; background: var(--terminal); transition: max-height .45s cubic-bezier(.22, 1, .36, 1); }
+.terminal-shell { min-height: 0; max-height: 32rem; padding: 12px 20px 20px; overflow: hidden; border: 0; border-radius: 0; background: var(--terminal); }
 #terminal { min-height: clamp(18rem, 36svh, 24rem); max-width: 100%; }
 .terminal-shell.preview { min-height: 0; max-height: 14rem; }
 .preview #terminal { min-height: 0; overflow: hidden; margin-top: 6px; }
@@ -33,4 +33,3 @@
 #playground:has(.terminal-shell.preview) .note { display: none; }
 #chat-preview .composer-label { display: flex; align-items: baseline; gap: 1rem; margin-bottom: .75rem; font: 13px/1.5 var(--font-sans); }
 .composer-label span { color: var(--muted); font-size: 12px; }
-@media (prefers-reduced-motion: reduce) { .terminal-shell { transition: none; } }
