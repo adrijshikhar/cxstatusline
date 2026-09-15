@@ -32,5 +32,8 @@
     "@playwright/test": "^1.63.0",
     "agentation": "^3.0.2",
     "typescript": "^5.7.3"
+  },
+  "patchedDependencies": {
+    "ink-web@0.2.0": "patches/ink-web@0.2.0.patch"
   }
 }
