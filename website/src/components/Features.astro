@@ -1,0 +1,38 @@
+---
+import { Card } from "./ui/card";
+---
+<section id="features" class="marketing-section content-section block" aria-labelledby="features-title">
+  <div class="mb-7 text-center max-md:mb-9">
+    <h2 id="features-title" class="m-0 max-w-none" tabindex="-1">Choose what stays in sight.</h2>
+  </div>
+  <figure class="mb-14 max-md:mb-10">
+    <div class="flex flex-wrap items-stretch rounded-md border border-[var(--line)] bg-[rgba(16,21,29,.42)] font-mono text-sm leading-[1.4]" aria-label="Sample cxstatusline with model, thinking effort, context, Git branch, and Git changes">
+      <span class="flex min-h-13 items-center border-r border-[var(--line)] px-4.5 text-[#61afef] max-md:min-h-11 max-md:px-3 max-md:text-xs"><span class="mr-1.25 text-[var(--muted)]">Model</span>: Codex</span>
+      <span class="flex min-h-13 items-center border-r border-[var(--line)] px-4.5 text-[#e06c75] max-md:min-h-11 max-md:px-3 max-md:text-xs"><span class="mr-1.25 text-[var(--muted)]">Thinking</span>: high</span>
+      <span class="flex min-h-13 items-center border-r border-[var(--line)] px-4.5 text-[#98c379] max-md:min-h-11 max-md:px-3 max-md:text-xs"><span class="mr-1.25 text-[var(--muted)]">Context</span>: 50k/200k (25%)</span>
+      <span class="flex min-h-13 items-center border-r border-[var(--line)] px-4.5 text-[#c678dd] max-md:min-h-11 max-md:px-3 max-md:text-xs">git main</span>
+      <span class="flex min-h-13 items-center px-4.5 text-[#e5c07b] max-md:min-h-11 max-md:px-3 max-md:text-xs">+42,-10</span>
+    </div>
+    <div class="grid grid-cols-3 gap-6 max-md:gap-2" aria-label="What each statusline signal shows">
+      <article class="relative px-4 pt-11 max-md:px-2"><span class="absolute left-5 top-0 h-8.5 w-px bg-[var(--accent)] after:absolute after:-bottom-px after:-left-1 after:size-2.25 after:rounded-full after:bg-[var(--accent)]"></span><h3 class="mb-1 text-sm">Know your session</h3><p class="m-0 text-[13px] leading-6 text-[var(--muted)] max-md:text-xs">See the model and session at a glance.</p></article>
+      <article class="relative px-4 pt-11 max-md:px-2"><span class="absolute left-5 top-0 h-8.5 w-px bg-[#9be870] after:absolute after:-bottom-px after:-left-1 after:size-2.25 after:rounded-full after:bg-[#9be870]"></span><h3 class="mb-1 text-sm">Watch your context</h3><p class="m-0 text-[13px] leading-6 text-[var(--muted)] max-md:text-xs">Keep an eye on context usage as you work.</p></article>
+      <article class="relative px-4 pt-11 max-md:px-2"><span class="absolute left-5 top-0 h-8.5 w-px bg-[#f4c84d] after:absolute after:-bottom-px after:-left-1 after:size-2.25 after:rounded-full after:bg-[#f4c84d]"></span><h3 class="mb-1 text-sm">Keep Git close</h3><p class="m-0 text-[13px] leading-6 text-[var(--muted)] max-md:text-xs">See your branch and changes, right here.</p></article>
+    </div>
+  </figure>
+  <div class="grid grid-cols-2 gap-10 max-md:grid-cols-1 max-md:gap-8">
+    <article>
+      <Card className="h-full p-5">
+        <h3 class="mb-3 max-w-[18ch] text-xl">One to three rows.</h3>
+        <p class="m-0 max-w-[42ch] leading-7 text-[var(--muted)]">Reorder widgets. Choose colors. Add Powerline separators.</p>
+        <div class="mt-4.5 grid gap-1.25 font-mono text-[11px] leading-[1.4]" aria-label="Three illustrative statusline rows"><div class="rounded border border-[var(--line)] bg-[var(--bg)] px-2.5 py-1.75 text-[#61afef]">Model: Codex <i class="not-italic text-[var(--muted)]">|</i> Thinking: high <i class="not-italic text-[var(--muted)]">|</i> Context: 50k/200k (25%)</div><div class="rounded border border-[var(--line)] bg-[var(--bg)] px-2.5 py-1.75 text-[#e5c07b]">git main <i class="not-italic text-[var(--muted)]">|</i> +42,-10</div><div class="rounded border border-[var(--line)] bg-[var(--bg)] px-2.5 py-1.75 text-[#cdd9e5]">Session: &lt;1m <i class="not-italic text-[var(--muted)]">|</i> Weekly: 12.0% <i class="not-italic text-[var(--muted)]">|</i> Weekly Reset: 1d 12hr 30m</div></div>
+      </Card>
+    </article>
+    <article>
+      <Card className="h-full p-5">
+        <h3 class="mb-3 max-w-[18ch] text-xl">Your own signals.</h3>
+        <p class="m-0 max-w-[42ch] leading-7 text-[var(--muted)]">Extend the native app with your own commands.</p>
+        <div class="mt-4.5 rounded border border-[var(--line)] bg-[var(--bg)] px-4 py-5 font-mono text-[13px] leading-[1.4] text-[#cdd9e5]">Custom text · Symbols · Commands</div>
+      </Card>
+    </article>
+  </div>
+</section>
