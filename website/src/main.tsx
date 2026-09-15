@@ -1,4 +1,6 @@
 import "./style.css";
+import { createElement } from "react";
+import { animate, stagger } from "animejs";
 
 const desktop = window.matchMedia("(min-width: 769px)");
 const desktopPlayground = document.querySelector<HTMLElement>("#desktop-playground")!;
@@ -8,6 +10,29 @@ const status = document.querySelector<HTMLElement>("#status")!;
 const copyInstallButton = document.querySelector<HTMLButtonElement>("#copy-install")!;
 const copyStatus = document.querySelector<HTMLElement>("#copy-status")!;
 const installCommands = document.querySelector<HTMLElement>("#install-commands")!;
+
+async function mountDevelopmentReviewTools(): Promise<void> {
+  if (!import.meta.env.DEV || import.meta.env.VITE_ENABLE_AGENTATION !== "1") return;
+
+  const agentationModule = "agentation";
+  const [{ Agentation }, { createRoot }] = await Promise.all([
+    import(/* @vite-ignore */ agentationModule),
+    import("react-dom/client"),
+  ]);
+  const host = document.createElement("div");
+  host.id = "agentation-root";
+  document.body.append(host);
+  createRoot(host).render(createElement(Agentation));
+}
+const intro = document.querySelector<HTMLElement>(".intro");
+
+function animateHero(): void {
+  if (!intro || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  animate(".intro-copy > *", { opacity: [0, 1], translateY: [18, 0], delay: stagger(90), duration: 650, ease: "outCubic" });
+  animate(".hero-terminal", { opacity: [0, .72], translateX: [24, 0], duration: 800, delay: 220, ease: "outCubic" });
+  animate(".hero-terminal-progress span", { scaleX: [0, 1], duration: 1000, delay: 520, ease: "outCubic" });
+  animate(".hero-terminal-cursor", { opacity: [1, 0], duration: 650, ease: "inOutSine", loop: true, alternate: true });
+}
 
 let pending: Promise<typeof import("./playground")> | undefined;
 let runtime: typeof import("./playground") | undefined;
@@ -68,4 +93,6 @@ copyInstallButton.addEventListener("click", async () => {
 });
 
 setMobileVisibility(desktop.matches);
+animateHero();
 void syncViewport();
+void mountDevelopmentReviewTools();
