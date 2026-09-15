@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.1](https://github.com/adrijshikhar/cxstatusline/compare/v0.4.0...v0.4.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* calculate live working tree diff in git-changes widget ([#26](https://github.com/adrijshikhar/cxstatusline/issues/26)) ([cc3b56b](https://github.com/adrijshikhar/cxstatusline/commit/cc3b56bf74885b3d6c8aeef64d25da36ddae15e5))
+
 ## [0.4.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.3.0...v0.4.0) (2026-09-14)
 
 
