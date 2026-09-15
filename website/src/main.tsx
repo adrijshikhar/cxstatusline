@@ -13,9 +13,8 @@ const installCommands = document.querySelector<HTMLElement>("#install-commands")
 async function mountDevelopmentReviewTools(): Promise<void> {
   if (!import.meta.env.DEV || import.meta.env.VITE_ENABLE_AGENTATION !== "1") return;
 
-  const agentationModule = "agentation";
   const [{ Agentation }, { createRoot }] = await Promise.all([
-    import(/* @vite-ignore */ agentationModule),
+    import("agentation"),
     import("react-dom/client"),
   ]);
   const host = document.createElement("div");
