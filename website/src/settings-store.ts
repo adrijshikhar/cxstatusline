@@ -1,7 +1,7 @@
 import { SettingsSchema, type Settings } from "../../src/types/Settings";
 import { migrateSettings } from "../../src/utils/migrations";
 
-export const STORAGE_KEY = "cxstatusline.playground.settings.v1";
+export const STORAGE_KEY = "cxstatusline.playground.settings.v2";
 
 export function loadSavedSettings(storage: Pick<Storage, "getItem">): { settings: Settings | null; error: string | null } {
   try {
