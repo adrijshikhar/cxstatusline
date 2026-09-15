@@ -5,6 +5,15 @@ const storageKey = "cxstatusline.playground.settings.v1";
 async function waitForEditor(page: Page): Promise<void> {
   await expect(page.locator("#terminal .xterm"), "desktop mount").toHaveCount(1);
   await expect(page.locator("#terminal")).toContainText("Main Menu", { timeout: 15_000 });
+  await expect(page.locator("#terminal")).not.toHaveAttribute("inert", "");
+}
+
+async function terminalKeys(page: Page, keys: readonly string[]): Promise<void> {
+  await page.locator("#terminal .xterm-helper-textarea").focus();
+  for (const key of keys) {
+    await page.keyboard.press(key);
+    await page.waitForTimeout(50);
+  }
 }
 
 test("mobile stays static and does not touch the playground runtime", async ({ page }) => {
@@ -109,4 +118,37 @@ test("preview rows, clipboard denial, and basic surface checks remain bounded", 
   });
   expect(checks.overflow).toBe(true);
   expect(checks.smallTargets).toBeLessThanOrEqual(1);
+});
+
+test("xterm releases Tab focus", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await waitForEditor(page);
+
+  await terminalKeys(page, ["Tab"]);
+  await expect(page.locator('.site-header a[href="#features"]')).toBeFocused();
+  await terminalKeys(page, ["Shift+Tab"]);
+  await expect(page.locator("#download")).toBeFocused();
+});
+
+test("xterm saves, edits, and discards", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await waitForEditor(page);
+
+  await terminalKeys(page, ["ArrowDown", "ArrowDown", "ArrowDown", "ArrowDown", "ArrowDown", "ArrowDown", "Enter"]);
+  await expect(page.locator("#terminal")).toContainText("Save the current configuration and exit?");
+  await terminalKeys(page, ["Enter"]);
+  await expect(page.locator("#chat-preview")).toBeVisible();
+  const saved = await page.evaluate((key) => localStorage.getItem(key), storageKey);
+
+  await page.locator("#edit").click();
+  await waitForEditor(page);
+  await terminalKeys(page, ["Enter", "d", "Enter", "Escape"]);
+  await expect(page.locator("#terminal")).toContainText("Main Menu (unsaved changes)");
+  await terminalKeys(page, ["ArrowDown", "ArrowDown", "ArrowDown", "ArrowDown", "ArrowDown", "ArrowDown", "ArrowDown", "Enter"]);
+  await expect(page.locator("#terminal")).toContainText("Discard unsaved changes and exit?");
+  await terminalKeys(page, ["Enter"]);
+  await expect(page.locator("#chat-preview")).toBeVisible();
+  expect(await page.evaluate((key) => localStorage.getItem(key), storageKey)).toBe(saved);
 });
