@@ -35,6 +35,7 @@ p { margin: 0 0 16px; }
 .intro-actions a:hover { text-decoration: underline; }
 button:disabled { cursor: wait; opacity: .55; }
 .content-section { padding-block: 72px; border-bottom: 1px solid var(--line); }
+#faq { border-bottom: 0; }
 .section-head { max-width: 720px; margin-bottom: 64px; }
 .section-head p { max-width: 56ch; color: var(--muted); font-size: 18px; line-height: 1.6; }
 .install-section { display: grid; grid-template-columns: .9fr 1.1fr; gap: 24px 64px; align-items: start; }
