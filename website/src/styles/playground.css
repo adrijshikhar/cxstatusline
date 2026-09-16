@@ -1,5 +1,5 @@
 #playground { width: min(calc(100% - 2 * var(--page-gutter)), 90rem); min-height: 0; align-self: end; --terminal: var(--bg); margin-inline: auto; }
-#desktop-playground { display: grid; gap: 10px; }
+#desktop-playground { display: grid; gap: 10px; background: var(--terminal); }
 .terminal-shell { position: relative; min-height: 0; max-height: 32rem; overflow: hidden; background: var(--terminal); }
 #playground-skeleton { position: absolute; inset: auto 0 0; z-index: 1; height: 52px; background: var(--terminal); }
 .skeleton-status { display: grid; gap: 6px; height: 52px; align-content: center; }
