@@ -7,11 +7,12 @@
   type Dot = { anchorX: number; anchorY: number; x: number; y: number };
 
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-  const finePointer = window.matchMedia("(pointer: fine)");
+  const interactive = window.matchMedia("(min-width: 769px) and (pointer: fine)");
 
   document.querySelectorAll<HTMLElement>("[data-dot-field]").forEach((layer) => {
     if (layer.dataset.ready) return;
     layer.dataset.ready = "true";
+    if (!interactive.matches) return;
 
     const canvas = layer.querySelector("canvas");
     const context = canvas?.getContext("2d", { alpha: true });
@@ -144,7 +145,7 @@
     window.addEventListener("resize", onResize, { passive: true });
     document.addEventListener("visibilitychange", onVisibilityChange);
     reducedMotion.addEventListener("change", onMotionChange);
-    if (finePointer.matches) window.addEventListener("pointermove", onPointerMove, { passive: true });
+    window.addEventListener("pointermove", onPointerMove, { passive: true });
   });
 </script>
 
@@ -166,5 +167,16 @@
 
   @media (prefers-reduced-motion: reduce) {
     .dot-field-layer { opacity: .65; }
+  }
+
+  @media (max-width: 768px), (pointer: coarse) {
+    .dot-field-layer {
+      opacity: .7;
+      background-image: radial-gradient(circle, rgba(56, 189, 248, .24) 1px, transparent 1px);
+      background-position: 8px 8px;
+      background-size: 24px 24px;
+    }
+
+    canvas { display: none; }
   }
 </style>

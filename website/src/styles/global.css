@@ -44,23 +44,30 @@ button:disabled { cursor: wait; opacity: .55; }
 .install-copy { margin-top: 32px; color: var(--muted); font-size: 14px; line-height: 1.7; }
 .install-copy h3 { margin: 1.5rem 0 .5rem; font-size: 1rem; }
 .install-copy code { overflow-wrap: anywhere; }
-.site-footer { display: flex; align-items: start; justify-content: space-between; gap: 32px; padding-block: 64px; color: var(--muted); font-size: 13px; }
-.footer-brand { display: inline-block; margin-bottom: 12px; color: var(--text); text-decoration: none; font-size: 24px; font-weight: 700; letter-spacing: -.03em; }
+.site-footer { color: var(--muted); background: var(--bg); border-top: 1px solid var(--line); font-size: 13px; }
+.footer-inner { display: flex; align-items: end; justify-content: space-between; gap: 32px; padding-block: 48px; }
+.footer-brand { display: inline-block; margin-bottom: 8px; color: var(--text); text-decoration: none; font-size: 20px; font-weight: 700; letter-spacing: -.03em; }
 .site-footer p { margin: 0; }
+.site-footer nav { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px 24px; font-family: var(--font-mono); }
+.site-footer nav a { text-decoration: none; }
+.site-footer nav a:hover { text-decoration: underline; }
 .mobile-only { display: none; }
 @media (max-width: 768px) {
   :root { --page-gutter: 16px; }
-  .first-screen { min-height: 100svh; padding-bottom: 0; }
-  .intro { align-content: center; gap: 28px; padding-block: 32px 56px; }
+  .first-screen { min-height: 0; display: block; padding-bottom: 0; background: none; }
+  .intro { gap: 24px; padding-block: 24px 64px; }
   h1 { font-size: clamp(44px, 12vw, 64px); }
+  h2 { font-size: clamp(32px, 9vw, 42px); }
   .lede { font-size: 16px; }
+  .intro-actions { width: 100%; gap: 8px 20px; }
+  .intro-actions a { min-height: 44px; }
   .content-section { padding-block: 64px; }
   .section-head { margin-bottom: 36px; }
   .install-section { grid-template-columns: 1fr; gap: 32px; }
-  .site-footer { flex-direction: column; padding-block: 40px; }
-  .site-footer nav { display: flex; flex-wrap: wrap; gap: 16px; }
+  .footer-inner { align-items: start; flex-direction: column; padding-block: 40px; }
+  .site-footer nav { justify-content: flex-start; gap: 8px 20px; }
   #playground, .desktop-only { display: none; }
-  .mobile-only { display: inline-flex; }
+  .mobile-only { display: flex; }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }

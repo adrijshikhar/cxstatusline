@@ -21,6 +21,18 @@ async function mountDevelopmentReviewTools(): Promise<void> {
 }
 let pending: Promise<typeof import("./playground")> | undefined;
 let runtime: typeof import("./playground") | undefined;
+let stylesPending: Promise<void> | undefined;
+
+function loadPlaygroundStyles(): Promise<void> {
+  return stylesPending ??= new Promise((resolve, reject) => {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "/editor.css";
+    link.onload = () => resolve();
+    link.onerror = () => reject(new Error("Could not load playground styles"));
+    document.head.append(link);
+  });
+}
 
 function setMobileVisibility(visible: boolean): void {
   desktopPlayground.hidden = !visible;
@@ -45,6 +57,7 @@ async function syncViewport(): Promise<void> {
 
   bootButton.disabled = true;
   try {
+    await loadPlaygroundStyles();
     pending ??= import("./playground");
     runtime = await pending;
     if (!desktop.matches) return;
@@ -69,7 +82,7 @@ void mountDevelopmentReviewTools();
 
 if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
   animate("[data-dot-field]", {
-    opacity: [0, .9],
+    opacity: [0, desktop.matches ? .9 : .7],
     duration: 900,
     ease: "outExpo",
   });

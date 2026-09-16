@@ -2,7 +2,6 @@ import { mountInkInXterm } from "ink-web";
 import type React from "react";
 import { App, cloneSettings } from "../../src/tui/App";
 import { SettingsSchema, type Settings } from "../../src/types/Settings";
-import "@xterm/xterm/css/xterm.css";
 import { PreviewFooter } from "./PreviewFooter";
 import { loadSavedSettings, persistSettings } from "./settings-store";
 import preset from "./sample-settings.json";
