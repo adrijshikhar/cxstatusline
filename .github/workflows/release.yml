@@ -107,7 +107,7 @@ jobs:
       - name: Resolve Tarball Path
         id: tarball
         run: |
-          TARBALL=$(ls release-tarball/cxstatusline-*.tgz)
+          TARBALL=$(ls -d "$PWD"/release-tarball/cxstatusline-*.tgz)
           echo "path=$TARBALL" >> "$GITHUB_OUTPUT"
 
       - name: Attach tarball to GitHub Release
