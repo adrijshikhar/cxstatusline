@@ -41,6 +41,27 @@ test("mobile stays static and does not touch the playground runtime", async ({ p
   await page.screenshot({ path: "test-artifacts/task4-mobile.png", fullPage: true });
 });
 
+test("desktop downloads default settings before any edit", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await waitForEditor(page);
+  await expect(page.locator("#download")).toBeEnabled();
+  const defaultDownload = await Promise.all([page.waitForEvent("download"), page.locator("#download").click()]);
+  const defaultSettings = JSON.parse(await defaultDownload[0].createReadStream().then(async (stream) => { let text = ""; for await (const chunk of stream!) text += chunk; return text; }));
+  expect(defaultSettings).toMatchObject({
+    version: 3,
+    lines: [[
+      { id: "1", type: "model", color: "cyan" },
+      { id: "2", type: "separator" },
+      { id: "3", type: "context-window", color: "brightBlack" },
+      { id: "4", type: "separator" },
+      { id: "5", type: "git-branch", color: "magenta" },
+      { id: "6", type: "separator" },
+      { id: "7", type: "git-changes", color: "yellow" },
+    ], [], []],
+  });
+});
+
 test("desktop mounts once, opens the saved editor, reloads, and downloads", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const pageErrors: string[] = [];

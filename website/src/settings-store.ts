@@ -11,7 +11,7 @@ export function loadSavedSettings(storage: Pick<Storage, "getItem">): { settings
     if (migration.unknownVersion) throw new Error("unsupported version");
     return { settings: SettingsSchema.parse(migration.settings), error: null };
   } catch {
-    return { settings: null, error: "Saved browser settings could not be loaded; using the sample." };
+    return { settings: null, error: "Saved browser settings could not be loaded; using defaults." };
   }
 }
 
