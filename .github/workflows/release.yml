@@ -104,6 +104,12 @@ jobs:
           name: release-tarball
           path: release-tarball
 
+      - name: Resolve Tarball Path
+        id: tarball
+        run: |
+          TARBALL=$(ls release-tarball/cxstatusline-*.tgz)
+          echo "path=$TARBALL" >> "$GITHUB_OUTPUT"
+
       - name: Attach tarball to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -111,10 +117,10 @@ jobs:
           TAG: ${{ needs.build-and-verify.outputs.tag_name }}
         run: |
           gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1 || gh release create "$TAG" --repo "$REPO" --title "cxstatusline $TAG" --notes "Source release; the packed CLI and its checksum are attached." --verify-tag
-          gh release upload "$TAG" --repo "$REPO" release-tarball/cxstatusline-*.tgz release-tarball/SHA256SUMS --clobber
+          gh release upload "$TAG" --repo "$REPO" "${{ steps.tarball.outputs.path }}" release-tarball/SHA256SUMS --clobber
 
       - name: Upgrade npm for native OIDC Trusted Publishing
         run: npm install -g npm@latest
 
       - name: Publish to npm (OIDC Trusted Publishing)
-        run: npm publish release-tarball/cxstatusline-*.tgz --provenance --access public
+        run: npm publish "${{ steps.tarball.outputs.path }}" --provenance --access public
