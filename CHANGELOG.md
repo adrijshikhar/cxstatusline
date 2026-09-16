@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.4.1...v0.5.0) (2026-09-16)
+
+
+### Features
+
+* add interactive web playground preview ([#25](https://github.com/adrijshikhar/cxstatusline/issues/25)) ([ec941db](https://github.com/adrijshikhar/cxstatusline/commit/ec941dbfc64e7402b87ed623fdccfdac72317ed6))
+
 ## [0.4.1](https://github.com/adrijshikhar/cxstatusline/compare/v0.4.0...v0.4.1) (2026-09-15)
 
 
