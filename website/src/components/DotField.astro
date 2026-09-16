@@ -1,0 +1,182 @@
+<div class="dot-field-layer" data-dot-field aria-hidden="true">
+  <canvas></canvas>
+</div>
+
+<script>
+  // Adapted from React Bits DotField (MIT). This version sleeps when idle.
+  type Dot = { anchorX: number; anchorY: number; x: number; y: number };
+
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const interactive = window.matchMedia("(min-width: 769px) and (pointer: fine)");
+
+  document.querySelectorAll<HTMLElement>("[data-dot-field]").forEach((layer) => {
+    if (layer.dataset.ready) return;
+    layer.dataset.ready = "true";
+    if (!interactive.matches) return;
+
+    const canvas = layer.querySelector("canvas");
+    const context = canvas?.getContext("2d", { alpha: true });
+    if (!canvas || !context) return;
+
+    const dotRadius = 1.05;
+    const cursorRadius = 320;
+    const cursorStrength = 46;
+    let dots: Dot[] = [];
+    let width = 0;
+    let height = 0;
+    let gradient: CanvasGradient;
+    let pointerX = -10_000;
+    let pointerY = -10_000;
+    let pointerSpeed = 0;
+    let engagement = 0;
+    let frame: number | undefined;
+    let resizeTimer: number | undefined;
+
+    const draw = () => {
+      context.clearRect(0, 0, width, height);
+      context.fillStyle = gradient;
+      context.beginPath();
+      for (const dot of dots) {
+        context.moveTo(dot.x + dotRadius, dot.y);
+        context.arc(dot.x, dot.y, dotRadius, 0, Math.PI * 2);
+      }
+      context.fill();
+    };
+
+    const build = () => {
+      const ratio = Math.min(window.devicePixelRatio || 1, 2);
+      const spacing = window.innerWidth < 769 ? 30 : 22;
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = Math.round(width * ratio);
+      canvas.height = Math.round(height * ratio);
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      gradient = context.createLinearGradient(0, 0, width, height);
+      gradient.addColorStop(0, "rgba(139, 148, 158, 0.28)");
+      gradient.addColorStop(1, "rgba(56, 189, 248, 0.22)");
+
+      const columns = Math.ceil(width / spacing);
+      const rows = Math.ceil(height / spacing);
+      const offsetX = (width % spacing) / 2;
+      const offsetY = (height % spacing) / 2;
+      dots = [];
+      for (let row = 0; row < rows; row++) {
+        for (let column = 0; column < columns; column++) {
+          const anchorX = offsetX + column * spacing;
+          const anchorY = offsetY + row * spacing;
+          dots.push({ anchorX, anchorY, x: anchorX, y: anchorY });
+        }
+      }
+      draw();
+    };
+
+    const animate = () => {
+      frame = undefined;
+      if (document.hidden || reducedMotion.matches) return;
+
+      pointerSpeed *= 0.82;
+      engagement += (Math.min(pointerSpeed / 18, 1) - engagement) * 0.12;
+      if (engagement < 0.001) engagement = 0;
+
+      let unsettled = false;
+      for (const dot of dots) {
+        const dx = pointerX - dot.anchorX;
+        const dy = pointerY - dot.anchorY;
+        const distance = Math.hypot(dx, dy);
+        let targetX = dot.anchorX;
+        let targetY = dot.anchorY;
+        if (distance < cursorRadius && engagement > 0 && distance > 0) {
+          const force = (1 - distance / cursorRadius) ** 2 * cursorStrength * engagement;
+          targetX -= dx / distance * force;
+          targetY -= dy / distance * force;
+        }
+        dot.x += (targetX - dot.x) * 0.16;
+        dot.y += (targetY - dot.y) * 0.16;
+        unsettled ||= Math.abs(targetX - dot.x) > 0.02 || Math.abs(targetY - dot.y) > 0.02;
+      }
+
+      draw();
+      if (pointerSpeed > 0.02 || engagement > 0.002 || unsettled) {
+        frame = requestAnimationFrame(animate);
+      }
+    };
+
+    const requestFrame = () => {
+      if (!frame && !document.hidden && !reducedMotion.matches) frame = requestAnimationFrame(animate);
+    };
+
+    const onPointerMove = (event: PointerEvent) => {
+      pointerX = event.clientX;
+      pointerY = event.clientY;
+      pointerSpeed = Math.min(40, Math.max(pointerSpeed, Math.hypot(event.movementX, event.movementY)));
+      engagement = Math.max(engagement, 0.8);
+      requestFrame();
+    };
+
+    const onResize = () => {
+      window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(build, 120);
+    };
+
+    const onVisibilityChange = () => {
+      if (document.hidden && frame) {
+        cancelAnimationFrame(frame);
+        frame = undefined;
+      } else {
+        draw();
+      }
+    };
+
+    const onMotionChange = () => {
+      if (reducedMotion.matches && frame) {
+        cancelAnimationFrame(frame);
+        frame = undefined;
+      }
+      for (const dot of dots) {
+        dot.x = dot.anchorX;
+        dot.y = dot.anchorY;
+      }
+      draw();
+    };
+
+    build();
+    window.addEventListener("resize", onResize, { passive: true });
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    reducedMotion.addEventListener("change", onMotionChange);
+    window.addEventListener("pointermove", onPointerMove, { passive: true });
+  });
+</script>
+
+<style>
+  .dot-field-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+    opacity: .9;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dot-field-layer { opacity: .65; }
+  }
+
+  @media (max-width: 768px), (pointer: coarse) {
+    .dot-field-layer {
+      opacity: .7;
+      background-image: radial-gradient(circle, rgba(56, 189, 248, .24) 1px, transparent 1px);
+      background-position: 8px 8px;
+      background-size: 24px 24px;
+    }
+
+    canvas { display: none; }
+  }
+</style>

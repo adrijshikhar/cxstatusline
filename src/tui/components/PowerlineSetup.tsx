@@ -85,7 +85,8 @@ export function PowerlineSetup({ settings, onUpdate, onBack }: PowerlineSetupPro
   const [screen, setScreen] = useState<Screen>("menu");
   const [selected, setSelected] = useState(0);
   const [confirmEnable, setConfirmEnable] = useState(false);
-  const fontFound = useMemo(detectPowerlineFont, []);
+  const browserRuntime = process.env.CXSTATUSLINE_WEB === "1";
+  const fontFound = useMemo(() => browserRuntime ? false : detectPowerlineFont(), [browserRuntime]);
   const powerline = settings.powerline;
   const manualSeparators = settings.lines.some((line) => line.some((item) => item.type === "separator"));
 
@@ -120,7 +121,9 @@ export function PowerlineSetup({ settings, onUpdate, onBack }: PowerlineSetupPro
   return (
     <Box flexDirection="column">
       <Text bold>Powerline Setup</Text>
-      <Text dimColor>{`Font detection: ${fontFound ? "compatible font found" : "no compatible font found"} (informational; terminal configuration controls glyph rendering)`}</Text>
+      <Text dimColor>{browserRuntime
+        ? "Font detection: unavailable in browser (the browser terminal decides glyph rendering)"
+        : `Font detection: ${fontFound ? "compatible font found" : "no compatible font found"} (informational; terminal configuration controls glyph rendering)`}</Text>
       <Text>Powerline Mode: <Text color={powerline.enabled ? "green" : "red"}>{powerline.enabled ? "Enabled" : "Disabled"}</Text><Text dimColor> — press (t) to toggle</Text></Text>
       {powerline.enabled && <>
         <Text>Align Widgets: <Text color={powerline.autoAlign ? "green" : "red"}>{powerline.autoAlign ? "Enabled" : "Disabled"}</Text><Text dimColor> — press (a) to toggle</Text></Text>

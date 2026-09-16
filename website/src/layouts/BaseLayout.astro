@@ -1,0 +1,20 @@
+---
+import "../styles/global.css";
+import DotField from "../components/DotField.astro";
+---
+<!doctype html>
+<html lang="en">
+<head>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Customize your Codex CLI statusline with a live desktop playground. Explore widgets, save your layout, and install cxstatusline." />
+    <title>cxstatusline | Your Codex session, at a glance</title>
+  </head>
+<body>
+<DotField />
+<a class="skip-link" href="#main-content">Skip to content</a>
+<slot />
+<script>import "../main";</script>
+</body>
+</html>

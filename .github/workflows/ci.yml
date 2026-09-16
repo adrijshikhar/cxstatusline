@@ -21,6 +21,9 @@ jobs:
           bun-version: "1.4.0"
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
-      - run: bun test
+      - run: bun test ./test ./src
       - run: bun run build
       - run: bun run check:package
+      - run: cd website && bun install --frozen-lockfile
+      - run: cd website && bunx tsc --noEmit
+      - run: cd website && bun run build

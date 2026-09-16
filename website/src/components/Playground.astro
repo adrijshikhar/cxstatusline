@@ -1,0 +1,33 @@
+---
+import { Download, Pencil, RotateCcw } from "lucide-react";
+import { Button } from "./ui/button";
+import { Skeleton } from "./ui/skeleton";
+---
+<section id="playground" aria-labelledby="playground-title">
+<h2 id="playground-title" class="sr-only">Configure and preview your statusline</h2>
+<div id="desktop-playground">
+<div class="terminal-shell preview" aria-label="cxstatusline terminal">
+<div id="playground-skeleton" aria-hidden="true">
+<div class="skeleton-status"><Skeleton className="h-2.5 w-[min(34rem,38%)]" /><Skeleton className="h-2.5 w-[min(26rem,30%)]" /><Skeleton className="h-2.5 w-[min(18rem,22%)]" /></div>
+</div>
+<div id="chat-preview">
+<label class="sr-only" for="demo-message">Try the Codex composer</label>
+<span class="composer-prompt" aria-hidden="true">›</span>
+<input id="demo-message" type="text" autocomplete="off" placeholder="Ask Codex to do anything" disabled />
+</div>
+<div id="terminal" style="height: 52px">
+</div>
+</div>
+<div class="playground-meta">
+<div>
+<p id="status" class="status" role="status" aria-live="polite">Loading your sample layout…</p>
+<p class="terminal-hint" hidden>Arrow keys and Enter to edit · Tab to leave the terminal</p>
+</div>
+<div class="actions">
+<Button id="boot" variant="outline" className="font-mono" hidden><RotateCcw aria-hidden="true" />Retry</Button>
+<Button id="edit" className="font-mono" hidden><Pencil aria-hidden="true" />Edit layout</Button>
+<Button id="download" className="font-mono" disabled><Download aria-hidden="true" />Download JSON</Button>
+</div>
+</div>
+</div>
+</section>

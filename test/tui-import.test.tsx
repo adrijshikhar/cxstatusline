@@ -3,6 +3,7 @@ import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { render, type Instance } from "ink";
+import { act } from "react";
 import type { ReactNode } from "react";
 import { DEFAULT_SETTINGS, type Settings } from "../src/types/Settings";
 import { App } from "../src/tui/App";
@@ -44,8 +45,18 @@ function createTui(node: ReactNode): TuiHarness {
     instance,
     lastFrame: () => lastFrame,
     async write(input: string): Promise<void> {
-      stdin.write(input);
-      await new Promise<void>((resolve) => setTimeout(resolve, 10));
+      const environment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
+      const previous = environment.IS_REACT_ACT_ENVIRONMENT;
+      environment.IS_REACT_ACT_ENVIRONMENT = true;
+      try {
+        await act(async () => {
+          stdin.write(input);
+          await new Promise<void>((resolve) => setTimeout(resolve, 10));
+        });
+      } finally {
+        if (previous === undefined) delete environment.IS_REACT_ACT_ENVIRONMENT;
+        else environment.IS_REACT_ACT_ENVIRONMENT = previous;
+      }
     },
     cleanup() { instance.unmount(); instance.cleanup(); },
   };

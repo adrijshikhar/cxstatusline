@@ -1,0 +1,49 @@
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/InterVariable.woff2") format("woff2");
+}
+
+:root {
+  --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, monospace;
+  --page-gutter: 24px;
+  --bg: #0b0f14;
+  --surface: #10151d;
+  --surface-strong: #141b25;
+  --terminal: #0b0f14;
+  --text: #f0f6fc;
+  --muted: #8b949e;
+  --dim: #8b949e;
+  --accent: #38bdf8;
+  --accent-strong: #7dd3fc;
+  --accent-text: #06131c;
+  --positive: #3fb950;
+  --line: #212c3d;
+  --line-soft: #182231;
+  color: var(--text);
+  background: var(--bg);
+  font: 16px/1.55 var(--font-sans);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--text);
+  --color-popover: var(--surface);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--accent-text);
+  --color-secondary: var(--surface-strong);
+  --color-secondary-foreground: var(--text);
+  --color-muted: var(--surface);
+  --color-muted-foreground: var(--muted);
+  --color-accent: var(--surface-strong);
+  --color-accent-foreground: var(--text);
+  --color-border: var(--line);
+  --color-input: var(--line);
+  --color-ring: var(--accent);
+}

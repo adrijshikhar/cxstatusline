@@ -36,6 +36,8 @@ export interface AppProps {
   settingsPath: string;
   readImportFile?: (file: string) => Promise<string>;
   writeSettings?: typeof saveSettings;
+  /** Lets browser embeddings return to their host instead of ending Ink. */
+  onExit?: () => void;
 }
 
 const readImportFileFromDisk = (file: string): Promise<string> => readFile(file, "utf8");
@@ -52,8 +54,9 @@ function clampSettings(settings: Settings): Settings {
   return { ...cloned, lines: lines.length ? lines : [[]] };
 }
 
-export function App({ initialSettings, settingsPath, readImportFile = readImportFileFromDisk, writeSettings = saveSettings }: AppProps): React.JSX.Element {
-  const { exit } = useApp();
+export function App({ initialSettings, settingsPath, readImportFile = readImportFileFromDisk, writeSettings = saveSettings, onExit }: AppProps): React.JSX.Element {
+  const { exit: nativeExit } = useApp();
+  const exit = onExit ?? nativeExit;
   const { stdout } = useStdout();
   const [settings, setSettings] = useState<Settings | null>(() => initialSettings ? clampSettings(initialSettings) : null);
   const [originalSettings, setOriginalSettings] = useState<Settings | null>(() => initialSettings ? clampSettings(initialSettings) : null);
