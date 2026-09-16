@@ -58,7 +58,7 @@ function terminalLineHeight(): number {
   const cellHeight = (term as unknown as { _core?: { _renderService?: { dimensions?: { css?: { cell?: { height?: number } } } } } })?._core?._renderService?.dimensions?.css?.cell?.height;
   if (typeof cellHeight === "number" && cellHeight > 0) return cellHeight;
   const screen = term?.element?.querySelector<HTMLElement>(".xterm-screen");
-  if (screen && term.rows > 0) {
+  if (screen && term && term.rows > 0) {
     const measuredHeight = screen.getBoundingClientRect().height / term.rows;
     if (measuredHeight > 0) return measuredHeight;
   }

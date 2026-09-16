@@ -10,7 +10,7 @@ export function PreviewFooter({ settings }: { settings: Settings }): React.JSX.E
   useEffect(() => {
     const onResize = () => setColumns(stdout.columns || 80);
     stdout.on("resize", onResize);
-    return () => stdout.off("resize", onResize);
+    return () => { stdout.off("resize", onResize); };
   }, [stdout]);
   return <Box flexDirection="column"><StatusLinePreview settings={{ ...settings, flexMode: "full" }} terminalWidth={columns} /></Box>;
 }

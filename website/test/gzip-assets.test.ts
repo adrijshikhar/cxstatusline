@@ -8,7 +8,7 @@ const assets = join(import.meta.dir, "../dist/_astro");
 function gzipBytes(extension: string): number {
   return readdirSync(assets)
     .filter((file) => file.endsWith(extension))
-    .reduce((total, file) => total + gzipSync(readFileSync(join(assets, file)), { level: 9, mtime: 0 }).byteLength, 0);
+    .reduce((total, file) => total + gzipSync(readFileSync(join(assets, file)), { level: 9 }).byteLength, 0);
 }
 
 test("emitted JavaScript and CSS stay within documented gzip budgets", () => {

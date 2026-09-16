@@ -18,7 +18,6 @@ export function Button({ className, variant = "ghost", render, ...props }: Butto
           : "border-transparent bg-transparent text-[var(--text)] hover:bg-[var(--surface-strong)]",
         className,
       ),
-      "data-slot": "button",
       type: render ? undefined : "button",
     }, props),
     render,

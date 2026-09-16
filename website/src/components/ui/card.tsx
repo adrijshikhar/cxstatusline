@@ -8,7 +8,6 @@ export function Card({ className, render, ...props }: useRender.ComponentProps<"
     defaultTagName: "div",
     props: mergeProps<"div">({
       className: cn("relative flex flex-col rounded-md border border-[var(--line)] bg-[var(--surface)] text-[var(--text)]", className),
-      "data-slot": "card",
     }, props),
     render,
   });
