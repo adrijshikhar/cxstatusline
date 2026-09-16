@@ -68,6 +68,11 @@ void syncViewport();
 void mountDevelopmentReviewTools();
 
 if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  animate("[data-dot-field]", {
+    opacity: [0, .72],
+    duration: 900,
+    ease: "outExpo",
+  });
   animate("#playground-skeleton [data-slot='skeleton']", {
     opacity: [.3, 1],
     duration: 900,

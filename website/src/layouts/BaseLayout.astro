@@ -1,5 +1,6 @@
 ---
 import "../styles/global.css";
+import DotField from "../components/DotField.astro";
 ---
 <!doctype html>
 <html lang="en">
@@ -11,6 +12,7 @@ import "../styles/global.css";
     <title>cxstatusline | Your Codex session, at a glance</title>
   </head>
 <body>
+<DotField />
 <a class="skip-link" href="#main-content">Skip to content</a>
 <slot />
 <script>import "../main";</script>
