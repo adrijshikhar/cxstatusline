@@ -1,10 +1,9 @@
 import { mountInkInXterm } from "ink-web";
 import type React from "react";
 import { App, cloneSettings } from "../../src/tui/App";
-import { SettingsSchema, type Settings } from "../../src/types/Settings";
+import { DEFAULT_SETTINGS, type Settings } from "../../src/types/Settings";
 import { PreviewFooter } from "./PreviewFooter";
 import { loadSavedSettings, persistSettings } from "./settings-store";
-import preset from "./sample-settings.json";
 
 const desktopPlayground = document.querySelector<HTMLElement>("#desktop-playground")!;
 const featuresTitle = document.querySelector<HTMLElement>("#features-title")!;
@@ -17,10 +16,9 @@ const terminalElement = document.querySelector<HTMLElement>("#terminal")!;
 const shell = document.querySelector<HTMLElement>(".terminal-shell")!;
 const chat = document.querySelector<HTMLElement>("#chat-preview")!;
 const composer = document.querySelector<HTMLInputElement>("#demo-message")!;
-const sampleSettings = SettingsSchema.parse(preset);
 const previewRows = 3;
 const previewHeight = "52px";
-let savedSettings = cloneSettings(sampleSettings);
+let savedSettings = cloneSettings(DEFAULT_SETTINGS);
 let view: "editor" | "preview" = "editor";
 let mounted: ReturnType<typeof mountInkInXterm> | undefined;
 let bootPromise: Promise<void> | undefined;
@@ -40,7 +38,7 @@ async function renderEditor(): Promise<void> {
   shell.classList.remove("preview");
   hint.textContent = "Arrow keys and Enter to edit · Tab to leave the terminal";
   hint.hidden = false;
-  status.textContent = hasSavedSettings ? "Editing saved layout" : "Editing sample layout";
+  status.textContent = hasSavedSettings ? "Editing saved layout" : "Editing default settings";
   terminalElement.inert = true;
   terminalElement.style.height = "";
   if (!mounted) return;
@@ -81,7 +79,7 @@ function showPreview(focus = true): void {
     mounted.term.reset();
     mounted.rerender(<PreviewFooter settings={savedSettings} />);
   }
-  status.textContent = hasSavedSettings ? "Saved in this browser" : "Sample preview";
+  status.textContent = hasSavedSettings ? "Saved in this browser" : "Default settings preview";
   if (focus) focusCurrentView();
 }
 
@@ -140,7 +138,7 @@ async function startBoot(): Promise<void> {
   try {
     loaded = loadSavedSettings(window.localStorage);
   } catch {
-    loaded = { settings: null, error: "Saved browser settings could not be loaded; using the sample." };
+    loaded = { settings: null, error: "Saved browser settings could not be loaded; using defaults." };
   }
   if (loaded.settings) {
     savedSettings = loaded.settings;
@@ -167,7 +165,7 @@ async function startBoot(): Promise<void> {
       if (view === "preview") showPreview(false);
       else {
         terminalElement.inert = false;
-        status.textContent = loaded.error ?? "Editing sample layout";
+        status.textContent = loaded.error ?? "Editing default settings";
         hint.hidden = false;
       }
       skeleton.hidden = true;
