@@ -69,7 +69,7 @@ void mountDevelopmentReviewTools();
 
 if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
   animate("[data-dot-field]", {
-    opacity: [0, .72],
+    opacity: [0, .9],
     duration: 900,
     ease: "outExpo",
   });

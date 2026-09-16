@@ -17,9 +17,9 @@
     const context = canvas?.getContext("2d", { alpha: true });
     if (!canvas || !context) return;
 
-    const dotRadius = 0.7;
-    const cursorRadius = 220;
-    const cursorStrength = 14;
+    const dotRadius = 1.05;
+    const cursorRadius = 320;
+    const cursorStrength = 46;
     let dots: Dot[] = [];
     let width = 0;
     let height = 0;
@@ -44,7 +44,7 @@
 
     const build = () => {
       const ratio = Math.min(window.devicePixelRatio || 1, 2);
-      const spacing = window.innerWidth < 769 ? 32 : 26;
+      const spacing = window.innerWidth < 769 ? 30 : 22;
       width = window.innerWidth;
       height = window.innerHeight;
       canvas.width = Math.round(width * ratio);
@@ -53,8 +53,8 @@
       canvas.style.height = `${height}px`;
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
       gradient = context.createLinearGradient(0, 0, width, height);
-      gradient.addColorStop(0, "rgba(139, 148, 158, 0.16)");
-      gradient.addColorStop(1, "rgba(56, 189, 248, 0.11)");
+      gradient.addColorStop(0, "rgba(139, 148, 158, 0.28)");
+      gradient.addColorStop(1, "rgba(56, 189, 248, 0.22)");
 
       const columns = Math.ceil(width / spacing);
       const rows = Math.ceil(height / spacing);
@@ -110,6 +110,7 @@
       pointerX = event.clientX;
       pointerY = event.clientY;
       pointerSpeed = Math.min(40, Math.max(pointerSpeed, Math.hypot(event.movementX, event.movementY)));
+      engagement = Math.max(engagement, 0.8);
       requestFrame();
     };
 
@@ -154,7 +155,7 @@
     z-index: 0;
     overflow: hidden;
     pointer-events: none;
-    opacity: .72;
+    opacity: .9;
   }
 
   canvas {
@@ -164,6 +165,6 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .dot-field-layer { opacity: .5; }
+    .dot-field-layer { opacity: .65; }
   }
 </style>
