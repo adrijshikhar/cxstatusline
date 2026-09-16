@@ -5,7 +5,12 @@
       "release-type": "node",
       "package-name": "cxstatusline",
       "include-component-in-tag": false,
-      "bump-minor-pre-major": false
+      "bump-minor-pre-major": false,
+      "last-release-sha": "ec941dbfc64e7402b87ed623fdccfdac72317ed6",
+      "exclude-paths": [
+        "website",
+        "docs"
+      ]
     }
   }
 }
