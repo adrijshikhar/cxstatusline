@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   bumpMinor,
+  extractRelevantChanges,
+  formatConflictIssueBody,
+  reportConflictIssue,
   runUpstreamWatch,
   testPatchAgainstUpstream,
   updateCiPrebuiltTestContent,
@@ -184,5 +187,107 @@ describe("runUpstreamWatch orchestration", () => {
     expect(res.detail).toContain("issues/99");
     expect(createdArgs).toContain("--title");
     expect(createdArgs[3]).toContain("Support Codex 0.199.0 - patch conflicts detected");
+  });
+
+  test("creates issue including changelog and highlighted relevant changes", async () => {
+    let createdBody = "";
+    const mockGh: GhRunner = (args) => {
+      if (args[0] === "pr" && args[1] === "list") return { status: 0, stdout: "[]", stderr: "" };
+      if (args[0] === "issue" && args[1] === "list") return { status: 0, stdout: "[]", stderr: "" };
+      if (args[0] === "issue" && args[1] === "create") {
+        const bodyIdx = args.indexOf("--body");
+        if (bodyIdx !== -1 && args[bodyIdx + 1]) createdBody = args[bodyIdx + 1]!;
+        return { status: 0, stdout: "https://github.com/adrijshikhar/cxstatusline/issues/100", stderr: "" };
+      }
+      return { status: 0, stdout: "", stderr: "" };
+    };
+    const mockGit: GitRunner = (args) => {
+      if (args.includes("apply")) return { status: 1, stdout: "", stderr: "rejected hunk in footer.rs" };
+      return { status: 0, stdout: "", stderr: "" };
+    };
+    const sampleChangelog = [
+      "- #44040 Harden credential handling in shell snapshots @user",
+      "- #44354 Extract shared footer hint wrapping in the TUI @copyberry",
+      "- #44198 Preserve voice indicator styles during composer sparkle effects @copyberry",
+    ].join("\n");
+
+    const res = await runUpstreamWatch({
+      version: "0.199.0",
+      dryRun: false,
+      fetchReleases: async () => "0.199.0",
+      fetchReleaseNotes: async () => sampleChangelog,
+      gh: mockGh,
+      git: mockGit,
+    });
+    expect(res.action).toBe("issue_created");
+    expect(createdBody).toContain("### 🔍 Potentially Relevant Upstream Changes");
+    expect(createdBody).toContain("Extract shared footer hint wrapping in the TUI");
+    expect(createdBody).toContain("Preserve voice indicator styles during composer sparkle effects");
+    expect(createdBody).toContain("### 📋 Upstream Changelog");
+    expect(createdBody).toContain("Harden credential handling in shell snapshots");
+  });
+});
+
+describe("changelog analysis and issue formatting", () => {
+  test("extractRelevantChanges extracts changes related to TUI, footer, composer, and layout", () => {
+    const rawChangelog = [
+      "## What's Changed",
+      "- #100 Update python dependencies @alice",
+      "- #101 Fix bottom_pane height calculation in TUI @bob",
+      "- #102 Adjust chat_composer footer hints @charlie",
+      "- #103 Network proxy improvements @dave",
+      "- #104 Update rate-limit status reporting @eve",
+      "- #105 Refactor app layout and render loop @frank",
+    ].join("\n");
+
+    const relevant = extractRelevantChanges(rawChangelog);
+    expect(relevant).toHaveLength(4);
+    expect(relevant[0]).toContain("#101 Fix bottom_pane height calculation in TUI");
+    expect(relevant[1]).toContain("#102 Adjust chat_composer footer hints");
+    expect(relevant[2]).toContain("#104 Update rate-limit status reporting");
+    expect(relevant[3]).toContain("#105 Refactor app layout and render loop");
+  });
+
+  test("formatConflictIssueBody formats issue with changelog and highlights", () => {
+    const changelog = "- #500 Refactor footer rendering in TUI @dev\n- #501 Other change";
+    const body = formatConflictIssueBody("0.199.0", "rust-v0.199.0", "codex-0.198.0.patch", "patch failed", changelog);
+
+    expect(body).toContain("## Action Required: Upstream Codex 0.199.0 Released (Patch Conflicts)");
+    expect(body).toContain("OpenAI Codex has released tag `rust-v0.199.0`.");
+    expect(body).toContain("### 🔍 Potentially Relevant Upstream Changes");
+    expect(body).toContain("#500 Refactor footer rendering in TUI");
+    expect(body).toContain("### 📋 Upstream Changelog");
+    expect(body).toContain("<details open>");
+    expect(body).toContain("Full Changelog for <code>rust-v0.199.0</code>");
+    expect(body).toContain("https://github.com/openai/codex/releases/tag/rust-v0.199.0");
+    expect(body).toContain("### Steps to Resolve");
+  });
+
+  test("formatConflictIssueBody handles empty or missing changelog gracefully", () => {
+    const body = formatConflictIssueBody("0.199.0", "rust-v0.199.0", "codex-0.198.0.patch", "patch failed", null);
+
+    expect(body).toContain("### 📋 Upstream Changelog");
+    expect(body).toContain("No release notes were provided");
+    expect(body).not.toContain("Potentially Relevant Upstream Changes");
+    expect(body).toContain("### Steps to Resolve");
+  });
+
+  test("reportConflictIssue invokes gh with formatted body", () => {
+    let sentBody = "";
+    let sentTitle = "";
+    const mockGh: GhRunner = (args) => {
+      if (args[0] === "issue" && args[1] === "list") return { status: 0, stdout: "[]", stderr: "" };
+      if (args[0] === "issue" && args[1] === "create") {
+        sentTitle = args[args.indexOf("--title") + 1]!;
+        sentBody = args[args.indexOf("--body") + 1]!;
+        return { status: 0, stdout: "https://github.com/adrijshikhar/cxstatusline/issues/101", stderr: "" };
+      }
+      return { status: 0, stdout: "", stderr: "" };
+    };
+
+    const res = reportConflictIssue(mockGh, "0.199.0", "rust-v0.199.0", "codex-0.198.0.patch", "patch failed: Cargo.lock", "- #999 TUI widget fix");
+    expect(res.action).toBe("issue_created");
+    expect(sentTitle).toContain("[Action Needed] Support Codex 0.199.0 - patch conflicts detected");
+    expect(sentBody).toContain("#999 TUI widget fix");
   });
 });

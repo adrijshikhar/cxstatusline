@@ -98,6 +98,115 @@ export async function defaultFetchReleases(token?: string): Promise<string> {
   return selectStableVersion(releases);
 }
 
+export async function defaultFetchReleaseNotes(tag: string, token?: string): Promise<string | null> {
+  const headers: Record<string, string> = {
+    accept: "application/vnd.github+json",
+    "user-agent": "cxstatusline-upstream-watch",
+  };
+  if (token) headers.authorization = `Bearer ${token}`;
+  try {
+    const res = await fetch(`https://api.github.com/repos/openai/codex/releases/tags/${encodeURIComponent(tag)}`, {
+      headers,
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) return null;
+    const release = (await res.json()) as { body?: string | null };
+    return release.body ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export const RELEVANT_CHANGE_PATTERN =
+  /\b(tui|footer|composer|bottom_pane|status(?:line)?|ratelimit|rate_limit|rate-limit|widget|layout|render|terminal|chatwidget|pane|sparkle|indicator)\b/i;
+
+export function extractRelevantChanges(changelog: string): string[] {
+  const lines = changelog.split("\n");
+  const matches: string[] = [];
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) continue;
+    if (/^#{1,6}\s+/.test(trimmed)) continue;
+    if (RELEVANT_CHANGE_PATTERN.test(trimmed)) {
+      matches.push(trimmed);
+    }
+  }
+  return matches;
+}
+
+export function formatConflictIssueBody(
+  version: string,
+  tag: string,
+  lastPatch: string,
+  err: string,
+  changelog?: string | null,
+): string {
+  const releaseUrl = `https://github.com/openai/codex/releases/tag/${tag}`;
+  const lines: string[] = [
+    `## Action Required: Upstream Codex ${version} Released (Patch Conflicts)`,
+    "",
+    `OpenAI Codex has released tag \`${tag}\`.`,
+    `Automated patch application using \`${lastPatch}\` failed with conflicts:`,
+    "",
+    "```",
+    redact(err.slice(0, 2000)),
+    "```",
+  ];
+
+  if (changelog && changelog.trim().length > 0) {
+    const relevant = extractRelevantChanges(changelog);
+    if (relevant.length > 0) {
+      lines.push(
+        "",
+        "### 🔍 Potentially Relevant Upstream Changes",
+        "The following changes in this release touch TUI, footer, composer, or status components that may relate to our patch:",
+        "",
+        ...relevant.map((line) => (line.startsWith("- ") || line.startsWith("* ") ? line : `- ${line}`)),
+      );
+    }
+
+    const MAX_CHANGELOG_CHARS = 25_000;
+    let sanitizedChangelog = redact(changelog.trim());
+    if (sanitizedChangelog.length > MAX_CHANGELOG_CHARS) {
+      sanitizedChangelog =
+        sanitizedChangelog.slice(0, MAX_CHANGELOG_CHARS) +
+        `\n\n... [Changelog truncated. View full release notes on GitHub](${releaseUrl})`;
+    }
+
+    lines.push(
+      "",
+      "### 📋 Upstream Changelog",
+      `<details open>`,
+      `<summary><b>Full Changelog for <code>${tag}</code></b> (click to collapse)</summary>`,
+      "",
+      `[View full release notes on GitHub](${releaseUrl})`,
+      "",
+      sanitizedChangelog,
+      "",
+      `</details>`,
+    );
+  } else {
+    lines.push(
+      "",
+      "### 📋 Upstream Changelog",
+      `[View upstream release on GitHub](${releaseUrl})`,
+      "",
+      "_No release notes were provided in the upstream release or unable to fetch changelog._",
+    );
+  }
+
+  lines.push(
+    "",
+    "### Steps to Resolve",
+    `1. \`git checkout -b feat/support-codex-${version}\``,
+    `2. Resolve conflicts against \`openai/codex\` at tag \`${tag}\``,
+    `3. Add \`patches/codex-${version}.patch\` and update \`patches/manifest.json\``,
+    "4. Submit pull request for review.",
+  );
+
+  return lines.join("\n");
+}
+
 export function testPatchAgainstUpstream(
   git: GitRunner,
   upstreamTag: string,
@@ -119,6 +228,7 @@ export interface WatchOptions {
   repoDir?: string;
   token?: string;
   fetchReleases?: (token?: string) => Promise<string>;
+  fetchReleaseNotes?: (tag: string, token?: string) => Promise<string | null>;
   git?: GitRunner;
   gh?: GhRunner;
 }
@@ -134,6 +244,7 @@ export async function runUpstreamWatch(options: WatchOptions = {}): Promise<Watc
   const git = options.git ?? defaultGitRunner;
   const gh = options.gh ?? execGh;
   const fetcher = options.fetchReleases ?? defaultFetchReleases;
+  const fetchNotes = options.fetchReleaseNotes ?? (options.fetchReleases ? (async () => null) : defaultFetchReleaseNotes);
   const token = options.token ?? process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN;
 
   const targetVersion = options.version && options.version !== "auto"
@@ -174,12 +285,14 @@ export async function runUpstreamWatch(options: WatchOptions = {}): Promise<Watc
       if (options.dryRun) {
         return { action: "dry_run", version: targetVersion, detail: "Patch applies cleanly; dry run completed." };
       }
-      return applyCleanSupport(repoDir, git, gh, targetVersion, newPatchName, newPatchPath, latestPatchPath, branchName);
+      const changelog = await fetchNotes(upstreamTag, token);
+      return applyCleanSupport(repoDir, git, gh, targetVersion, newPatchName, newPatchPath, latestPatchPath, branchName, upstreamTag, changelog);
     } else {
       if (options.dryRun) {
         return { action: "dry_run", version: targetVersion, detail: `Conflicts detected: ${patchTest.error}` };
       }
-      return reportConflictIssue(gh, targetVersion, upstreamTag, latestPatchRange.file, patchTest.error ?? "unknown conflict");
+      const changelog = await fetchNotes(upstreamTag, token);
+      return reportConflictIssue(gh, targetVersion, upstreamTag, latestPatchRange.file, patchTest.error ?? "unknown conflict", changelog);
     }
   } finally {
     if (existsSync(scratch)) rmSync(scratch, { recursive: true, force: true });
@@ -195,6 +308,8 @@ function applyCleanSupport(
   patchPath: string,
   latestPatchPath: string,
   branchName: string,
+  upstreamTag: string,
+  changelog?: string | null,
 ): WatchResult {
   const patchContent = readFileSync(latestPatchPath, "utf8");
   writeFileSync(patchPath, patchContent, "utf8");
@@ -223,7 +338,8 @@ function applyCleanSupport(
   git(["commit", "-m", `feat: support Codex ${targetVersion}`], repoDir);
   git(["push", "-u", "origin", branchName], repoDir);
 
-  const prBody = [
+  const releaseUrl = `https://github.com/openai/codex/releases/tag/${upstreamTag}`;
+  const prBodyLines = [
     `## Automated Upstream Watcher: Support Codex ${targetVersion}`,
     "",
     `Upstream Codex release \`${targetVersion}\` was detected and tested.`,
@@ -237,33 +353,48 @@ function applyCleanSupport(
     "### Maintainer Review Gate",
     "Please review and approve this pull request to merge support into `main`.",
     "Once merged, native prebuilts can be built and published upon verification.",
-  ].join("\n");
+  ];
 
-  const prRes = gh(["pr", "create", "--title", `feat: support Codex ${targetVersion}`, "--body", prBody]);
+  if (changelog && changelog.trim().length > 0) {
+    const relevant = extractRelevantChanges(changelog);
+    if (relevant.length > 0) {
+      prBodyLines.push(
+        "",
+        "### 🔍 Upstream Changes Related to TUI / Statusline",
+        ...relevant.map((line) => (line.startsWith("- ") || line.startsWith("* ") ? line : `- ${line}`)),
+      );
+    }
+    prBodyLines.push(
+      "",
+      "### 📋 Upstream Changelog",
+      `<details>`,
+      `<summary><b>Full Changelog for <code>${upstreamTag}</code></b> (click to expand)</summary>`,
+      "",
+      `[View full release notes on GitHub](${releaseUrl})`,
+      "",
+      redact(changelog.trim().slice(0, 15_000)),
+      "",
+      `</details>`,
+    );
+  }
+
+  const prRes = gh(["pr", "create", "--title", `feat: support Codex ${targetVersion}`, "--body", prBodyLines.join("\n")]);
   return { action: "pr_created", version: targetVersion, detail: prRes.stdout.trim() };
 }
 
-function reportConflictIssue(gh: GhRunner, version: string, tag: string, lastPatch: string, err: string): WatchResult {
+export function reportConflictIssue(
+  gh: GhRunner,
+  version: string,
+  tag: string,
+  lastPatch: string,
+  err: string,
+  changelog?: string | null,
+): WatchResult {
   const issueSearch = gh(["issue", "list", "--search", `Codex ${version} patch conflicts`, "--json", "number,url"]);
   if (issueSearch.status === 0 && issueSearch.stdout.trim() !== "[]" && issueSearch.stdout.trim().length > 2) {
     return { action: "issue_exists", version, detail: `Issue already open: ${issueSearch.stdout.trim()}` };
   }
-  const body = [
-    `## Action Required: Upstream Codex ${version} Released (Patch Conflicts)`,
-    "",
-    `OpenAI Codex has released tag \`${tag}\`.`,
-    `Automated patch application using \`${lastPatch}\` failed with conflicts:`,
-    "",
-    "```",
-    redact(err.slice(0, 2000)),
-    "```",
-    "",
-    "### Steps to Resolve",
-    `1. \`git checkout -b feat/support-codex-${version}\``,
-    `2. Resolve conflicts against \`openai/codex\` at tag \`${tag}\``,
-    `3. Add \`patches/codex-${version}.patch\` and update \`patches/manifest.json\``,
-    "4. Submit pull request for review.",
-  ].join("\n");
+  const body = formatConflictIssueBody(version, tag, lastPatch, err, changelog);
   const issueRes = gh(["issue", "create", "--title", `[Action Needed] Support Codex ${version} - patch conflicts detected`, "--body", body]);
   return { action: "issue_created", version, detail: issueRes.stdout.trim() };
 }
