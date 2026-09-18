@@ -76,3 +76,28 @@ export function resolvePatch(m: Manifest, v: SemVer): { file: string; tag: strin
   });
   return hit ? { file: hit.file, tag: `${m.tag_prefix}${v.raw}` } : null;
 }
+
+/**
+ * Returns all discrete versions named in the manifest (candidate plus min/max of each range),
+ * sorted descending by semver (newest first).
+ */
+export function supportedCodexVersions(m: Manifest): string[] {
+  const versions = new Set<string>();
+  if (m.candidate) versions.add(m.candidate);
+  for (const p of m.patches) {
+    versions.add(p.min);
+    versions.add(p.max);
+  }
+  return Array.from(versions).sort((a, b) => {
+    const semA = parseSemver(a);
+    const semB = parseSemver(b);
+    if (!semA || !semB) return b.localeCompare(a);
+    return compareSemver(semB, semA);
+  });
+}
+
+/** Check whether a version is covered by any patch range in the manifest. */
+export function isCodexVersionSupported(m: Manifest, version: string): boolean {
+  const parsed = parseSemver(version);
+  return parsed !== null && resolvePatch(m, parsed) !== null;
+}
