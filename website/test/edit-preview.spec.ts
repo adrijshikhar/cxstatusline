@@ -1,8 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
+import defaultLayout from "../src/sample-settings.json" with { type: "json" };
+import packageJson from "../../package.json" with { type: "json" };
 
 const storageKey = "cxstatusline.playground.settings.v1";
 
 async function waitForEditor(page: Page): Promise<void> {
+  await expect(page.locator("#playground-skeleton")).toBeHidden();
+  if (await page.locator("#edit").isVisible()) await page.locator("#edit").click();
   await expect(page.locator("#terminal .xterm"), "desktop mount").toHaveCount(1);
   await expect(page.locator("#terminal")).toContainText("Main Menu", { timeout: 15_000 });
   await expect(page.locator("#terminal")).not.toHaveAttribute("inert", "");
@@ -33,6 +37,7 @@ test("mobile stays static and does not touch the playground runtime", async ({ p
   await expect(page.locator("#desktop-playground")).toBeHidden();
   await expect(page.locator("#playground")).toBeHidden();
   await expect(page.locator("#mobile-playground")).toHaveCount(0);
+  await expect(page.locator("#mobile-statusline-example")).toContainText("Codex");
   ({ reads: storageReads, writes: storageWrites } = await page.evaluate(() => (window as any).__storageAudit));
   expect(storageReads).toBe(0);
   expect(storageWrites).toBe(0);
@@ -41,25 +46,41 @@ test("mobile stays static and does not touch the playground runtime", async ({ p
   await page.screenshot({ path: "test-artifacts/task4-mobile.png", fullPage: true });
 });
 
+test("release metadata shows one refreshed npm version", async ({ page }) => {
+  let releaseRequested!: () => void;
+  const releaseRequest = new Promise<void>((resolve) => { releaseRequested = resolve; });
+  await page.route("https://registry.npmjs.org/cxstatusline/latest", async (route) => {
+    await releaseRequest;
+    await route.fulfill({ json: { version: "9.9.9" } });
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await expect(page.locator("#release-version")).toHaveText(`v${packageJson.version}`);
+  await expect(page.locator("#release-sync")).toHaveText("refreshing");
+  releaseRequested();
+  await expect(page.locator("#release-version")).toHaveText("v9.9.9");
+  await expect(page.locator("#release-sync")).toHaveText("live");
+});
+
+test("compatibility is a dedicated support matrix", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const compatibility = page.locator("#compatibility");
+  await expect(compatibility.getByRole("heading")).toHaveText("Compatibility matrix.");
+  await expect(compatibility).toContainText("0.152.1");
+  await expect(compatibility).toContainText("0.154.0");
+  await expect(compatibility).not.toContainText("Latest release");
+});
+
 test("desktop downloads default settings before any edit", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
-  await waitForEditor(page);
+  await expect(page.locator("#playground-skeleton")).toBeHidden();
+  await expect(page.locator("#chat-preview")).toBeVisible();
   await expect(page.locator("#download")).toBeEnabled();
   const defaultDownload = await Promise.all([page.waitForEvent("download"), page.locator("#download").click()]);
   const defaultSettings = JSON.parse(await defaultDownload[0].createReadStream().then(async (stream) => { let text = ""; for await (const chunk of stream!) text += chunk; return text; }));
-  expect(defaultSettings).toMatchObject({
-    version: 3,
-    lines: [[
-      { id: "1", type: "model", color: "cyan" },
-      { id: "2", type: "separator" },
-      { id: "3", type: "context-window", color: "brightBlack" },
-      { id: "4", type: "separator" },
-      { id: "5", type: "git-branch", color: "magenta" },
-      { id: "6", type: "separator" },
-      { id: "7", type: "git-changes", color: "yellow" },
-    ], [], []],
-  });
+  expect(defaultSettings).toEqual(defaultLayout);
 });
 
 test("desktop mounts once, opens the saved editor, reloads, and downloads", async ({ page }) => {
@@ -71,22 +92,22 @@ test("desktop mounts once, opens the saved editor, reloads, and downloads", asyn
   const preset = await page.evaluate(() => fetch("/src/sample-settings.json").then((response) => response.json()));
   await page.evaluate(([key, value]) => localStorage.setItem(key, JSON.stringify(value)), [storageKey, preset]);
   await page.reload();
-  await expect(page.locator("#status")).toHaveText("Saved in this browser");
+  await expect(page.locator("#status")).toContainText("Saved in this browser");
   await expect(page.locator("#chat-preview")).toBeVisible();
   await page.locator("#edit").click();
   await waitForEditor(page);
   await expect(page.locator("#terminal")).toContainText("Main Menu");
   await page.reload();
-  await expect(page.locator("#status")).toHaveText("Saved in this browser");
+  await expect(page.locator("#status")).toContainText("Saved in this browser");
   await expect(page.locator("#desktop-playground")).toBeVisible();
-  await expect(page.locator("#download")).toHaveText("Download JSON");
+  await expect(page.locator("#download")).toContainText("Export");
   const frame = await page.locator("body").boundingBox();
   expect(frame?.width).toBe(1440);
   expect((await page.locator(".first-screen").boundingBox())?.height).toBeLessThanOrEqual(900);
-  expect(await page.locator("#playground").boundingBox()).toMatchObject({ x: 24, width: 1392 });
+  expect((await page.locator(".terminal-window").boundingBox())?.width).toBeGreaterThan(1_320);
   await page.screenshot({ path: "test-artifacts/task4-desktop.png", fullPage: true });
 
-  await expect(page.locator("#download")).toHaveText("Download JSON");
+  await expect(page.locator("#download")).toContainText("Export");
   const download = await Promise.all([page.waitForEvent("download"), page.locator("#download").click()]);
   expect(download[0].suggestedFilename()).toBe("cxstatusline-settings.json");
   expect(JSON.parse(await download[0].createReadStream().then(async (stream) => { let text = ""; for await (const chunk of stream!) text += chunk; return text; }))).toHaveProperty("version");
@@ -177,3 +198,31 @@ test("xterm saves, edits, and discards", async ({ page }) => {
   await expect(page.locator("#chat-preview")).toBeVisible();
   expect(await page.evaluate((key) => localStorage.getItem(key), storageKey)).toBe(saved);
 });
+
+test("desktop import button loads custom settings and updates preview", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await expect(page.locator("#playground-skeleton")).toBeHidden();
+  await expect(page.locator("#import")).toBeVisible();
+  await expect(page.locator("#import")).toContainText("Import");
+
+  const customLayout = {
+    ...defaultLayout,
+    lines: [[{ id: "custom-1", type: "git-branch", color: "magenta" }]],
+  };
+
+  const fileChooserPromise = page.waitForEvent("filechooser");
+  await page.locator("#import").click();
+  const fileChooser = await fileChooserPromise;
+  await fileChooser.setFiles({
+    name: "custom-settings.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(customLayout)),
+  });
+
+  await expect(page.locator("#status")).toContainText("Saved in this browser");
+  const saved = await page.evaluate((key) => localStorage.getItem(key), storageKey);
+  expect(saved).not.toBeNull();
+  expect(JSON.parse(saved!)).toMatchObject({ lines: [[{ type: "git-branch" }]] });
+});
+

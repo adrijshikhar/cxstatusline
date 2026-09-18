@@ -1,0 +1,94 @@
+---
+import { supportedCodexReleases } from "../release-info";
+import { Card } from "./ui/card";
+import CopyFlagButton from "./CopyFlagButton";
+
+const issueBody = [
+  "### Requested Codex version",
+  "<!-- e.g. 0.156.0 or the version you want supported -->",
+  "",
+  "### Platform / Architecture",
+  "<!-- e.g. macOS (Apple Silicon), macOS (Intel), Linux (x64) -->",
+  "",
+  "### Current behavior / error (if attempted)",
+  "<!-- e.g. output of `cxstatusline install --codex-version X.Y.Z` or `cxstatusline doctor` -->",
+  "```",
+  "",
+  "```",
+  "",
+  "### Additional context",
+  "<!-- Any notes on where this Codex build came from or why this version is needed -->",
+].join("\n");
+
+const requestVersionIssueUrl = `https://github.com/adrijshikhar/cxstatusline/issues/new?template=request-version.md&title=${encodeURIComponent("Support request: Codex v")}&labels=version-request&body=${encodeURIComponent(issueBody)}`;
+---
+
+<section id="compatibility" class="marketing-section content-section" aria-labelledby="compatibility-title">
+  <div class="compatibility-header">
+    <div class="compatibility-title-group">
+      <h2 id="compatibility-title">Compatibility matrix.</h2>
+      <p class="compatibility-desc">
+        Any version of cxstatusline can install and patch any supported Codex release. Select your version interactively during installation or target one directly with <code>--codex-version</code>.
+      </p>
+    </div>
+    <div class="compatibility-hint">
+      <span class="hint-label">Targeted install command:</span>
+      <code class="hint-code">cxstatusline install --codex-version &lt;release&gt;</code>
+    </div>
+  </div>
+
+  <Card className="compatibility-card p-0 overflow-hidden">
+    <div class="compatibility-labels" aria-hidden="true">
+      <span>Codex Release</span>
+      <span>Supported Platforms</span>
+      <span>Install Flag</span>
+      <span class="text-right">Status</span>
+    </div>
+    <ul class="compatibility-rows">
+      {supportedCodexReleases.map((release) => (
+        <li class="compatibility-row">
+          <div class="flex items-center gap-2">
+            <code>{release.version}</code>
+            {release.isLatest && (
+              <span class="rounded border border-[var(--line)] bg-[var(--surface-strong)] px-2 py-0.5 text-xs text-[var(--accent)]" title="Latest supported Codex CLI release">
+                Latest
+              </span>
+            )}
+          </div>
+          <div class="compatibility-platforms">
+            {release.platforms.join(", ")}
+          </div>
+          <div class="compatibility-flag">
+            <code>--codex-version {release.version}</code>
+            <CopyFlagButton client:load text={`--codex-version ${release.version}`} />
+          </div>
+          <div class="compatibility-status">
+            <a
+              href={release.releaseUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              class={`compatibility-badge compatibility-badge-${release.type}`}
+              title={`View ${release.version} release on GitHub`}
+            >
+              <span>{release.status}</span>
+              <span aria-hidden="true" class="release-arrow">↗</span>
+            </a>
+          </div>
+        </li>
+      ))}
+    </ul>
+    <div class="compatibility-footer">
+      <a
+        class="compatibility-link"
+        href={requestVersionIssueUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Request a version <span>→</span>
+      </a>
+      <a class="compatibility-link" href="https://github.com/adrijshikhar/cxstatusline/releases">
+        Browse all releases on GitHub <span>→</span>
+      </a>
+    </div>
+  </Card>
+</section>

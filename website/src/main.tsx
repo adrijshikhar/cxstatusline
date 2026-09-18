@@ -6,6 +6,28 @@ const desktopPlayground = document.querySelector<HTMLElement>("#desktop-playgrou
 const featuresTitle = document.querySelector<HTMLElement>("#features-title")!;
 const bootButton = document.querySelector<HTMLButtonElement>("#boot")!;
 const status = document.querySelector<HTMLElement>("#status")!;
+const releaseVersion = document.querySelector<HTMLElement>("#release-version");
+const releaseSync = document.querySelector<HTMLElement>("#release-sync");
+
+async function refreshReleaseVersion(): Promise<void> {
+  if (!releaseSync) return;
+  const abort = new AbortController();
+  const timeout = window.setTimeout(() => abort.abort(), 4_000);
+  try {
+    const response = await fetch("https://registry.npmjs.org/cxstatusline/latest", { signal: abort.signal });
+    const payload: unknown = await response.json();
+    const version = typeof payload === "object" && payload !== null && "version" in payload && typeof payload.version === "string" ? payload.version : null;
+    if (!response.ok || !version) throw new Error("npm registry did not return a version");
+    if (releaseVersion) releaseVersion.textContent = `v${version}`;
+    releaseSync.textContent = "live";
+    releaseSync.title = "Live npm release";
+  } catch {
+    releaseSync.textContent = "refresh failed";
+    releaseSync.title = releaseSync.textContent;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
 
 async function mountDevelopmentReviewTools(): Promise<void> {
   if (!import.meta.env.DEV || import.meta.env.PUBLIC_ENABLE_AGENTATION !== "1") return;
@@ -79,8 +101,56 @@ bootButton.addEventListener("click", () => {
 setMobileVisibility(desktop.matches);
 void syncViewport();
 void mountDevelopmentReviewTools();
+void refreshReleaseVersion();
+
+const composer = document.querySelector<HTMLInputElement>("#demo-message")!;
+const composerCursor = document.querySelector<HTMLElement>(".composer-cursor")!;
+function updateComposerCursor(): void {
+  composerCursor.textContent = composer.value.slice(0, composer.selectionStart ?? 0);
+  composerCursor.style.translate = `${-composer.scrollLeft}px 0`;
+  composerCursor.hidden = composer.selectionStart !== composer.selectionEnd;
+}
+for (const event of ["input", "selectionchange", "scroll", "focus"]) {
+  composer.addEventListener(event, updateComposerCursor);
+}
 
 if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  function animateTerminalButton(button: HTMLElement, active: boolean): void {
+    const styles = getComputedStyle(button);
+    const color = active
+      ? styles.getPropertyValue("--terminal").trim()
+      : styles.getPropertyValue("--terminal-button-idle").trim();
+    animate(button.querySelector("[data-terminal-bracket='open']")!, {
+      translateX: active ? -2 : 0,
+      duration: active ? 280 : 360,
+      ease: "outQuart",
+    });
+    animate(button.querySelector("[data-terminal-bracket='close']")!, {
+      translateX: active ? 2 : 0,
+      duration: active ? 280 : 360,
+      ease: "outQuart",
+    });
+    animate(button.querySelector("[data-terminal-label]")!, {
+      letterSpacing: active ? ".035em" : "0em",
+      duration: active ? 280 : 360,
+      ease: "outQuart",
+    });
+    animate(button, {
+      color,
+      backgroundColor: active ? styles.getPropertyValue("--accent-strong").trim() : "rgba(125, 211, 252, 0)",
+      duration: active ? 320 : 420,
+      ease: "outQuart",
+    });
+  }
+
+  document.querySelectorAll<HTMLElement>(".terminal-button").forEach((button) => {
+    const update = () => animateTerminalButton(button, button.matches(":hover, :focus-visible"));
+    button.addEventListener("pointerenter", update);
+    button.addEventListener("pointerleave", update);
+    button.addEventListener("focus", update);
+    button.addEventListener("blur", update);
+  });
+
   animate("[data-dot-field]", {
     opacity: [0, desktop.matches ? .9 : .7],
     duration: 900,
@@ -94,18 +164,24 @@ if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
     loop: 3,
     ease: "inOutSine",
   });
-  animate(".intro > *", {
-    opacity: [0.55, 1],
-    translateY: [10, 0],
-    duration: 700,
-    delay: stagger(110),
+  animate(".terminal-window, .terminal-chrome > *, #playground", {
+    opacity: [0, 1],
+    duration: 600,
+    delay: stagger(70),
     ease: "outExpo",
   });
-  animate(".prompt-line", {
-    clipPath: ["inset(0 100% 0 0)", "inset(0 0% 0 0)"],
-    duration: 850,
-    delay: 160,
-    ease: "outExpo",
+  animate(".ascii-wordmark", {
+    opacity: [0, 1],
+    duration: 700,
+    delay: 400,
+    ease: "outSine",
+  });
+  animate("[data-transcript-prompt]", { opacity: [0, 1], duration: 700, delay: 1_150, ease: "outSine" });
+  const reply = document.querySelector<HTMLElement>("[data-transcript-reply]")!;
+  reply.inert = true;
+  animate(reply, {
+    opacity: [0, 1], duration: 700, delay: 1_900, ease: "outSine",
+    onComplete: () => { reply.inert = false; },
   });
 
   const animations = new WeakMap<Element, ReturnType<typeof animate>>();
@@ -118,7 +194,7 @@ if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
   }, { threshold: .12 });
 
   const setupScrollReveals = () => {
-    document.querySelectorAll(".content-section, .site-footer").forEach((section) => {
+    document.querySelectorAll(".content-section:not(#faq), .site-footer").forEach((section) => {
       const children = section.querySelectorAll(":scope > *");
       animations.set(section, animate(children.length ? children : section, {
         autoplay: false,

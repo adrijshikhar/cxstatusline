@@ -3,7 +3,7 @@
 ## Supported scope
 
 Fixes target the latest cxstatusline release and exact Codex versions listed in
-`patches/manifest.json` (currently 0.152.1, 0.153.0, and 0.153.4). Other Codex versions are not
+`patches/manifest.json` (currently 0.152.1, 0.153.0, 0.153.4, 0.154.0, and 0.155.0). Other Codex versions are not
 implicitly compatible. Maintainer response is best effort; this is not an OpenAI service.
 
 ## Data and execution

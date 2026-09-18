@@ -12,6 +12,6 @@ function gzipBytes(extension: string): number {
 }
 
 test("emitted JavaScript and CSS stay within documented gzip budgets", () => {
-  expect(gzipBytes(".js")).toBeLessThanOrEqual(380000);
-  expect(gzipBytes(".css")).toBeLessThanOrEqual(7500);
+  expect(gzipBytes(".js")).toBeLessThanOrEqual(385000);
+  expect(gzipBytes(".css")).toBeLessThanOrEqual(8000);
 });

@@ -9,7 +9,8 @@
 :root {
   --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
   --font-mono: "SFMono-Regular", Consolas, monospace;
-  --page-gutter: 24px;
+  --page-gutter: clamp(1rem, 2.5vw, 1.5rem);
+  --terminal-inset: clamp(1rem, 2vw, 1.75rem);
   --bg: #0b0f14;
   --surface: #10151d;
   --surface-strong: #141b25;
@@ -21,11 +22,20 @@
   --accent-strong: #7dd3fc;
   --accent-text: #06131c;
   --positive: #3fb950;
+  --placeholder: #a8b3c0;
+  --signal-info: #61afef;
+  --signal-danger: #e06c75;
+  --signal-success: #98c379;
+  --signal-warning: #e5c07b;
+  --signal-purple: #c678dd;
+  --signal-neutral: #cdd9e5;
+  --status-verified: #61c454;
+  --status-patch: #e5c07b;
   --line: #212c3d;
   --line-soft: #182231;
   color: var(--text);
   background: var(--bg);
-  font: 16px/1.55 var(--font-sans);
+  font: 1rem/1.55 var(--font-sans);
   color-scheme: dark;
 }
 
