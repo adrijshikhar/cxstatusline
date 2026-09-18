@@ -4,7 +4,6 @@ import type { Context } from "../context";
 import { acquireLock } from "../lock";
 import type { FetchLike, TransportOptions } from "../distribution/transport";
 import { releaseTag } from "../distribution";
-import { VERSION } from "../version-info";
 import { readUpstreamVersion } from "../codex/upstream";
 import { installHook } from "../hook/install";
 import { writeState } from "../state";
@@ -176,14 +175,23 @@ export async function probeUpstreamLatest(fetchFn: FetchLike): Promise<string | 
 
 export async function probePrebuiltExists(
   targetCodexVersion: string,
-  cxVersion: string,
-  fetchFn: FetchLike,
+  cxVersionOrFetch: string | FetchLike,
+  fetchFnOrBaseUrl?: FetchLike | string,
   baseUrl?: string,
 ): Promise<boolean> {
+  const fetchFn: FetchLike =
+    typeof cxVersionOrFetch === "function"
+      ? cxVersionOrFetch
+      : ((fetchFnOrBaseUrl as FetchLike | undefined) ?? (globalThis.fetch as unknown as FetchLike));
+  const resolvedBaseUrl: string | undefined =
+    typeof cxVersionOrFetch === "function"
+      ? (typeof fetchFnOrBaseUrl === "string" ? fetchFnOrBaseUrl : baseUrl)
+      : baseUrl;
+
   try {
-    const tag = releaseTag(cxVersion, targetCodexVersion);
-    const url = baseUrl
-      ? `${baseUrl}/${tag}/manifest.json`
+    const tag = releaseTag(targetCodexVersion);
+    const url = resolvedBaseUrl
+      ? `${resolvedBaseUrl}/${tag}/manifest.json`
       : `https://github.com/adrijshikhar/cxstatusline/releases/download/${tag}/manifest.json`;
     const res = await fetchFn(url, { method: "HEAD", signal: AbortSignal.timeout(5000) });
     return res.ok || res.status === 302 || res.status === 301;
@@ -222,7 +230,7 @@ export async function runUpdate(
   if (current && !opts.force && !opts.compile) {
     const latest = await probeUpstreamLatest(fetchFn);
     if (latest && latest !== current.raw) {
-      const available = await probePrebuiltExists(latest, VERSION, fetchFn, transport.baseUrl);
+      const available = await probePrebuiltExists(latest, fetchFn, transport.baseUrl);
       if (!available) {
         ctx.say(`Warning: Upstream Codex update available: ${current.raw} -> ${latest}.`);
         ctx.say(`However, cxstatusline has not yet published prebuilt binaries for Codex ${latest}.`);

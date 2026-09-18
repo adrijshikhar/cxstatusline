@@ -23,7 +23,7 @@ export interface Artifact {
 
 export interface ReleaseManifest {
   schema: 1;
-  cxVersion: string;
+  cxVersion?: string;
   codexVersion: string;
   upstreamTag: string;
   upstreamCommit: string;
@@ -36,9 +36,9 @@ export interface ReleaseManifest {
 }
 
 export interface ExpectedRelease {
-  cxVersion: string;
   codexVersion: string;
   platform: Platform;
+  cxVersion?: string;
 }
 
 export interface PreparedPair {
@@ -80,10 +80,9 @@ function isStableVersion(s: unknown): s is string {
 
 // ---- Public exact-selection helpers ----
 
-export function releaseTag(cxVersion: string, codexVersion: string): string {
-  if (!isStableVersion(cxVersion)) throw new Error("releaseTag: cxVersion must be a stable three-part semver");
+export function releaseTag(codexVersion: string): string {
   if (!isStableVersion(codexVersion)) throw new Error("releaseTag: codexVersion must be a stable three-part semver");
-  return `cxstatusline-v${cxVersion}-codex-v${codexVersion}`;
+  return `codex-v${codexVersion}`;
 }
 
 /**
@@ -127,7 +126,7 @@ const ArtifactSchema = z
 const ManifestShapeSchema = z
   .object({
     schema: z.literal(1),
-    cxVersion: z.string(),
+    cxVersion: z.string().optional(),
     codexVersion: z.string(),
     upstreamTag: z.string(),
     upstreamCommit: z.string().regex(HEX40, "upstreamCommit must be 40 lowercase hex chars"),
@@ -163,8 +162,8 @@ function checkArtifacts(m: ManifestShape, expected: ExpectedRelease): string | n
 }
 
 function checkBusinessRules(m: ManifestShape, expected: ExpectedRelease): string | null {
-  if (!isStableVersion(m.cxVersion) || m.cxVersion !== expected.cxVersion) {
-    return "cxVersion does not match expected release";
+  if (m.cxVersion !== undefined && !isStableVersion(m.cxVersion)) {
+    return "cxVersion is not a valid semver";
   }
   if (!isStableVersion(m.codexVersion) || m.codexVersion !== expected.codexVersion) {
     return "codexVersion does not match expected release";
@@ -178,7 +177,10 @@ function checkBusinessRules(m: ManifestShape, expected: ExpectedRelease): string
 // ---- Public validator ----
 
 export function validateManifest(raw: unknown, expected: ExpectedRelease): ReleaseManifest {
-  if (!isStableVersion(expected.cxVersion) || !isStableVersion(expected.codexVersion)) {
+  if (!isStableVersion(expected.codexVersion)) {
+    throw new Error("validateManifest: expected release versions must be stable three-part semver");
+  }
+  if (expected.cxVersion !== undefined && !isStableVersion(expected.cxVersion)) {
     throw new Error("validateManifest: expected release versions must be stable three-part semver");
   }
   if (!PLATFORMS.includes(expected.platform)) {

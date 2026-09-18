@@ -30,7 +30,7 @@ export function assertReleaseIdentity(input: ReleaseIdentityInput): void {
   if (!input.bundle.includes(input.headSha)) {
     throw new Error(`bundle does not contain embedded source commit ${input.headSha}`);
   }
-  const expectedTag = releaseTag(input.packageVersion, input.candidate);
+  const expectedTag = releaseTag(input.candidate);
   if (!input.nativeReleaseExists(expectedTag)) {
     throw new Error(`no native release found for tag ${expectedTag}`);
   }

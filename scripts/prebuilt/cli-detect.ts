@@ -242,7 +242,7 @@ function finish(
 ): void {
   const frozen = {
     codex_version: detection.codexVersion,
-    cx_version: detection.cxVersion,
+    cx_version: detection.cxVersion ?? "",
     tag: detection.tag,
     upstream_tag: detection.upstreamTag,
     patch_file: detection.patchFile,

@@ -163,7 +163,7 @@ describe("release notes", () => {
     const notes = releaseNotes(notesInput);
     expect(notes).not.toMatch(/private/i);
     const disclosures = [
-      `cxstatusline v${CX} · Codex ${CODEX} (darwin-arm64)`,
+      `Codex ${CODEX} (darwin-arm64)`,
       `Built from cxstatusline commit ${SOURCE} (package version ${CX})`,
       `patch codex-${CODEX}.patch sha256 ${PATCH_SHA}`,
       "darwin-arm64 only (Apple Silicon); Intel is not built in this release.",
@@ -196,7 +196,7 @@ describe("release notes", () => {
 
   test("formats multiple architectures in title and notes", () => {
     const notes = releaseNotes({ ...notesInput, platforms: ["darwin-arm64", "darwin-x64"] });
-    expect(notes).toContain(`cxstatusline v${CX} · Codex ${CODEX} (darwin-arm64, darwin-x64)`);
+    expect(notes).toContain(`Codex ${CODEX} (darwin-arm64, darwin-x64)`);
     expect(notes).toContain("darwin-arm64 (Apple Silicon), darwin-x64 (Intel).");
   });
 });

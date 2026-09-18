@@ -171,7 +171,7 @@ describe("resolveDetection", () => {
     expect(resolveDetection(patchManifest, CODEX, CX)).toEqual({
       codexVersion: CODEX,
       cxVersion: CX,
-      tag: `cxstatusline-v${CX}-codex-v${CODEX}`,
+      tag: `codex-v${CODEX}`,
       upstreamTag: `rust-v${CODEX}`,
       patchFile: `codex-${CODEX}.patch`,
     });

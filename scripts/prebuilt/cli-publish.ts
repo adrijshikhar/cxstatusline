@@ -26,7 +26,7 @@ export async function runPublish(flags: Record<string, string>): Promise<void> {
     runUrl: required(flags, "run-url"),
     sourceCommit: required(flags, "source-commit"),
     codexVersion: required(flags, "codex-version"),
-    cxVersion: required(flags, "cx-version"),
+    cxVersion: flags["cx-version"],
     platform: platforms[0],
     platforms,
     event: flags["event"] ?? process.env.GITHUB_EVENT_NAME ?? "workflow_dispatch",

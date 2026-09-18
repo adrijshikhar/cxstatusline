@@ -31,9 +31,8 @@ export interface ReleaseFixture {
   readonly archiveName: string;
 }
 
-/** A valid release for one (cxVersion, codexVersion, platform) triple. */
 export function releaseFixture(o: {
-  cxVersion: string;
+  cxVersion?: string;
   codexVersion: string;
   platform?: Platform;
   archiveSha?: string;
@@ -51,7 +50,7 @@ export function releaseFixture(o: {
   const archiveName = `cxstatusline-codex-${o.codexVersion}-${platform}.tar.gz`;
   const manifest: ReleaseManifest = {
     schema: 1,
-    cxVersion: o.cxVersion,
+    cxVersion: o.cxVersion ?? "0.2.1",
     codexVersion: o.codexVersion,
     upstreamTag: `rust-v${o.codexVersion}`,
     upstreamCommit: "c".repeat(40),
@@ -64,7 +63,7 @@ export function releaseFixture(o: {
       { platform, filename: archiveName, sha256: o.archiveSha ?? sha256(archive), size: archive.length, files },
     ],
   };
-  return { manifest, archive, tag: releaseTag(o.cxVersion, o.codexVersion), archiveName };
+  return { manifest, archive, tag: releaseTag(o.codexVersion), archiveName };
 }
 
 export type Route = Buffer | number | { redirect: string };

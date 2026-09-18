@@ -30,10 +30,10 @@ export function parseProvenance(body: string): Provenance | null {
 /** Which trigger produced this build. Recorded verbatim so a release is never mis-attributed. */
 export type BuildIdentity =
   | { readonly kind: "dispatch"; readonly sha: string }
-  | { readonly kind: "schedule"; readonly cxVersion: string };
+  | { readonly kind: "schedule"; readonly cxVersion?: string };
 
 export interface NotesInput {
-  readonly cxVersion: string;
+  readonly cxVersion?: string;
   readonly codexVersion: string;
   readonly platform?: Platform;
   readonly platforms?: readonly Platform[];
@@ -48,15 +48,15 @@ export interface NotesInput {
   readonly identity: BuildIdentity;
 }
 
-export function releaseTitle(i: Pick<NotesInput, "cxVersion" | "codexVersion"> & { platform?: Platform; platforms?: readonly Platform[] }): string {
+export function releaseTitle(i: { codexVersion: string; cxVersion?: string; platform?: Platform; platforms?: readonly Platform[] }): string {
   const platforms = i.platforms ?? (i.platform ? [i.platform] : ["darwin-arm64"]);
-  return `cxstatusline v${i.cxVersion} · Codex ${i.codexVersion} (${platforms.join(", ")})`;
+  return `Codex ${i.codexVersion} (${platforms.join(", ")})`;
 }
 
 function identityLine(i: NotesInput): string {
   const trigger = i.identity.kind === "dispatch"
     ? `manual dispatch of commit ${i.identity.sha}`
-    : `scheduled build of source release v${i.identity.cxVersion}`;
+    : `scheduled build${i.identity.cxVersion ? ` of source release v${i.identity.cxVersion}` : ""}`;
   return `Workflow run ${i.runUrl} (${trigger})`;
 }
 
@@ -82,7 +82,7 @@ export function releaseNotes(i: NotesInput): string {
   return [
     `# ${releaseTitle(i)}`,
     "",
-    `Built from cxstatusline commit ${i.sourceCommit} (package version ${i.cxVersion}) and `
+    `Built from cxstatusline commit ${i.sourceCommit}${i.cxVersion ? ` (package version ${i.cxVersion})` : ""} and `
       + `openai/codex ${i.upstreamTag} (${i.upstreamCommit}) with patch ${i.patchFile} `
       + `sha256 ${i.patchSha256}.`,
     "",

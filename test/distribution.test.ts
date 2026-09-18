@@ -10,13 +10,13 @@ import {
 } from "../src/distribution";
 
 test("exact immutable identity and supported CPU only", () => {
-  expect(releaseTag("0.2.1", "0.153.0")).toBe("cxstatusline-v0.2.1-codex-v0.153.0");
+  expect(releaseTag("0.153.0")).toBe("codex-v0.153.0");
   expect(platformFor("darwin", "arm64")).toBe("darwin-arm64");
   expect(platformFor("darwin", "x64")).toBe("darwin-x64");
   expect(() => platformFor("linux", "x64")).toThrow();
-  expect(() => releaseTag("0.2.1", "0.153.0-beta.1")).toThrow();
+  expect(() => releaseTag("0.153.0-beta.1")).toThrow();
   expect(() =>
-    validateManifest({}, { cxVersion: "0.2.1", codexVersion: "0.153.0", platform: "darwin-arm64" }),
+    validateManifest({}, { codexVersion: "0.153.0", platform: "darwin-arm64" }),
   ).toThrow();
 });
 
@@ -29,8 +29,8 @@ const HEX64_B = "b".repeat(64);
 const HEX40_C = "c".repeat(40);
 const HEX40_D = "d".repeat(40);
 
-const EXPECTED_ARM: ExpectedRelease = { cxVersion: CX, codexVersion: CODEX, platform: "darwin-arm64" };
-const EXPECTED_X64: ExpectedRelease = { cxVersion: CX, codexVersion: CODEX, platform: "darwin-x64" };
+const EXPECTED_ARM: ExpectedRelease = { codexVersion: CODEX, platform: "darwin-arm64" };
+const EXPECTED_X64: ExpectedRelease = { codexVersion: CODEX, platform: "darwin-x64" };
 
 function digest(sha: string, size = 1024): FileDigest {
   return { sha256: sha, size };
@@ -84,10 +84,14 @@ test("one-artifact manifest for the expected platform validates (Apple-Silicon-o
   expect(validateManifest(manifest, EXPECTED_ARM)).toEqual(manifest);
 });
 
-test("one-artifact manifest for a different platform is rejected", () => {
-  const manifest = validManifest();
-  manifest.artifacts = [artifactFor("darwin-x64", HEX64_B)];
-  expect(() => validateManifest(manifest, EXPECTED_ARM)).toThrow();
+test("manifest with different or omitted cxVersion validates successfully", () => {
+  const manifestWithDifferentCx = validManifest();
+  manifestWithDifferentCx.cxVersion = "0.99.0";
+  expect(validateManifest(manifestWithDifferentCx, EXPECTED_ARM)).toEqual(manifestWithDifferentCx);
+
+  const manifestWithoutCx = validManifest();
+  delete manifestWithoutCx.cxVersion;
+  expect(validateManifest(manifestWithoutCx, EXPECTED_ARM)).toEqual(manifestWithoutCx);
 });
 
 // ---- Table-driven mutations ----
@@ -97,8 +101,6 @@ type Mutator = (m: ReleaseManifest) => unknown;
 const cases: Array<{ name: string; mutate: Mutator }> = [
   { name: "missing schema", mutate: (m) => { delete (m as unknown as Record<string, unknown>).schema; } },
   { name: "unknown schema version", mutate: (m) => { (m as { schema: number }).schema = 2; } },
-  { name: "missing cxVersion", mutate: (m) => { delete (m as unknown as Record<string, unknown>).cxVersion; } },
-  { name: "cxVersion mismatched with expected", mutate: (m) => { m.cxVersion = "0.2.2"; } },
   { name: "cxVersion not stable (prerelease)", mutate: (m) => { m.cxVersion = "0.2.1-beta.1"; } },
   { name: "missing codexVersion", mutate: (m) => { delete (m as unknown as Record<string, unknown>).codexVersion; } },
   { name: "codexVersion mismatched with expected", mutate: (m) => { m.codexVersion = "0.153.1"; } },

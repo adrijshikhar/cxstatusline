@@ -6,7 +6,6 @@ import { platformFor, preparePrebuilt, type ExpectedRelease, type PreparedPair }
 import { ReleaseUnavailableError, sanitize, type TransportOptions } from "../distribution/transport";
 import { readState, writeState, RELEASE_UNAVAILABLE, type State } from "../state";
 import { needsRepatch, parseSemver, type SemVer } from "../version";
-import { VERSION } from "../version-info";
 import { prepareCompiled } from "./compile";
 import { ManifestError, loadManifest, resolvePatch } from "./manifest";
 import { prebuiltPreflight, preflight } from "./preflight";
@@ -187,7 +186,6 @@ function compiledAcquisition(
 /** The release identity this build of cxstatusline may install for `upstream`. */
 function expectedRelease(upstream: SemVer): ExpectedRelease {
   return {
-    cxVersion: VERSION,
     codexVersion: upstream.raw,
     platform: platformFor(process.platform, process.arch),
   };
