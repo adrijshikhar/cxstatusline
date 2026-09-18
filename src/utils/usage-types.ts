@@ -1,3 +1,4 @@
+export const FIVE_HOUR_WINDOW_MS = 5 * 60 * 60 * 1000;
 export const SEVEN_DAY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface UsageWindowMetrics {

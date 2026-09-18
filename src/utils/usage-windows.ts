@@ -1,4 +1,4 @@
-import { SEVEN_DAY_WINDOW_MS, type UsageWindowMetrics } from './usage-types';
+import { FIVE_HOUR_WINDOW_MS, SEVEN_DAY_WINDOW_MS, type UsageWindowMetrics } from './usage-types';
 
 function windowFromReset(resetAt: string | undefined, durationMs: number, nowMs: number): UsageWindowMetrics | null {
   if (!resetAt) return null;
@@ -7,6 +7,10 @@ function windowFromReset(resetAt: string | undefined, durationMs: number, nowMs:
   const elapsedMs = Math.max(0, Math.min(durationMs, nowMs - resetAtMs + durationMs));
   const elapsedPercent = elapsedMs / durationMs * 100;
   return { sessionDurationMs: durationMs, elapsedMs, remainingMs: durationMs - elapsedMs, elapsedPercent, remainingPercent: 100 - elapsedPercent };
+}
+
+export function getFiveHourUsageWindowFromResetAt(resetAt: string | undefined, nowMs = Date.now()): UsageWindowMetrics | null {
+  return windowFromReset(resetAt, FIVE_HOUR_WINDOW_MS, nowMs);
 }
 
 export function getWeeklyUsageWindowFromResetAt(resetAt: string | undefined, nowMs = Date.now()): UsageWindowMetrics | null {
@@ -63,6 +67,10 @@ export function makeUsageProgressBar(percent: number, width = 15): string {
   return '[' + '█'.repeat(filled) + '░'.repeat(width - filled) + ']';
 }
 
-export function resolveWeeklyUsageWindow(data: { weeklyResetAt?: string | undefined }): UsageWindowMetrics | null {
-  return getWeeklyUsageWindowFromResetAt(data.weeklyResetAt);
+export function resolveFiveHourUsageWindow(data: { fiveHourResetAt?: string | undefined }, nowMs = Date.now()): UsageWindowMetrics | null {
+  return getFiveHourUsageWindowFromResetAt(data.fiveHourResetAt, nowMs);
+}
+
+export function resolveWeeklyUsageWindow(data: { weeklyResetAt?: string | undefined }, nowMs = Date.now()): UsageWindowMetrics | null {
+  return getWeeklyUsageWindowFromResetAt(data.weeklyResetAt, nowMs);
 }

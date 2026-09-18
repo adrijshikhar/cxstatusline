@@ -9,6 +9,8 @@ export { CustomCommandWidget } from "./CustomCommand";
 export { CustomSymbolWidget } from "./CustomSymbol";
 export { CustomTextWidget } from "./CustomText";
 export { CurrentWorkingDirWidget } from "./CurrentWorkingDir";
+export { FiveHourResetTimerWidget } from "./FiveHourResetTimer";
+export { FiveHourUsageWidget } from "./FiveHourUsage";
 export { FreeMemoryWidget } from "./FreeMemory";
 export { GitBranchWidget } from "./GitBranch";
 export { GitChangesWidget } from "./GitChanges";

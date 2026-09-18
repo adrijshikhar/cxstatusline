@@ -110,8 +110,8 @@ it never opens the TUI.
 
 ## Widgets
 
-34 widgets: model and thinking effort, Git branch and changes, context and token counts, token speed,
-weekly usage and reset, session clock and name, working directory, terminal width, memory, plus three
+36 widgets: model and thinking effort, Git branch and changes, context and token counts, token speed,
+5-hour and weekly usage and reset, session clock and name, working directory, terminal width, memory, plus three
 custom widgets that show your own text, symbol, or the output of a shell command.
 
 Type IDs match ccstatusline's, so a ccstatusline preset imports without translation.

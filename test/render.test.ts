@@ -155,4 +155,29 @@ describe("runRender", () => {
     expect(result.stdout).toContain("\uE0B0");
     expect(result.stdout).not.toContain("\x1b");
   });
+
+  test("renders five-hour-usage and five-hour-reset-timer from payload", async () => {
+    const { env } = tmpEnv();
+    const paths = resolvePaths(env);
+    mkdirSync(paths.configDir, { recursive: true });
+    writeFileSync(paths.settingsFile, JSON.stringify({
+      version: 2,
+      colorLevel: 0,
+      lines: [[
+        { id: "five-hour", type: "five-hour-usage" },
+        { id: "five-hour-timer", type: "five-hour-reset-timer" },
+      ]],
+    }));
+
+    const result = await runRender(fixture, {
+      env,
+      now,
+      terminalWidth: 120,
+      freeMemoryBytes: 0,
+    });
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("5h: 31.0%");
+    expect(result.stdout).toContain("5h Reset: 2hr");
+  });
 });

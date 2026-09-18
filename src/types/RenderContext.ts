@@ -11,6 +11,8 @@ export interface RenderContext {
   readonly memoryUsage?: { used: number; total: number };
   /** Presentation-compatible views derived solely from the Codex payload. */
   readonly usageData?: {
+    fiveHourUsage?: number | undefined;
+    fiveHourResetAt?: string | undefined;
     weeklyUsage?: number | undefined;
     weeklyResetAt?: string | undefined;
     error?: string | undefined;

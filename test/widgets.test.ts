@@ -40,7 +40,12 @@ const fullContext: RenderContext = {
   now,
   terminalWidth: 120,
   freeMemoryBytes: 2 * 1024 ** 3,
-  usageData: { weeklyUsage: 8, weeklyResetAt: "2026-09-08T00:00:00Z" },
+  usageData: {
+    fiveHourUsage: 31,
+    fiveHourResetAt: "2026-09-03T14:00:00Z",
+    weeklyUsage: 8,
+    weeklyResetAt: "2026-09-08T00:00:00Z",
+  },
   isPreview: false,
 };
 
@@ -105,7 +110,7 @@ test("project root retains backslash paths exactly", () => {
 
 test("data widgets omit unavailable values without hiding environment widgets", () => {
   const context: RenderContext = { ...fullContext, data: { payload_version: 1 }, usageData: undefined };
-  for (const type of ["model", "thinking-effort", "git-review", "tokens-input", "tokens-output", "tokens-cached", "tokens-total", "weekly-usage", "session-name", "claude-session-id", "version", "current-working-dir", "sandbox-status"] as const) {
+  for (const type of ["model", "thinking-effort", "git-review", "tokens-input", "tokens-output", "tokens-cached", "tokens-total", "five-hour-usage", "weekly-usage", "session-name", "claude-session-id", "version", "current-working-dir", "sandbox-status"] as const) {
     expect(render(type, context), type).toBeNull();
   }
   expect(render("cache-hit-rate", context)).toBe("Cache Hit: n/a");
