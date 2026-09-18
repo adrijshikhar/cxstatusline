@@ -165,7 +165,7 @@ cxstatusline matches exact stable releases of OpenAI Codex.
 | **0.154.0** | [`codex-v0.154.0`](https://github.com/adrijshikhar/cxstatusline/releases/tag/codex-v0.154.0) | Apple Silicon (`darwin-arm64`) | ✅ Verified Prebuilt |
 | **0.153.4** | [`codex-v0.153.4`](https://github.com/adrijshikhar/cxstatusline/releases/tag/codex-v0.153.4) | Apple Silicon (`darwin-arm64`) | ✅ Verified Prebuilt |
 | **0.153.0** | [`codex-v0.153.0`](https://github.com/adrijshikhar/cxstatusline/releases/tag/codex-v0.153.0) | Apple Silicon (`darwin-arm64`) | ✅ Verified Prebuilt |
-| **0.152.1** | *Source compile only* | Apple Silicon / Intel (`--compile`) | 🛠️ Supported via `install --compile` |
+| **0.152.1** | [`codex-v0.152.1`](https://github.com/adrijshikhar/cxstatusline/releases/tag/codex-v0.152.1) | Apple Silicon (`darwin-arm64`) | ✅ Verified Prebuilt |
 
 To install a specific version:
 ```sh
