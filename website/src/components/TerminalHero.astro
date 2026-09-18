@@ -1,0 +1,14 @@
+---
+import { releaseVersion } from "../release-info";
+---
+
+<section id="terminal-hero" class="marketing-section" aria-labelledby="intro-title">
+  <div class="terminal-window">
+    <header class="terminal-chrome">
+      <div class="terminal-controls" aria-hidden="true"><span></span><span></span><span></span></div>
+      <span class="terminal-identity">Codex</span>
+      <div class="release-meta"><span id="release-version">v{releaseVersion}</span><span class="release-separator" aria-hidden="true">·</span><span id="release-sync" aria-live="polite" title="refreshing">refreshing</span></div>
+    </header>
+    <div class="terminal-window-body"><slot /></div>
+  </div>
+</section>

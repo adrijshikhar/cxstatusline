@@ -2,6 +2,8 @@
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Hero from "../components/Hero.astro";
 import Playground from "../components/Playground.astro";
+import TerminalHero from "../components/TerminalHero.astro";
+import Compatibility from "../components/Compatibility.astro";
 import Features from "../components/Features.astro";
 import Install from "../components/Install.astro";
 import Faq from "../components/Faq";
@@ -10,11 +12,14 @@ import Footer from "../components/Footer.astro";
 <BaseLayout>
   <main id="main-content">
     <div class="first-screen">
-      <Hero />
-      <Playground />
+      <TerminalHero>
+        <Hero />
+        <Playground />
+      </TerminalHero>
     </div>
     <Features />
     <Install />
+    <Compatibility />
     <Faq client:load />
   </main>
   <Footer />

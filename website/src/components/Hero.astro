@@ -1,23 +1,29 @@
 ---
-import { ArrowDown, ArrowUpRight, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
+import { createElement } from "react";
+import AsciiWordmark from "./AsciiWordmark.astro";
+import MobileStatusline from "./MobileStatusline.astro";
+import { TerminalButton } from "./ui/terminal-button";
 ---
-<section class="intro marketing-section" aria-labelledby="intro-title">
-  <a class="wordmark" href="/">cxstatusline</a>
-  <p class="prompt-line"><ChevronRight aria-hidden="true" size={16} strokeWidth={2} /> Configure my Codex statusline</p>
-  <div class="response-line">
+<div class="intro" aria-labelledby="intro-title">
+  <AsciiWordmark />
+  <p class="prompt-line" data-transcript-prompt><ChevronRight aria-hidden="true" size={16} strokeWidth={2} /> Configure my Codex statusline</p>
+  <div class="response-line" data-transcript-reply>
     <span class="response-mark" aria-hidden="true">•</span>
     <div>
-      <h1 id="intro-title">Keep the whole session<br /><span>in sight.</span></h1>
+      <h1 id="intro-title">Keep the whole session in sight.</h1>
       <p class="lede desktop-only">Context, Git, and usage stay below your prompt. Edit the live layout here, then install it locally.</p>
-      <p class="lede mobile-only">Context, Git, and usage stay below your prompt. Open this page on desktop to try the live layout editor.</p>
+      <p class="lede mobile-only">Context, Git, and usage—right below your prompt.</p>
+      <MobileStatusline />
+      <p class="mobile-editor-note mobile-only">Live layout editor available on desktop.</p>
       <div class="intro-actions desktop-only">
-        <a href="#install">Install cxstatusline <ArrowDown aria-hidden="true" size={14} strokeWidth={2} /></a>
-        <a href="https://github.com/adrijshikhar/cxstatusline">View source <ArrowUpRight aria-hidden="true" size={14} strokeWidth={2} /></a>
+        <TerminalButton className="hero-action" render={createElement("a", { href: "#install" })}>Installation guide</TerminalButton>
+        <TerminalButton className="hero-action" render={createElement("a", { href: "https://github.com/adrijshikhar/cxstatusline" })}>GitHub source</TerminalButton>
       </div>
       <div class="intro-actions mobile-only">
-        <a href="#features">See how it works <ArrowDown aria-hidden="true" size={14} strokeWidth={2} /></a>
-        <a href="https://github.com/adrijshikhar/cxstatusline">View source <ArrowUpRight aria-hidden="true" size={14} strokeWidth={2} /></a>
+        <TerminalButton className="hero-action" render={createElement("a", { href: "#features" })}>Explore</TerminalButton>
+        <TerminalButton className="hero-action" render={createElement("a", { href: "https://github.com/adrijshikhar/cxstatusline" })}>View source</TerminalButton>
       </div>
     </div>
   </div>
-</section>
+</div>
