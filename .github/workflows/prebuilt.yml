@@ -127,7 +127,7 @@ jobs:
       # exit code is the command's, not tee's). `report` excerpts its tail into the issue.
       - run: set -o pipefail; bun install --frozen-lockfile 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-validate.log"
       - run: set -o pipefail; bun run typecheck 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-validate.log"
-      - run: set -o pipefail; bun test 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-validate.log"
+      - run: set -o pipefail; bun test ./test ./src 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-validate.log"
       # CXSTATUSLINE_RELEASE_BUILD=1 refuses a dirty or commit-less checkout.
       - run: set -o pipefail; CXSTATUSLINE_RELEASE_BUILD=1 bun run build 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-validate.log"
       - name: Bundle reports the detected cxstatusline version
