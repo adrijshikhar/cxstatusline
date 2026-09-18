@@ -1,6 +1,6 @@
 {
   "name": "cxstatusline",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Customizable statusline for OpenAI Codex CLI",
   "license": "MIT",
   "repository": {
