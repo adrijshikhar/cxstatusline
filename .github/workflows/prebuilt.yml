@@ -21,10 +21,10 @@ on:
         options: ["auto", "0.155.0", "0.154.0", "0.153.4", "0.153.0", "0.152.1"]
         default: "auto"
       platforms:
-        description: Target platforms to build (arm64,x64 or arm64)
+        description: Target platforms to build (all, darwin, linux, linux-x64, linux-arm64, arm64,x64, arm64)
         type: choice
-        options: ["arm64,x64", "arm64"]
-        default: "arm64,x64"
+        options: ["all", "linux", "darwin", "linux-x64", "linux-arm64", "arm64,x64", "arm64"]
+        default: "all"
       self_hosted:
         description: Run on the owner's self-hosted Apple Silicon runner (arm64 only; no hosted minutes)
         type: boolean
