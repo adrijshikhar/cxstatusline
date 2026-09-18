@@ -18,7 +18,7 @@ on:
       codex_version:
         description: Codex version to build (auto = highest stable upstream release that this repo patches)
         type: choice
-        options: ["auto", "0.154.0", "0.153.4", "0.153.0", "0.152.1"]
+        options: ["auto", "0.155.0", "0.154.0", "0.153.4", "0.153.0", "0.152.1"]
         default: "auto"
       platforms:
         description: Target platforms to build (arm64,x64 or arm64)
@@ -89,7 +89,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REQUESTED_CODEX_VERSION: ${{ inputs.codex_version || 'auto' }}
-          REQUESTED_PLATFORMS: ${{ inputs.platforms || 'arm64,x64' }}
+          REQUESTED_PLATFORMS: ${{ inputs.self_hosted && 'arm64' || inputs.platforms || 'arm64,x64' }}
           SELF_HOSTED: ${{ inputs.self_hosted && 'true' || 'false' }}
         run: |
           set -o pipefail
@@ -127,7 +127,7 @@ jobs:
       # exit code is the command's, not tee's). `report` excerpts its tail into the issue.
       - run: set -o pipefail; bun install --frozen-lockfile 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-validate.log"
       - run: set -o pipefail; bun run typecheck 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-validate.log"
-      - run: set -o pipefail; bun test 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-validate.log"
+      - run: set -o pipefail; bun test ./test ./src 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-validate.log"
       # CXSTATUSLINE_RELEASE_BUILD=1 refuses a dirty or commit-less checkout.
       - run: set -o pipefail; CXSTATUSLINE_RELEASE_BUILD=1 bun run build 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-validate.log"
       - name: Bundle reports the detected cxstatusline version
@@ -159,7 +159,6 @@ jobs:
     timeout-minutes: 360
     env:
       CODEX_VERSION: ${{ needs.detect.outputs.codex_version }}
-      CX_VERSION: ${{ needs.detect.outputs.cx_version }}
       SOURCE_COMMIT: ${{ needs.detect.outputs.source_commit }}
       EXPECTED_ARCH: ${{ matrix.arch }}
       V8_TARGET: ${{ matrix.target }}
@@ -241,7 +240,6 @@ jobs:
           set -o pipefail
           bun scripts/prebuilt.ts package \
             --codex-version "$CODEX_VERSION" \
-            --cx-version "$CX_VERSION" \
             --source-commit "$SOURCE_COMMIT" \
             --upstream "$GITHUB_WORKSPACE/upstream" \
             --staging "$RUNNER_TEMP/staging" \
@@ -252,7 +250,7 @@ jobs:
         run: |
           set -o pipefail
           bun scripts/prebuilt.ts verify --out "$GITHUB_WORKSPACE/out" \
-            --codex-version "$CODEX_VERSION" --cx-version "$CX_VERSION" \
+            --codex-version "$CODEX_VERSION" \
             --platform "$PLATFORM" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
       - name: Record build provenance
         env:
@@ -397,7 +395,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.detect.outputs.tag }}
           CODEX_VERSION: ${{ needs.detect.outputs.codex_version }}
-          CX_VERSION: ${{ needs.detect.outputs.cx_version }}
           PLATFORMS: ${{ needs.detect.outputs.platforms }}
           SOURCE_COMMIT: ${{ needs.detect.outputs.source_commit }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -410,7 +407,6 @@ jobs:
             --run-url "$RUN_URL" \
             --source-commit "$SOURCE_COMMIT" \
             --codex-version "$CODEX_VERSION" \
-            --cx-version "$CX_VERSION" \
             --platforms "$PLATFORMS" \
             --event "$GITHUB_EVENT_NAME" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-publish.log"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

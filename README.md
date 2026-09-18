@@ -53,7 +53,10 @@ cxstatusline install
 cxstatusline doctor
 ```
 
-`install` downloads the verified prebuilt binary matching your exact Codex version and architecture, verifies checksums against `manifest.json`, and activates it.
+`cxstatusline install` downloads the verified prebuilt binary matching your Codex version, verifies checksums against `manifest.json`, and activates it.
+- **Interactive selection**: Running `cxstatusline install` in a terminal prompts you to choose from available supported versions (defaulting to your detected or latest version).
+- **Target a specific version**: `cxstatusline install --codex-version <version>` (e.g. `cxstatusline install --codex-version 0.154.0`).
+- **Non-interactive / CI**: Pass `-y` or `--yes` to accept the default without prompting.
 
 Start Codex, accept its cxstatusline hook trust prompt, and open a new session after installation. An already-running process does not switch binaries when installation finishes.
 
@@ -145,13 +148,31 @@ Updates use an immutable **generation-based layout** (`~/.local/libexec/cxstatus
 👉 For a full architectural breakdown of how Codex is patched with Rust, check out the **[Architecture & Technical Deep Dive (wiki.md)](wiki.md)**.
  
 ## Supported versions
- 
-cxstatusline matches exact stable releases. Supported versions:
-- **0.154.0**
-- **0.153.4**
-- **0.153.0**
-- **0.152.1**
- 
+
+cxstatusline matches exact stable releases of OpenAI Codex.
+
+### Latest Supported Version
+| Codex Target | Prebuilt Release | Supported Architecture | Status |
+|---|---|---|---|
+| **0.155.0** | [`codex-v0.155.0`](https://github.com/adrijshikhar/cxstatusline/releases/tag/codex-v0.155.0) | Apple Silicon (`darwin-arm64`) | ✅ Verified Prebuilt |
+
+<details>
+<summary><b>Previous Supported Versions</b></summary>
+<br>
+
+| Codex Target | Prebuilt Release | Supported Architecture | Status |
+|---|---|---|---|
+| **0.154.0** | [`codex-v0.154.0`](https://github.com/adrijshikhar/cxstatusline/releases/tag/codex-v0.154.0) | Apple Silicon (`darwin-arm64`) | ✅ Verified Prebuilt |
+| **0.153.4** | [`codex-v0.153.4`](https://github.com/adrijshikhar/cxstatusline/releases/tag/codex-v0.153.4) | Apple Silicon (`darwin-arm64`) | ✅ Verified Prebuilt |
+| **0.153.0** | [`codex-v0.153.0`](https://github.com/adrijshikhar/cxstatusline/releases/tag/codex-v0.153.0) | Apple Silicon (`darwin-arm64`) | ✅ Verified Prebuilt |
+| **0.152.1** | [`codex-v0.152.1`](https://github.com/adrijshikhar/cxstatusline/releases/tag/codex-v0.152.1) | Apple Silicon (`darwin-arm64`) | ✅ Verified Prebuilt |
+
+To install a specific version:
+```sh
+cxstatusline install --codex-version 0.154.0
+```
+</details>
+
 If your Codex version is not listed, cxstatusline fails closed: it will neither download an unverified prebuilt nor attempt source compilation. New versions require a tested patch file, an entry in `patches/manifest.json`, and a release workflow run.
  
 ## 🩺 Troubleshooting

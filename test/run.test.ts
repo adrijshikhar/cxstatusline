@@ -485,6 +485,19 @@ describe("runInstall", () => {
 });
 
 describe("runUpdate", () => {
+  const mockFetchLatest = (targetVersion: string) => {
+    return async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      const urlStr = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+      if (urlStr.includes("api.github.com/repos/openai/codex/releases/latest")) {
+        return new Response(JSON.stringify({ tag_name: `rust-v${targetVersion}` }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return fetch(url, init);
+    };
+  };
+
   test("runs upstream's updater, then installs the prebuilt pair for the new version", async () => {
     const f = releaseFixture({ cxVersion: VERSION, codexVersion: "0.154.0" });
     const { c, paths, calls, said, state } = ctx({ upstreamVersion: "0.153.0", noRust: true });
@@ -497,7 +510,7 @@ describe("runUpdate", () => {
       return baseRun(cmd, args, opts);
     };
     await withServer(routesFor(f), async (baseUrl) => {
-      expect(await runUpdate({ ...c, run }, { baseUrl })).toBe(0);
+      expect(await runUpdate({ ...c, run }, { baseUrl, fetch: mockFetchLatest("0.154.0") })).toBe(0);
     });
     expect(readState(paths.stateFile).state.patched_from).toBe("0.154.0");
     expect(activePair(paths).codex).toBe("CODEX-BINARY");
@@ -530,7 +543,7 @@ describe("runUpdate", () => {
     };
     said.length = 0;
     await withServer({}, async (baseUrl) => {
-      expect(await runUpdate({ ...c, run }, { baseUrl })).toBe(1);
+      expect(await runUpdate({ ...c, run }, { baseUrl, fetch: mockFetchLatest("0.154.0") })).toBe(1);
     });
     expect(activeGeneration(paths)).toBe(before);
     expect(activePair(paths)).toEqual({ codex: "CODEX-BINARY", host: "HOST-BINARY" });
