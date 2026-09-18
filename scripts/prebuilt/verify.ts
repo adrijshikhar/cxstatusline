@@ -20,7 +20,7 @@ const MACHO_ARCH: Record<Platform, string> = { "darwin-arm64": "arm64", "darwin-
 
 export interface VerifyOptions {
   readonly outDir: string;
-  readonly cxVersion: string;
+  readonly cxVersion?: string;
   readonly codexVersion: string;
   readonly platform: Platform;
   /** Skip the `lipo`/`otool`/`vtool` probes. Only ever true for unit tests and non-macOS hosts. */

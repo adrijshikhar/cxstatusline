@@ -7,7 +7,7 @@ import type { ArtifactFile, FileDigest, Platform, ReleaseManifest } from "../../
 import { archiveFilename } from "./pack";
 
 export interface ManifestInput {
-  readonly cxVersion: string;
+  readonly cxVersion?: string;
   readonly codexVersion: string;
   readonly platform: Platform;
   /** `git rev-parse HEAD` of the patched upstream checkout. */

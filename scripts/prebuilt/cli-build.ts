@@ -40,7 +40,7 @@ import { verifyOutput } from "./verify";
  * fails before the index is touched; the patch is never edited and the source is never fixed up.
  */
 export async function runBuild(flags: Record<string, string>): Promise<void> {
-  const detection = resolveDetection(loadManifest(patchesDir()), required(flags, "codex-version"), cxVersion());
+  const detection = resolveDetection(loadManifest(patchesDir()), required(flags, "codex-version"), flags["cx-version"]);
   const upstream = resolve(required(flags, "upstream"));
   const patch = join(patchesDir(), detection.patchFile);
   resetDirectory(upstream, (entries) => entries.includes(".git"));
@@ -62,7 +62,7 @@ export async function runPackage(flags: Record<string, string>): Promise<void> {
   const detection = resolveDetection(
     loadManifest(patchesDir()),
     required(flags, "codex-version"),
-    required(flags, "cx-version"),
+    flags["cx-version"],
   );
   const upstream = resolve(required(flags, "upstream"));
   // Required, not derived: the frozen commit `detect` resolved is the only correct answer on a
@@ -90,7 +90,7 @@ export async function runPackage(flags: Record<string, string>): Promise<void> {
   const archive = await packArchive(stagingDir, join(outDir, filename));
 
   const manifest = buildManifest({
-    cxVersion: detection.cxVersion,
+    cxVersion: flags["cx-version"] ?? detection.cxVersion,
     codexVersion: detection.codexVersion,
     platform,
     upstreamCommit: upstreamCommit(upstream),
@@ -102,7 +102,6 @@ export async function runPackage(flags: Record<string, string>): Promise<void> {
     files: await fileDigests(stagingDir),
   });
   validateManifest(JSON.parse(JSON.stringify(manifest)), {
-    cxVersion: detection.cxVersion,
     codexVersion: detection.codexVersion,
     platform,
   });
@@ -114,7 +113,7 @@ export async function runPackage(flags: Record<string, string>): Promise<void> {
 export async function runVerify(flags: Record<string, string>): Promise<void> {
   const report = await verifyOutput({
     outDir: resolve(required(flags, "out")),
-    cxVersion: required(flags, "cx-version"),
+    cxVersion: flags["cx-version"],
     codexVersion: required(flags, "codex-version"),
     platform: platformFor(process.platform, process.arch),
     skipMacho: flags["skip-macho"] === "true",

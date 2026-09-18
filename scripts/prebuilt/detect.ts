@@ -26,7 +26,7 @@ export class UncoveredUpstreamError extends Error {
 
 export interface Detection {
   readonly codexVersion: string;
-  readonly cxVersion: string;
+  readonly cxVersion?: string;
   readonly tag: string;
   readonly upstreamTag: string;
   readonly patchFile: string;
@@ -71,13 +71,15 @@ function requireStable(label: string, version: string): SemVer {
 }
 
 /**
- * Turn a chosen upstream version plus this checkout's CX version into the full release identity.
+ * Turn a chosen upstream version plus optional CX version into the full release identity.
  * Fails closed when `patches/manifest.json` does not explicitly cover the version: naming both the
  * uncovered upstream version and the supported candidate is what makes the blocked issue actionable.
  */
-export function resolveDetection(m: Manifest, codexVersion: string, cxVersion: string): Detection {
+export function resolveDetection(m: Manifest, codexVersion: string, cxVersion?: string): Detection {
   const parsed = requireStable("upstream Codex version", codexVersion);
-  requireStable("cxstatusline version", cxVersion);
+  if (cxVersion !== undefined) {
+    requireStable("cxstatusline version", cxVersion);
+  }
   const patch = resolvePatch(m, parsed);
   if (patch === null) {
     const candidate = m.candidate ?? m.patches.at(-1)?.max ?? "none";
@@ -90,7 +92,7 @@ export function resolveDetection(m: Manifest, codexVersion: string, cxVersion: s
   return {
     codexVersion,
     cxVersion,
-    tag: releaseTag(cxVersion, codexVersion),
+    tag: releaseTag(codexVersion),
     upstreamTag: patch.tag,
     patchFile: patch.file,
   };

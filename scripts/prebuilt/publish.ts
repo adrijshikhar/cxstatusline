@@ -36,7 +36,7 @@ export interface PublishOptions {
   readonly runUrl: string;
   readonly sourceCommit: string;
   readonly codexVersion: string;
-  readonly cxVersion: string;
+  readonly cxVersion?: string;
   readonly platform?: Platform;
   readonly platforms?: readonly Platform[];
   readonly event: string;

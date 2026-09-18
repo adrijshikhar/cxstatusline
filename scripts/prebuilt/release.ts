@@ -54,7 +54,7 @@ export interface VerifiedSet {
 }
 
 export type ExpectedReleaseInput = {
-  readonly cxVersion: string;
+  readonly cxVersion?: string;
   readonly codexVersion: string;
   readonly platforms?: readonly Platform[];
   readonly platform?: Platform;

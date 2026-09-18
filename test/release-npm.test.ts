@@ -12,7 +12,7 @@ describe("assertReleaseIdentity", () => {
     headSha: "a".repeat(40),
     bundle: `// compiled bundle\nconst CXSTATUSLINE_SOURCE_COMMIT = "${"a".repeat(40)}";\n`,
     candidate: "0.153.4",
-    nativeReleaseExists: (tag: string) => tag === "cxstatusline-v0.1.1-codex-v0.153.4",
+    nativeReleaseExists: (tag: string) => tag === "codex-v0.153.4",
   };
 
   test("happy path passes with valid matching inputs", () => {

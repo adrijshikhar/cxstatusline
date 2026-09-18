@@ -13,6 +13,7 @@ import {
   type ReleaseManifest,
 } from "../distribution";
 import { activeGeneration, readInstallation } from "../patch/generation";
+import { VERSION } from "../version-info";
 import { extractArchive } from "./archive";
 import { ARTIFACT_FILES } from "./files";
 import { ARCHIVE_MAX_BYTES, MANIFEST_MAX_BYTES, downloadAsset, sanitize, type TransportOptions } from "./transport";
@@ -128,7 +129,7 @@ function stagedPair(
     codexVersion: manifest.codexVersion,
     provenance: {
       source: "prebuilt",
-      cxVersion: manifest.cxVersion,
+      cxVersion: manifest.cxVersion ?? VERSION,
       platform: artifact.platform,
       patchSha256: manifest.patchSha256,
       upstreamCommit: manifest.upstreamCommit,
@@ -181,7 +182,7 @@ export async function preparePrebuilt(
   expected: ExpectedRelease,
   opts: TransportOptions = {},
 ): Promise<PrebuiltPreparation> {
-  const tag = releaseTag(expected.cxVersion, expected.codexVersion);
+  const tag = releaseTag(expected.codexVersion);
   opts.onStatus?.("manifest", `Checking release ${tag} for ${expected.platform}...`);
   const download = privateTemp(ctx, "download-");
   try {

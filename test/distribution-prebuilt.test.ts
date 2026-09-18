@@ -14,9 +14,9 @@ import { releaseEntries as entries, releaseFixture, releaseServer, routesFor, sh
 
 const CX = "0.2.1";
 const CODEX = "0.153.0";
-const TAG = releaseTag(CX, CODEX);
+const TAG = releaseTag(CODEX);
 const ARCHIVE = `cxstatusline-codex-${CODEX}-darwin-arm64.tar.gz`;
-const EXPECTED = { cxVersion: CX, codexVersion: CODEX, platform: "darwin-arm64" } as const;
+const EXPECTED = { codexVersion: CODEX, platform: "darwin-arm64" } as const;
 
 // ---- Release fixture ----
 
