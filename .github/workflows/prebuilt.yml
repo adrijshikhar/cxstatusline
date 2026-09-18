@@ -89,7 +89,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REQUESTED_CODEX_VERSION: ${{ inputs.codex_version || 'auto' }}
-          REQUESTED_PLATFORMS: ${{ inputs.platforms || 'arm64,x64' }}
+          REQUESTED_PLATFORMS: ${{ inputs.self_hosted && 'arm64' || inputs.platforms || 'arm64,x64' }}
           SELF_HOSTED: ${{ inputs.self_hosted && 'true' || 'false' }}
         run: |
           set -o pipefail
