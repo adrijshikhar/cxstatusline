@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.1](https://github.com/adrijshikhar/cxstatusline/compare/v0.5.0...v0.5.1) (2026-09-18)
+
+
+### Bug Fixes
+
+* **prebuilt:** default REQUESTED_PLATFORMS to arm64 when self_hosted is true ([#49](https://github.com/adrijshikhar/cxstatusline/issues/49)) ([6d16711](https://github.com/adrijshikhar/cxstatusline/commit/6d16711584ff5c9786d600798a69ca59098a3901))
+* **prebuilt:** scope validate step test to ./test ./src ([#52](https://github.com/adrijshikhar/cxstatusline/issues/52)) ([f2e6a8d](https://github.com/adrijshikhar/cxstatusline/commit/f2e6a8d9a060489794389137fd7f89a1d02bf152))
+
 ## [0.5.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.4.1...v0.5.0) (2026-09-18)
 
 
