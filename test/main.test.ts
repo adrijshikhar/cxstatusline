@@ -216,6 +216,56 @@ describe("command dispatch", () => {
       expect(t.err.join("")).toMatch(/usage/i);
     });
   }
+  test("install --codex-version 0.152.1 installs target version", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    expect(await main(["install", "--codex-version", "0.152.1"], { ...t.io, env: d.env }, d.deps)).toBe(1);
+    expect(t.out.join("")).toMatch(/staging a prebuilt Codex pair needs 2 GiB/);
+  });
+  test("install --codex-version=0.152.1 installs target version", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    expect(await main(["install", "--codex-version=0.152.1"], { ...t.io, env: d.env }, d.deps)).toBe(1);
+    expect(t.out.join("")).toMatch(/staging a prebuilt Codex pair needs 2 GiB/);
+  });
+  test("install --codex-version with missing argument exits 2", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    expect(await main(["install", "--codex-version"], { ...t.io, env: d.env }, d.deps)).toBe(2);
+    expect(t.err.join("")).toContain("--codex-version requires a version argument");
+  });
+  test("install --codex-version= with empty argument exits 2", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    expect(await main(["install", "--codex-version="], { ...t.io, env: d.env }, d.deps)).toBe(2);
+    expect(t.err.join("")).toContain("--codex-version requires a version argument");
+  });
+  test("install -y skips prompt and installs default", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    let promptCalled = false;
+    const promptVersion = async () => {
+      promptCalled = true;
+      return "0.152.1";
+    };
+    expect(await main(["install", "-y"], { ...t.io, isTTY: true, env: d.env }, { ...d.deps, promptVersion })).toBe(1);
+    expect(promptCalled).toBe(false);
+    expect(t.out.join("")).toMatch(/staging a prebuilt Codex pair needs 2 GiB/);
+  });
+  test("interactive install with promptVersion prompts user and installs selected version", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    let promptCalled = false;
+    const promptVersion = async (opts: { supportedVersions: readonly string[]; defaultVersion?: string }) => {
+      promptCalled = true;
+      expect(opts.supportedVersions).toEqual(["0.152.1"]);
+      expect(opts.defaultVersion).toBe("0.152.1");
+      return "0.152.1";
+    };
+    expect(await main(["install"], { ...t.io, isTTY: true, env: d.env }, { ...d.deps, promptVersion })).toBe(1);
+    expect(promptCalled).toBe(true);
+    expect(t.out.join("")).toMatch(/staging a prebuilt Codex pair needs 2 GiB/);
+  });
   test("--internal-refresh-command is dispatched without reading stdin, produces no stdout, and is absent from USAGE", async () => {
     const t = io("");
     const throwingIo = {

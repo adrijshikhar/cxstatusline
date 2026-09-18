@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { ManifestError, loadManifest, resolvePatch, type Manifest } from "../src/patch/manifest";
+import {
+  ManifestError,
+  loadManifest,
+  resolvePatch,
+  supportedCodexVersions,
+  isCodexVersionSupported,
+  type Manifest,
+} from "../src/patch/manifest";
 import { parseSemver } from "../src/version";
 import { tmpEnv } from "./helpers";
 
@@ -85,5 +92,27 @@ describe("candidate metadata", () => {
     expect(() => loadManifest(manifestDir('{"version":1,"tag_prefix":"rust-v","candidate":7,"patches":[]}'))).toThrow(
       ManifestError,
     );
+  });
+});
+
+describe("supportedCodexVersions and isCodexVersionSupported", () => {
+  test("returns supported versions sorted newest first", () => {
+    const list = supportedCodexVersions(m);
+    expect(list).toEqual(["0.153.0", "0.152.3", "0.152.1"]);
+  });
+
+  test("shipped manifest includes all supported versions including 0.155.0", () => {
+    const shipped = loadManifest(join(import.meta.dir, "..", "patches"));
+    const versions = supportedCodexVersions(shipped);
+    expect(versions).toContain("0.155.0");
+    expect(versions).toContain("0.154.0");
+    expect(versions[0]).toBe("0.155.0");
+  });
+
+  test("checks if a version is supported", () => {
+    expect(isCodexVersionSupported(m, "0.153.0")).toBe(true);
+    expect(isCodexVersionSupported(m, "0.152.2")).toBe(true);
+    expect(isCodexVersionSupported(m, "0.154.0")).toBe(false);
+    expect(isCodexVersionSupported(m, "invalid")).toBe(false);
   });
 });
