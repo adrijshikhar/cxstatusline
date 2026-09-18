@@ -7,7 +7,7 @@ import { ReleaseUnavailableError, sanitize, type TransportOptions } from "../dis
 import { readState, writeState, RELEASE_UNAVAILABLE, type State } from "../state";
 import { needsRepatch, parseSemver, type SemVer } from "../version";
 import { prepareCompiled } from "./compile";
-import { ManifestError, loadManifest, resolvePatch } from "./manifest";
+import { ManifestError, isCodexVersionSupported, loadManifest, resolvePatch, supportedCodexVersions } from "./manifest";
 import { prebuiltPreflight, preflight } from "./preflight";
 import { activatePair, assertLauncherReplaceable, ensureWrapper, isOurWrapper } from "./wrapper";
 
@@ -26,6 +26,7 @@ export type PatchOutcome =
 export interface AcquisitionOptions {
   readonly source: AcquisitionSource;
   readonly force: boolean;
+  readonly targetVersion?: string;
 }
 
 export function loadState(ctx: Context): State {
@@ -90,25 +91,62 @@ async function acquireLocked(
   opts: AcquisitionOptions,
   transport: TransportOptions,
 ): Promise<PatchOutcome> {
+  let targetSemver: SemVer | undefined;
+  if (opts.targetVersion) {
+    try {
+      const manifest = loadManifest(ctx.patchesDir);
+      if (!isCodexVersionSupported(manifest, opts.targetVersion)) {
+        const supported = supportedCodexVersions(manifest).join(", ");
+        return {
+          kind: "refused",
+          reason: `Codex ${opts.targetVersion} is not supported. Supported versions: ${supported}`,
+        };
+      }
+      targetSemver = parseSemver(opts.targetVersion)!;
+    } catch (e) {
+      const reason = e instanceof ManifestError ? e.message : `patches/manifest.json could not be read: ${String(e)}`;
+      return { kind: "refused", reason };
+    }
+  }
+
   const located = upstreamFor(ctx, initial);
-  if ("reason" in located) {
-    recordFailure(ctx, initial, "unknown", located.reason);
-    return { kind: "refused", reason: located.reason };
+  let state: State;
+  if ("bin" in located) {
+    state = located.state;
+    // Persist the resolved upstream_bin/launcher_restore immediately - before the `held` check and
+    // long before anything replaces the launcher. If the final bookkeeping write later fails, this
+    // earlier one is what lets `revert` still find its way back to upstream.
+    writeState(ctx.paths.stateFile, state);
+  } else {
+    if (targetSemver && opts.source === "prebuilt") {
+      state = {
+        ...initial,
+        upstream_bin: null,
+        launcher_restore: initial.launcher_restore ?? { kind: "none" },
+      };
+      writeState(ctx.paths.stateFile, state);
+    } else {
+      recordFailure(ctx, initial, "unknown", located.reason);
+      return { kind: "refused", reason: located.reason };
+    }
   }
-  const state = located.state;
-  // Persist the resolved upstream_bin/launcher_restore immediately - before the `held` check and
-  // long before anything replaces the launcher. If the final bookkeeping write later fails, this
-  // earlier one is what lets `revert` still find its way back to upstream.
-  writeState(ctx.paths.stateFile, state);
-  const upstream = readUpstreamVersion(located.bin, ctx.run);
-  if (!upstream) {
-    const reason = `could not read a version from ${located.bin} --version`;
-    recordFailure(ctx, state, "unknown", reason);
-    return { kind: "refused", reason };
+
+  let versionToAcquire: SemVer;
+  if (targetSemver) {
+    versionToAcquire = targetSemver;
+  } else {
+    const upstream = "bin" in located ? readUpstreamVersion(located.bin, ctx.run) : null;
+    if (!upstream) {
+      const reason = `could not read a version from ${located.bin} --version`;
+      recordFailure(ctx, state, "unknown", reason);
+      return { kind: "refused", reason };
+    }
+    versionToAcquire = upstream;
   }
+
   const patched = state.patched_from ? parseSemver(state.patched_from) : null;
-  if (!opts.force && !needsRepatch(upstream, patched, state.policy)) {
-    return { kind: "held", upstream: upstream.raw, patched: state.patched_from ?? "never" };
+  if (!opts.force && !needsRepatch(versionToAcquire, patched, state.policy)) {
+    return { kind: "held", upstream: versionToAcquire.raw, patched: state.patched_from ?? "never" };
   }
   // Before any download or build: if the launcher is not ours to replace, nothing else is worth
   // spending minutes and gigabytes on.
@@ -116,12 +154,12 @@ async function acquireLocked(
     assertLauncherReplaceable(ctx.paths);
   } catch (e) {
     const reason = reasonOf(e);
-    recordFailure(ctx, state, upstream.raw, reason);
+    recordFailure(ctx, state, versionToAcquire.raw, reason);
     return { kind: "refused", reason };
   }
   return opts.source === "compiled"
-    ? compiledAcquisition(ctx, state, upstream, transport.onStatus)
-    : prebuiltAcquisition(ctx, state, upstream, transport);
+    ? compiledAcquisition(ctx, state, versionToAcquire, transport.onStatus)
+    : prebuiltAcquisition(ctx, state, versionToAcquire, transport);
 }
 
 /** Activate a staged pair and record it, removing the staging directory whatever happens. */

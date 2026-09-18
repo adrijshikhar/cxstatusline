@@ -20,6 +20,7 @@ const PATCH_SHA = createHash("sha256").update(PATCH_BODY).digest("hex");
 
 interface Options {
   upstreamVersion?: string;
+  stagedVersion?: string;
   which?: (c: string) => string | null;
   cargoFails?: boolean;
   /** cargo exits 0 but one built path cannot be copied, so staging fails half-way. */
@@ -52,7 +53,10 @@ function ctx(over: Options = {}) {
   const { run, calls } = fakeExec((cmd, args) => {
     if (over.noRust && (cmd === "cargo" || cmd === "rustup")) throw new Error(`this path must never run ${cmd}`);
     if (cmd === "gh") return over.gh ? over.gh(args) : { status: 1, stderr: "release not found" };
-    if (args[0] === "--version") return { stdout: `codex-cli ${state.upstreamVersion}\n` };
+    if (args[0] === "--version") {
+      const version = over.stagedVersion && cmd.includes("staging") ? over.stagedVersion : state.upstreamVersion;
+      return { stdout: `codex-cli ${version}\n` };
+    }
     if (cmd === "git" && args.includes("rev-parse")) return { stdout: `${UPSTREAM_COMMIT}\n` };
     if (cmd === "rustup" && args[0] === "toolchain") return { stdout: `${REQUIRED_TOOLCHAIN}-aarch64-apple-darwin\n` };
     if (cmd === "rustup" && args[0] === "component") return { stdout: "cargo\nclippy\nrust-src\nrustfmt\n" };
@@ -274,6 +278,36 @@ describe("runAcquisition (prebuilt)", () => {
       expect(activeGeneration(paths)).toBe(first);
       expect(requests.filter((r) => r.endsWith(".tar.gz"))).toHaveLength(1);
     });
+  });
+  test("refused: targetVersion not supported by manifest", async () => {
+    const { c } = ctx({ noRust: true });
+    expect(await runAcquisition(c, { source: "prebuilt", force: true, targetVersion: "0.99.0" }))
+      .toEqual({
+        kind: "refused",
+        reason: expect.stringMatching(/0\.99\.0 is not supported/i),
+      });
+  });
+  test("installs requested targetVersion even when local upstream is different", async () => {
+    const f = fixture();
+    const { c, paths } = ctx({ upstreamVersion: "0.152.1", stagedVersion: CODEX, noRust: true });
+    await withServer(routesFor(f), async (baseUrl) => {
+      expect(await runAcquisition(c, { source: "prebuilt", force: true, targetVersion: CODEX }, { baseUrl }))
+        .toEqual({ kind: "installed", version: CODEX, source: "prebuilt", reused: false });
+    });
+    expect(readInstallation(paths)?.provenance.release?.tag).toBe(f.tag);
+    expect(readState(paths.stateFile).state.patched_from).toBe(CODEX);
+  });
+  test("installs prebuilt standalone when no local upstream binary exists", async () => {
+    const f = fixture();
+    const { c, paths } = ctx({ noRust: true, stagedVersion: CODEX, which: () => null });
+    rmSync(paths.wrapperPath, { force: true });
+    await withServer(routesFor(f), async (baseUrl) => {
+      expect(await runAcquisition(c, { source: "prebuilt", force: true, targetVersion: CODEX }, { baseUrl }))
+        .toEqual({ kind: "installed", version: CODEX, source: "prebuilt", reused: false });
+    });
+    expect(activePair(paths)).toEqual({ codex: "CODEX-BINARY", host: "HOST-BINARY" });
+    expect(isOurWrapper(paths.wrapperPath)).toBe(true);
+    expect(readState(paths.stateFile).state.patched_from).toBe(CODEX);
   });
   test("no published release: unavailable, the old pair keeps running, nothing compiles", async () => {
     const f = fixture();
