@@ -50,7 +50,7 @@ export interface NotesInput {
 
 export function releaseTitle(i: { codexVersion: string; cxVersion?: string; platform?: Platform; platforms?: readonly Platform[] }): string {
   const platforms = i.platforms ?? (i.platform ? [i.platform] : ["darwin-arm64"]);
-  return `Codex ${i.codexVersion} (${platforms.join(", ")})`;
+  return `[Prebuilt] Codex ${i.codexVersion} (${platforms.join(", ")})`;
 }
 
 function identityLine(i: NotesInput): string {

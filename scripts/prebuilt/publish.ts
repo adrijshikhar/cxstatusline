@@ -189,7 +189,7 @@ export async function publishRelease(o: PublishOptions): Promise<PublishOutcome>
   await reverifyUploaded(o, set);
   
   if (verdict.state !== "published-partial") {
-    ghText(o.run, ["release", "edit", o.tag, "--draft=false", "--latest=false"]);
+    ghText(o.run, ["release", "edit", o.tag, "--draft=false", "--latest=false", "--prerelease"]);
   }
   
   if (url === "") url = inspectRelease(o.run, o.tag).url;

@@ -216,6 +216,7 @@ describe("publishRelease", () => {
     expect(fake.of("release download")).toHaveLength(3);
     expect(fake.of("release edit")[0]).toContain("--draft=false");
     expect(fake.of("release edit")[0]).toContain("--latest=false");
+    expect(fake.of("release edit")[0]).toContain("--prerelease");
     expect(fake.calls.flat()).not.toContain("--clobber");
     expect(fake.calls.flat().every((a) => !a.includes("$") && !a.includes("`"))).toBe(true);
   });
