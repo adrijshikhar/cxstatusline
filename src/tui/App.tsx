@@ -35,6 +35,8 @@ export interface AppProps {
   initialSettings?: Settings;
   settingsPath: string;
   readImportFile?: (file: string) => Promise<string>;
+  /** Browser host supplies a native file picker; null means cancellation. */
+  pickImportFile?: () => Promise<string | null>;
   writeSettings?: typeof saveSettings;
   /** Lets browser embeddings return to their host instead of ending Ink. */
   onExit?: () => void;
@@ -54,7 +56,7 @@ function clampSettings(settings: Settings): Settings {
   return { ...cloned, lines: lines.length ? lines : [[]] };
 }
 
-export function App({ initialSettings, settingsPath, readImportFile = readImportFileFromDisk, writeSettings = saveSettings, onExit }: AppProps): React.JSX.Element {
+export function App({ initialSettings, settingsPath, readImportFile = readImportFileFromDisk, pickImportFile, writeSettings = saveSettings, onExit }: AppProps): React.JSX.Element {
   const { exit: nativeExit } = useApp();
   const exit = onExit ?? nativeExit;
   const { stdout } = useStdout();
@@ -163,6 +165,10 @@ export function App({ initialSettings, settingsPath, readImportFile = readImport
 
   const handleMainMenu = (value: MainMenuOption): void => {
     if (!settings) return;
+    if (value === "import" && pickImportFile) {
+      importSettings("");
+      return;
+    }
     if (value === "lines" || value === "colors" || value === "powerline" || value === "overrides" || value === "export" || value === "import") {
       beginEdit(value);
     } else if (value === "save") {
@@ -181,18 +187,24 @@ export function App({ initialSettings, settingsPath, readImportFile = readImport
   };
 
   const importSettings = (file: string): void => {
-    if (!file) {
+    if (!file && !pickImportFile) {
       setImportError("Enter a file path.");
       return;
     }
     const request = ++importGeneration.current;
-    void readImportFile(file).then((text) => {
+    const showImportError = (message: string): void => {
+      if (pickImportFile) setFlash(message);
+      else setImportError(message);
+    };
+    setFlash(null);
+    void (pickImportFile ? pickImportFile() : readImportFile(file)).then((text) => {
       if (request !== importGeneration.current) return;
+      if (text === null) return;
       let parsed: unknown;
       try {
         parsed = JSON.parse(text);
       } catch {
-        setImportError("The selected file could not be parsed.");
+        showImportError("The selected file could not be parsed. Choose a valid JSON file.");
         return;
       }
       try {
@@ -200,11 +212,13 @@ export function App({ initialSettings, settingsPath, readImportFile = readImport
         setImportError(null);
         setScreen("import-preview");
       } catch {
-        setImportError("The selected file is not a supported preset.");
+        showImportError("The selected file is not a supported preset.");
         return;
       }
     }, () => {
-      if (request === importGeneration.current) setImportError("Could not read the selected file.");
+      if (request === importGeneration.current) showImportError(pickImportFile
+        ? "Could not read the selected file. Choose a JSON file smaller than 1 MB."
+        : "Could not read the selected file.");
     });
   };
 

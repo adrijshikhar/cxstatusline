@@ -109,7 +109,7 @@ function ListItem({ children, isSelected, color = "green", disabled, ...boxProps
   return (
     <Box {...boxProps}>
       <Text {...(isSelected && { color })} {...(disabled && { dimColor: true })}>
-        {isSelected ? "▶  " : "   "}{children}
+        {isSelected ? "▶ " : "  "}{children}
       </Text>
     </Box>
   );

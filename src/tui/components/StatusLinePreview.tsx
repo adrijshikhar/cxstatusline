@@ -11,7 +11,7 @@ export interface StatusLinePreviewProps {
 
 export const PREVIEW_CONTEXT: Omit<RenderContext, "isPreview" | "terminalWidth"> = {
   data: { payload_version: 1 },
-  now: new Date(0),
+  now: new Date("2026-09-02T10:00:00Z"),
   freeMemoryBytes: 0,
 };
 

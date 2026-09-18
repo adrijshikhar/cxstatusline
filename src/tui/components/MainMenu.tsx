@@ -12,7 +12,7 @@ export function buildMainMenuItems(): readonly (ListEntry<MainMenuOption> | "-")
     { label: "Global Overrides", value: "overrides", description: "Set padding, separators, and global display overrides." },
     "-",
     { label: "Export", value: "export", description: "Write the current in-memory configuration to a JSON file." },
-    { label: "Import", value: "import", description: "Replace the in-memory configuration from a valid v2 JSON file." },
+    { label: "Import", value: "import", description: "Preview and confirm a layout from a JSON file." },
     "-",
     { label: "Save & Exit", value: "save", description: "Atomically save the current configuration, then exit." },
     { label: "Exit Without Saving", value: "discard", description: "Discard this TUI session without writing settings.json." },

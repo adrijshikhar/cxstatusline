@@ -1,0 +1,17 @@
+---
+import { supportedCodexVersions } from "../release-info";
+---
+
+<section id="compatibility" class="marketing-section content-section" aria-labelledby="compatibility-title">
+  <div class="compatibility-intro">
+    <h2 id="compatibility-title">Compatibility matrix.</h2>
+    <p>Every listed Codex CLI release has a tested cxstatusline patch. Unsupported versions fail closed until they are verified.</p>
+  </div>
+  <div class="compatibility-list">
+    <div class="compatibility-labels" aria-hidden="true"><span>Codex CLI</span><span>Status</span></div>
+    <ul>
+      {supportedCodexVersions.map((version) => <li><div class="flex items-center gap-2"><code>{version}</code>{version === supportedCodexVersions.at(-1) && <span class="rounded border border-[var(--line)] bg-[var(--surface)] px-2 py-0.5" title="Latest supported Codex CLI version">Latest</span>}</div><span>Verified support</span></li>)}
+    </ul>
+  </div>
+  <a class="compatibility-link" href="https://github.com/adrijshikhar/cxstatusline#supported-versions">View compatibility details</a>
+</section>
