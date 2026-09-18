@@ -37,7 +37,7 @@ Independent project; not an official OpenAI product.
 
 ## Requirements
 
-- **macOS 14 (Sonoma) or newer** (Apple Silicon or Intel).
+- **macOS 14 (Sonoma) or newer** (Apple Silicon or Intel) or **Linux** (x86_64 or aarch64).
 - **Node.js 22+**.
 - **Existing Codex CLI installation** kept in place (`~/.codex/`).
 - **Git**.

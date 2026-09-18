@@ -6,6 +6,7 @@ import {
   type Artifact,
   type ExpectedRelease,
   type FileDigest,
+  type Platform,
   type ReleaseManifest,
 } from "../src/distribution";
 
@@ -13,7 +14,10 @@ test("exact immutable identity and supported CPU only", () => {
   expect(releaseTag("0.153.0")).toBe("codex-v0.153.0");
   expect(platformFor("darwin", "arm64")).toBe("darwin-arm64");
   expect(platformFor("darwin", "x64")).toBe("darwin-x64");
-  expect(() => platformFor("linux", "x64")).toThrow();
+  expect(platformFor("linux", "x64")).toBe("linux-x64");
+  expect(platformFor("linux", "arm64")).toBe("linux-arm64");
+  expect(() => platformFor("windows", "x64")).toThrow();
+  expect(() => platformFor("linux", "riscv64")).toThrow();
   expect(() => releaseTag("0.153.0-beta.1")).toThrow();
   expect(() =>
     validateManifest({}, { codexVersion: "0.153.0", platform: "darwin-arm64" }),
@@ -46,7 +50,7 @@ function filesFor(sha: string): Artifact["files"] {
   };
 }
 
-function artifactFor(platform: "darwin-arm64" | "darwin-x64", sha: string): Artifact {
+function artifactFor(platform: Platform, sha: string): Artifact {
   return {
     platform,
     filename: `cxstatusline-codex-${CODEX}-${platform}.tar.gz`,
@@ -76,6 +80,19 @@ test("valid two-platform manifest round-trips through validateManifest", () => {
   const manifest = validManifest();
   expect(validateManifest(manifest, EXPECTED_ARM)).toEqual(manifest);
   expect(validateManifest(manifest, EXPECTED_X64)).toEqual(manifest);
+});
+
+test("valid four-platform manifest round-trips through validateManifest", () => {
+  const manifest = validManifest();
+  manifest.artifacts = [
+    artifactFor("darwin-arm64", HEX64_A),
+    artifactFor("darwin-x64", HEX64_B),
+    artifactFor("linux-x64", HEX64_A),
+    artifactFor("linux-arm64", HEX64_B),
+  ];
+  expect(validateManifest(manifest, EXPECTED_ARM)).toEqual(manifest);
+  expect(validateManifest(manifest, { codexVersion: CODEX, platform: "linux-x64" })).toEqual(manifest);
+  expect(validateManifest(manifest, { codexVersion: CODEX, platform: "linux-arm64" })).toEqual(manifest);
 });
 
 test("one-artifact manifest for the expected platform validates (Apple-Silicon-only release)", () => {
@@ -128,11 +145,13 @@ const cases: Array<{ name: string; mutate: Mutator }> = [
   { name: "missing artifacts", mutate: (m) => { delete (m as unknown as Record<string, unknown>).artifacts; } },
   { name: "empty artifacts array", mutate: (m) => { m.artifacts = []; } },
   {
-    name: "too many artifacts (three entries)",
+    name: "too many artifacts (five entries)",
     mutate: (m) => {
       m.artifacts = [
         artifactFor("darwin-arm64", HEX64_A),
         artifactFor("darwin-x64", HEX64_B),
+        artifactFor("linux-x64", HEX64_A),
+        artifactFor("linux-arm64", HEX64_B),
         artifactFor("darwin-arm64", HEX64_A),
       ];
     },

@@ -36,7 +36,7 @@ import {
 } from "../scripts/prebuilt";
 import { RUST_NOTICES_MARKER } from "../scripts/prebuilt/rust-licenses";
 import { extractArchive } from "../src/distribution/archive";
-import { validateManifest, type ArtifactFile, type FileDigest } from "../src/distribution";
+import { validateManifest, type ArtifactFile, type FileDigest, type Platform } from "../src/distribution";
 import type { Manifest } from "../src/patch/manifest";
 
 const CX = "0.1.0";
@@ -107,7 +107,7 @@ function digests(stagingDir: string): Record<ArtifactFile, FileDigest> {
   return out as Record<ArtifactFile, FileDigest>;
 }
 
-function manifestInput(stagingDir: string, archive: FileDigest): ManifestInput {
+function manifestInput(stagingDir: string, archive: FileDigest, over: Partial<ManifestInput> = {}): ManifestInput {
   return {
     cxVersion: CX,
     codexVersion: CODEX,
@@ -119,15 +119,16 @@ function manifestInput(stagingDir: string, archive: FileDigest): ManifestInput {
     createdAt: "2026-09-07T00:00:00Z",
     archive,
     files: digests(stagingDir),
+    ...over,
   };
 }
 
 /** Build a complete, self-consistent `out/` (archive + manifest.json + SHA256SUMS). */
-async function releaseDir(stagingDir: string): Promise<string> {
+async function releaseDir(stagingDir: string, platform: Platform = "darwin-arm64"): Promise<string> {
   const out = tmp("out");
-  const filename = archiveFilename(CODEX, "darwin-arm64");
+  const filename = archiveFilename(CODEX, platform);
   const archive = await packArchive(stagingDir, join(out, filename));
-  const manifest = buildManifest(manifestInput(stagingDir, archive));
+  const manifest = buildManifest(manifestInput(stagingDir, archive, { platform }));
   writeFileSync(join(out, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   await writeChecksums(out, [filename, "manifest.json"]);
   return out;
@@ -521,6 +522,22 @@ describe("verifyOutput", () => {
     expect(report.checks).toContain("archive sha256 matches manifest");
     expect(report.checks).toContain("SHA256SUMS matches manifest");
     expect(report.checks).toContain("Mach-O arch/linkage/minos SKIPPED");
+  });
+
+  test("accepts a self-consistent Linux release directory and reports skipped ELF probes", async () => {
+    const out = await releaseDir(smokeStaging(), "linux-x64");
+    const report = await verifyOutput({
+      outDir: out,
+      cxVersion: CX,
+      codexVersion: CODEX,
+      platform: "linux-x64",
+      skipMacho: true,
+    });
+    expect(report.machoSkipped).toBe(true);
+    expect(report.manifest.cxVersion).toBe(CX);
+    expect(report.checks).toContain("archive sha256 matches manifest");
+    expect(report.checks).toContain("SHA256SUMS matches manifest");
+    expect(report.checks).toContain("ELF arch/linkage SKIPPED");
   });
 
   test("rejects a tampered archive whose bytes no longer match the manifest", async () => {

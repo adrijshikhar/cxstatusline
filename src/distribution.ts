@@ -4,7 +4,7 @@ import { parseSemver } from "./version";
 
 // ---- Shared types (plan-defined; used verbatim by later tasks) ----
 
-export type Platform = "darwin-arm64" | "darwin-x64";
+export type Platform = "darwin-arm64" | "darwin-x64" | "linux-x64" | "linux-arm64";
 
 export type { ArtifactFile };
 
@@ -60,7 +60,12 @@ export interface PreparedPair {
 
 // ---- Constants ----
 
-const PLATFORMS: readonly Platform[] = ["darwin-arm64", "darwin-x64"];
+export const PLATFORMS: readonly Platform[] = [
+  "darwin-arm64",
+  "darwin-x64",
+  "linux-x64",
+  "linux-arm64",
+];
 
 /** Spec archive name: `cxstatusline-codex-<codexVersion>-<platform>.tar.gz`. */
 const ARCHIVE_PREFIX = "cxstatusline-codex";
@@ -93,6 +98,8 @@ export function releaseTag(codexVersion: string): string {
 export function platformFor(os: string, arch: string): Platform {
   if (os === "darwin" && arch === "arm64") return "darwin-arm64";
   if (os === "darwin" && arch === "x64") return "darwin-x64";
+  if (os === "linux" && arch === "x64") return "linux-x64";
+  if (os === "linux" && arch === "arm64") return "linux-arm64";
   throw new Error(`platformFor: unsupported platform os=${os} arch=${arch}`);
 }
 
@@ -115,7 +122,7 @@ const FilesSchema = z.object(filesShape).strict();
 
 const ArtifactSchema = z
   .object({
-    platform: z.enum(["darwin-arm64", "darwin-x64"]),
+    platform: z.enum(["darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64"]),
     filename: z.string(),
     sha256: z.string().regex(HEX64, "sha256 must be 64 lowercase hex chars"),
     size: z.number().refine(safePositiveInt, "size must be a finite positive safe integer"),
@@ -135,7 +142,7 @@ const ManifestShapeSchema = z
     sourceCommit: z.string().regex(HEX40, "sourceCommit must be 40 lowercase hex chars"),
     workflowUrl: z.string().regex(WORKFLOW_URL, "workflowUrl must be a github actions run URL"),
     createdAt: z.string().regex(ISO_8601, "createdAt must be an ISO 8601 timestamp"),
-    artifacts: z.array(ArtifactSchema).min(1).max(2),
+    artifacts: z.array(ArtifactSchema).min(1).max(4),
   })
   .strict();
 

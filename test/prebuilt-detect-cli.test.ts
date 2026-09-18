@@ -69,9 +69,9 @@ describe("detect on a schedule", () => {
   });
 
   test("a bad --platform is refused rather than defaulted", () => {
-    const run = runDetect(["--event", "workflow_dispatch", "--platform", "linux-x64"], []);
+    const run = runDetect(["--event", "workflow_dispatch", "--platform", "solaris-x64"], []);
     expect(run.status).toBe(1);
-    expect(run.stderr).toMatch(/--platform must be one of darwin-arm64, darwin-x64/);
+    expect(run.stderr).toMatch(/--platform must be one of/);
   });
 
   test("a bad --platforms is refused", () => {
@@ -99,8 +99,8 @@ describe("buildMatrix", () => {
   });
 
   test("hosted runner maps each platform to its runner and target", () => {
-    const m = buildMatrix(["darwin-arm64", "darwin-x64"], false);
-    expect(m).toHaveLength(2);
+    const m = buildMatrix(["darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64"], false);
+    expect(m).toHaveLength(4);
     expect(m[0]).toEqual({
       runner: "macos-15",
       arch: "arm64",
@@ -112,6 +112,18 @@ describe("buildMatrix", () => {
       arch: "x64",
       target: "x86_64-apple-darwin",
       platform: "darwin-x64",
+    });
+    expect(m[2]).toEqual({
+      runner: "ubuntu-latest",
+      arch: "x64",
+      target: "x86_64-unknown-linux-gnu",
+      platform: "linux-x64",
+    });
+    expect(m[3]).toEqual({
+      runner: "ubuntu-24.04-arm",
+      arch: "arm64",
+      target: "aarch64-unknown-linux-gnu",
+      platform: "linux-arm64",
     });
   });
 });
