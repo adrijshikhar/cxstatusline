@@ -1,5 +1,34 @@
 ---
 import { Card } from "./ui/card";
+
+const sampleSignals = [
+  { label: "Model", value: "Codex", color: "text-[var(--signal-info)]", layout: "border-r border-[var(--line)] max-md:border-b" },
+  { label: "Thinking", value: "high", color: "text-[var(--signal-danger)]", layout: "border-r border-[var(--line)] max-md:border-r-0 max-md:border-b" },
+  { label: "Context", value: "50k/200k (25%)", color: "text-[var(--signal-success)]", layout: "border-r border-[var(--line)] max-md:col-span-2 max-md:border-r-0 max-md:border-b" },
+  { label: "", value: "git main", color: "text-[var(--signal-purple)]", layout: "border-r border-[var(--line)]" },
+  { label: "", value: "+42,-10", color: "text-[var(--signal-warning)]", layout: "" },
+];
+
+const callouts = [
+  {
+    title: "Know your session",
+    desc: "See the model and session at a glance.",
+    pinClass: "bg-[var(--accent)] after:bg-[var(--accent)]",
+    extraClass: "max-md:border-b max-md:border-[var(--line)]",
+  },
+  {
+    title: "Watch your context",
+    desc: "Keep an eye on context usage as you work.",
+    pinClass: "bg-[var(--signal-success)] after:bg-[var(--signal-success)]",
+    extraClass: "max-md:border-b max-md:border-[var(--line)]",
+  },
+  {
+    title: "Keep Git close",
+    desc: "See your branch and changes, right here.",
+    pinClass: "bg-[var(--signal-warning)] after:bg-[var(--signal-warning)]",
+    extraClass: "",
+  },
+];
 ---
 <section id="features" class="marketing-section content-section block" aria-labelledby="features-title">
   <div class="mb-7 text-center max-md:mb-6 max-md:text-left">
@@ -7,16 +36,22 @@ import { Card } from "./ui/card";
   </div>
   <figure class="mb-14 max-md:mb-10">
     <div class="flex flex-wrap items-stretch rounded-md border border-[var(--line)] bg-[var(--surface)] font-mono text-sm leading-[1.4] max-md:grid max-md:grid-cols-2" aria-label="Sample cxstatusline with model, thinking effort, context, Git branch, and Git changes">
-      <span class="flex min-h-13 items-center border-r border-[var(--line)] px-4.5 text-[var(--signal-info)] max-md:min-h-11 max-md:border-b max-md:px-3 max-md:text-xs"><span class="mr-1.25 text-[var(--muted)]">Model</span>: Codex</span>
-      <span class="flex min-h-13 items-center border-r border-[var(--line)] px-4.5 text-[var(--signal-danger)] max-md:min-h-11 max-md:border-r-0 max-md:border-b max-md:px-3 max-md:text-xs"><span class="mr-1.25 text-[var(--muted)]">Thinking</span>: high</span>
-      <span class="flex min-h-13 items-center border-r border-[var(--line)] px-4.5 text-[var(--signal-success)] max-md:col-span-2 max-md:min-h-11 max-md:border-r-0 max-md:border-b max-md:px-3 max-md:text-xs"><span class="mr-1.25 text-[var(--muted)]">Context</span>: 50k/200k (25%)</span>
-      <span class="flex min-h-13 items-center border-r border-[var(--line)] px-4.5 text-[#c678dd] max-md:min-h-11 max-md:px-3 max-md:text-xs">git main</span>
-      <span class="flex min-h-13 items-center px-4.5 text-[#e5c07b] max-md:min-h-11 max-md:px-3 max-md:text-xs">+42,-10</span>
+      {sampleSignals.map(({ label, value, color, layout }) => (
+        <span class={`flex min-h-13 items-center px-4.5 max-md:min-h-11 max-md:px-3 max-md:text-xs ${color} ${layout}`}>
+          {label ? <><span class="mr-1.25 text-[var(--muted)]">{label}</span>: {value}</> : value}
+        </span>
+      ))}
     </div>
     <div class="grid grid-cols-3 gap-6 max-md:grid-cols-1 max-md:gap-0" aria-label="What each statusline signal shows">
-      <article class="relative px-4 pt-11 max-md:grid max-md:grid-cols-[12px_1fr] max-md:gap-x-3 max-md:border-b max-md:border-[var(--line)] max-md:px-1 max-md:py-5"><span class="absolute left-5 top-0 h-8.5 w-px bg-[var(--accent)] after:absolute after:-bottom-px after:-left-1 after:size-2.25 after:rounded-full after:bg-[var(--accent)] max-md:static max-md:mt-1.5 max-md:size-2.25 max-md:rounded-full max-md:after:hidden"></span><div><h3 class="mb-1 text-sm max-md:text-base">Know your session</h3><p class="m-0 text-[13px] leading-6 text-[var(--muted)] max-md:text-sm">See the model and session at a glance.</p></div></article>
-      <article class="relative px-4 pt-11 max-md:grid max-md:grid-cols-[12px_1fr] max-md:gap-x-3 max-md:border-b max-md:border-[var(--line)] max-md:px-1 max-md:py-5"><span class="absolute left-5 top-0 h-8.5 w-px bg-[var(--signal-success)] after:absolute after:-bottom-px after:-left-1 after:size-2.25 after:rounded-full after:bg-[var(--signal-success)] max-md:static max-md:mt-1.5 max-md:size-2.25 max-md:rounded-full max-md:after:hidden"></span><div><h3 class="mb-1 text-sm max-md:text-base">Watch your context</h3><p class="m-0 text-[13px] leading-6 text-[var(--muted)] max-md:text-sm">Keep an eye on context usage as you work.</p></div></article>
-      <article class="relative px-4 pt-11 max-md:grid max-md:grid-cols-[12px_1fr] max-md:gap-x-3 max-md:px-1 max-md:py-5"><span class="absolute left-5 top-0 h-8.5 w-px bg-[var(--signal-warning)] after:absolute after:-bottom-px after:-left-1 after:size-2.25 after:rounded-full after:bg-[var(--signal-warning)] max-md:static max-md:mt-1.5 max-md:size-2.25 max-md:rounded-full max-md:after:hidden"></span><div><h3 class="mb-1 text-sm max-md:text-base">Keep Git close</h3><p class="m-0 text-[13px] leading-6 text-[var(--muted)] max-md:text-sm">See your branch and changes, right here.</p></div></article>
+      {callouts.map(({ title, desc, pinClass, extraClass }) => (
+        <article class={`relative px-4 pt-11 max-md:grid max-md:grid-cols-[12px_1fr] max-md:gap-x-3 max-md:px-1 max-md:py-5 ${extraClass}`}>
+          <span class={`absolute left-5 top-0 h-8.5 w-px ${pinClass} after:absolute after:-bottom-px after:-left-1 after:size-2.25 after:rounded-full max-md:static max-md:mt-1.5 max-md:size-2.25 max-md:rounded-full max-md:after:hidden`}></span>
+          <div>
+            <h3 class="mb-1 text-sm max-md:text-base">{title}</h3>
+            <p class="m-0 text-[13px] leading-6 text-[var(--muted)] max-md:text-sm">{desc}</p>
+          </div>
+        </article>
+      ))}
     </div>
   </figure>
   <div class="grid grid-cols-2 gap-10 max-md:grid-cols-1 max-md:gap-8">
@@ -31,7 +66,7 @@ import { Card } from "./ui/card";
       <Card className="h-full p-5">
         <h3 class="mb-3 max-w-[18ch] text-xl">Your own signals.</h3>
         <p class="m-0 max-w-[42ch] leading-7 text-[var(--muted)]">Extend the native app with your own commands.</p>
-        <div class="mt-4.5 rounded border border-[var(--line)] bg-[var(--bg)] px-4 py-5 font-mono text-[13px] leading-[1.4] text-[#cdd9e5]">Custom text · Symbols · Commands</div>
+        <div class="mt-4.5 rounded border border-[var(--line)] bg-[var(--bg)] px-4 py-5 font-mono text-[13px] leading-[1.4] text-[var(--signal-neutral)]">Custom text · Symbols · Commands</div>
       </Card>
     </article>
   </div>

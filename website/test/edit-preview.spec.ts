@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import defaultLayout from "../src/sample-settings.json" with { type: "json" };
+import packageJson from "../../package.json" with { type: "json" };
 
 const storageKey = "cxstatusline.playground.settings.v1";
 
@@ -54,7 +55,7 @@ test("release metadata shows one refreshed npm version", async ({ page }) => {
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
-  await expect(page.locator("#release-version")).toHaveText("v0.4.1");
+  await expect(page.locator("#release-version")).toHaveText(`v${packageJson.version}`);
   await expect(page.locator("#release-sync")).toHaveText("refreshing");
   releaseRequested();
   await expect(page.locator("#release-version")).toHaveText("v9.9.9");

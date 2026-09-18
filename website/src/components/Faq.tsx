@@ -17,7 +17,7 @@ export default function Faq() {
           <AccordionItem value={`item-${index + 1}`} key={question}>
             <AccordionTrigger className="py-5 text-lg md:text-xl">{question}</AccordionTrigger>
             <AccordionPanel className="text-base md:text-lg">
-              {index === 3 ? <a className="text-link" href="https://github.com/adrijshikhar/cxstatusline#requirements">{answer}</a> : answer}
+              {index === 3 ? <a href="https://github.com/adrijshikhar/cxstatusline#requirements">{answer}</a> : answer}
             </AccordionPanel>
           </AccordionItem>
         ))}

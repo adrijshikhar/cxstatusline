@@ -39,5 +39,4 @@
 .config-btn:focus-visible { outline: 1px solid var(--accent); color: var(--text); }
 .config-btn:disabled { opacity: .45; cursor: not-allowed; }
 .config-icon { font-size: .8em; opacity: .85; }
-.mobile-only { display: none; }
 #desktop-playground[hidden], [hidden] { display: none !important; }

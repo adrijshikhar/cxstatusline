@@ -27,7 +27,10 @@
   --signal-danger: #e06c75;
   --signal-success: #98c379;
   --signal-warning: #e5c07b;
+  --signal-purple: #c678dd;
   --signal-neutral: #cdd9e5;
+  --status-verified: #61c454;
+  --status-patch: #e5c07b;
   --line: #212c3d;
   --line-soft: #182231;
   color: var(--text);

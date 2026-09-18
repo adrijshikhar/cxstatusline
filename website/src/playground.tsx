@@ -122,12 +122,12 @@ function showPreview(focus = true, rerender = true): void {
   if (focus) focusCurrentView();
 }
 
-const writeSettings = async (_path: string, settings: Settings): Promise<void> => {
+async function writeSettings(_path: string, settings: Settings): Promise<void> {
   savedSettings = persistSettings(window.localStorage, settings);
   hasSavedSettings = true;
   downloadButton.disabled = false;
   if (view === "editor") setEditorStatus();
-};
+}
 
 function pickImportFile(): Promise<string | null> {
   return new Promise((resolve, reject) => {
@@ -238,7 +238,16 @@ export function boot(): Promise<void> {
 export function setDesktopVisible(visible: boolean): void {
   desktopPlayground.hidden = !visible;
   desktopPlayground.inert = !visible;
-  if (mounted) mounted.term.options.disableStdin = visible && view === "editor" ? false : true;
+  if (mounted) mounted.term.options.disableStdin = !(visible && view === "editor");
+}
+
+function downloadJsonFile(filename: string, data: unknown): void {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 async function handleImport(): Promise<void> {
@@ -267,10 +276,5 @@ async function handleImport(): Promise<void> {
 editButton.addEventListener("click", () => { void renderEditor(); });
 importButton?.addEventListener("click", () => { void handleImport(); });
 downloadButton.addEventListener("click", () => {
-  const link = document.createElement("a");
-  const url = URL.createObjectURL(new Blob([JSON.stringify(savedSettings, null, 2)], { type: "application/json" }));
-  link.href = url;
-  link.download = "cxstatusline-settings.json";
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+  downloadJsonFile("cxstatusline-settings.json", savedSettings);
 });
