@@ -9,7 +9,7 @@ Configure everything interactively by running `cxstatusline` with no arguments. 
 
 ## Widget catalog
 
-34 widgets across one to three rows. Type IDs match ccstatusline's, so a ccstatusline preset imports
+36 widgets across one to three rows. Type IDs match ccstatusline's, so a ccstatusline preset imports
 without translation; widgets it has that Codex cannot support are reported and skipped on import.
 ### Core
 
@@ -67,6 +67,8 @@ without translation; widgets it has that Codex cannot support are reported and s
 
 | Type | Name | Shows |
 |---|---|---|
+| `five-hour-usage` | 5h Usage | Shows 5-hour API usage percentage |
+| `five-hour-reset-timer` | 5h Reset Timer | Shows time remaining until 5-hour usage reset |
 | `weekly-usage` | Weekly Usage | Shows weekly API usage percentage |
 | `weekly-reset-timer` | Weekly Reset Timer | Shows time remaining until weekly usage reset |
 

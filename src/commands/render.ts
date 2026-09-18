@@ -37,6 +37,8 @@ export async function runRender(stdin: string, deps: RenderDeps): Promise<Render
       freeMemoryBytes: deps.freeMemoryBytes,
       memoryUsage: deps.memoryUsage ?? { used: deps.freeMemoryBytes, total: deps.freeMemoryBytes },
       usageData: {
+        fiveHourUsage: payload.usage?.five_hour?.used === undefined ? undefined : payload.usage.five_hour.used * 100,
+        fiveHourResetAt: payload.usage?.five_hour?.resets_at,
         weeklyUsage: payload.usage?.weekly?.used === undefined ? undefined : payload.usage.weekly.used * 100,
         weeklyResetAt: payload.usage?.weekly?.resets_at,
       },

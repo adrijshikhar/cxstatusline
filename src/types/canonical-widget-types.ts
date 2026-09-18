@@ -4,6 +4,7 @@ export const CANONICAL_WIDGET_TYPES = [
   "context-bar", "context-length", "context-window", "context-percentage",
   "context-percentage-usable", "tokens-input", "tokens-output", "tokens-cached",
   "tokens-total", "cache-hit-rate", "input-speed", "output-speed", "total-speed",
+  "five-hour-usage", "five-hour-reset-timer",
   "weekly-usage", "weekly-reset-timer",
   "session-clock", "session-name", "claude-session-id", "version",
   "current-working-dir", "sandbox-status", "terminal-width", "free-memory",

@@ -18,6 +18,8 @@ function renderFixture(settingsName: string, payloadName: string): string {
     terminalWidth: null,
     freeMemoryBytes: 2 * 1024 ** 3,
     usageData: {
+      fiveHourUsage: data.usage?.five_hour?.used === undefined ? undefined : data.usage.five_hour.used * 100,
+      fiveHourResetAt: data.usage?.five_hour?.resets_at,
       weeklyUsage: data.usage?.weekly?.used === undefined ? undefined : data.usage.weekly.used * 100,
       weeklyResetAt: data.usage?.weekly?.resets_at,
     },

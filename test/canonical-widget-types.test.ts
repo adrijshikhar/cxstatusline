@@ -6,13 +6,14 @@ describe("canonical widget catalog", () => {
   test("the widget type schema is derived from the canonical list", () => {
     expect(WidgetTypeSchema.options).toEqual([...CANONICAL_WIDGET_TYPES]);
   });
-  test("contains exactly the 34 Codex-supported types in order", () => {
+  test("contains exactly the 36 Codex-supported types in order", () => {
     const expected = [
       "separator", "flex-separator", "model", "thinking-effort",
       "git-branch", "git-changes", "git-review", "git-root-dir",
       "context-bar", "context-length", "context-window", "context-percentage",
       "context-percentage-usable", "tokens-input", "tokens-output", "tokens-cached",
       "tokens-total", "cache-hit-rate", "input-speed", "output-speed", "total-speed",
+      "five-hour-usage", "five-hour-reset-timer",
       "weekly-usage", "weekly-reset-timer",
       "session-clock", "session-name", "claude-session-id", "version",
       "current-working-dir", "sandbox-status", "terminal-width", "free-memory",

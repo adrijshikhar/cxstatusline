@@ -17,7 +17,7 @@ import {
     formatUsageDuration,
     formatUsageResetAt,
     getUsageErrorMessage,
-    resolveWeeklyUsageWindow
+    resolveFiveHourUsageWindow
 } from '../utils/usage';
 
 import { makeModifierText } from './shared/editor-display';
@@ -59,19 +59,19 @@ import {
     toggleUsageWeekday
 } from './shared/usage-display';
 
-const WEEKLY_PREVIEW_DURATION_MS = 36.5 * 60 * 60 * 1000;
-const WEEKLY_RESET_PREVIEW_AT = '2026-03-15T08:30:00.000Z';
+const FIVE_HOUR_PREVIEW_DURATION_MS = 2.5 * 60 * 60 * 1000;
+const FIVE_HOUR_RESET_PREVIEW_AT = '2026-03-15T08:30:00.000Z';
 const USAGE_TIMER_LOADING_MESSAGE = '[Loading]';
 
-function isWeeklyResetHoursOnly(item: WidgetItem): boolean {
+function isFiveHourResetHoursOnly(item: WidgetItem): boolean {
     return isMetadataFlagEnabled(item, 'hours');
 }
 
-function toggleWeeklyResetHoursOnly(item: WidgetItem): WidgetItem {
+function toggleFiveHourResetHoursOnly(item: WidgetItem): WidgetItem {
     return toggleMetadataFlag(item, 'hours');
 }
 
-function getWeeklyResetModifierText(item: WidgetItem): string | undefined {
+function getFiveHourResetModifierText(item: WidgetItem): string | undefined {
     const displayMode = getUsageDisplayMode(item);
     const dateMode = isUsageDateMode(item);
     const isBarMode = isUsageProgressMode(displayMode) || isUsageSliderMode(displayMode);
@@ -106,7 +106,7 @@ function getWeeklyResetModifierText(item: WidgetItem): string | undefined {
             if (isUsageWeekdayEnabled(item)) {
                 modifiers.push('weekday');
             }
-        } else if (isWeeklyResetHoursOnly(item)) {
+        } else if (isFiveHourResetHoursOnly(item)) {
             modifiers.push('hours only');
         }
     }
@@ -124,16 +124,16 @@ function getWeeklyResetModifierText(item: WidgetItem): string | undefined {
     return makeModifierText(modifiers);
 }
 
-export class WeeklyResetTimerWidget implements Widget {
+export class FiveHourResetTimerWidget implements Widget {
     getDefaultColor(): string { return 'brightBlue'; }
-    getDescription(): string { return 'Shows time remaining until weekly usage reset'; }
-    getDisplayName(): string { return 'Weekly Reset Timer'; }
+    getDescription(): string { return 'Shows time remaining until 5-hour usage reset'; }
+    getDisplayName(): string { return '5h Reset Timer'; }
     getCategory(): string { return 'Usage'; }
 
     getEditorDisplay(item: WidgetItem): WidgetEditorDisplay {
         return {
             displayText: this.getDisplayName(),
-            modifierText: getWeeklyResetModifierText(item)
+            modifierText: getFiveHourResetModifierText(item)
         };
     }
 
@@ -163,7 +163,7 @@ export class WeeklyResetTimerWidget implements Widget {
         }
 
         if (action === 'toggle-hours') {
-            return toggleWeeklyResetHoursOnly(item);
+            return toggleFiveHourResetHoursOnly(item);
         }
 
         return null;
@@ -174,7 +174,7 @@ export class WeeklyResetTimerWidget implements Widget {
         const inverted = isUsageInverted(item);
         const compact = isUsageCompact(item);
         const dateMode = isUsageDateMode(item);
-        const useDays = !isWeeklyResetHoursOnly(item);
+        const useDays = !isFiveHourResetHoursOnly(item);
         const format = resolveNumberFormat('percent', item, settings);
 
         if (context.isPreview) {
@@ -183,7 +183,7 @@ export class WeeklyResetTimerWidget implements Widget {
             if (isUsageProgressMode(displayMode)) {
                 const barWidth = getUsageProgressBarWidth(displayMode);
                 const progressBar = makeTimerProgressBar(previewPercent, barWidth);
-                return formatRawOrLabeledValue(item, 'Weekly Reset ', `[${progressBar}] ${formatPercent(previewPercent, format)}`);
+                return formatRawOrLabeledValue(item, '5h Reset ', `[${progressBar}] ${formatPercent(previewPercent, format)}`);
             }
 
             if (isUsageSliderMode(displayMode)) {
@@ -191,13 +191,13 @@ export class WeeklyResetTimerWidget implements Widget {
                 const sliderDisplay = displayMode === 'slider'
                     ? `${slider} ${formatPercent(previewPercent, format)}`
                     : slider;
-                return formatRawOrLabeledValue(item, 'Weekly Reset ', sliderDisplay);
+                return formatRawOrLabeledValue(item, '5h Reset ', sliderDisplay);
             }
 
             if (dateMode) {
                 const weekday = isUsageWeekdayEnabled(item);
                 const resetAt = formatUsageResetAt(
-                    WEEKLY_RESET_PREVIEW_AT,
+                    FIVE_HOUR_RESET_PREVIEW_AT,
                     compact,
                     getUsageTimezone(item),
                     getUsageLocale(item),
@@ -207,28 +207,28 @@ export class WeeklyResetTimerWidget implements Widget {
                 const fallback = weekday
                     ? (compact ? 'Sun 08:30Z' : 'Sun 08:30 UTC')
                     : (compact ? '03-15 08:30Z' : '2026-03-15 08:30 UTC');
-                return formatRawOrLabeledValue(item, 'Weekly Reset: ', resetAt ?? fallback);
+                return formatRawOrLabeledValue(item, '5h Reset: ', resetAt ?? fallback);
             }
 
-            return formatRawOrLabeledValue(item, 'Weekly Reset: ', formatUsageDuration(WEEKLY_PREVIEW_DURATION_MS, compact, useDays));
+            return formatRawOrLabeledValue(item, '5h Reset: ', formatUsageDuration(FIVE_HOUR_PREVIEW_DURATION_MS, compact, useDays));
         }
 
         const usageData = context.usageData ?? {};
-        const window = resolveWeeklyUsageWindow(usageData, context.now?.getTime());
+        const window = resolveFiveHourUsageWindow(usageData, context.now?.getTime());
 
         if (!window) {
             if (usageData.error) {
                 return getUsageErrorMessage(usageData.error);
             }
 
-            return formatRawOrLabeledValue(item, 'Weekly Reset: ', USAGE_TIMER_LOADING_MESSAGE);
+            return formatRawOrLabeledValue(item, '5h Reset: ', USAGE_TIMER_LOADING_MESSAGE);
         }
 
         if (isUsageProgressMode(displayMode)) {
             const barWidth = getUsageProgressBarWidth(displayMode);
             const percent = inverted ? window.remainingPercent : window.elapsedPercent;
             const progressBar = makeTimerProgressBar(percent, barWidth);
-            return formatRawOrLabeledValue(item, 'Weekly Reset ', `[${progressBar}] ${formatPercent(percent, format)}`);
+            return formatRawOrLabeledValue(item, '5h Reset ', `[${progressBar}] ${formatPercent(percent, format)}`);
         }
 
         if (isUsageSliderMode(displayMode)) {
@@ -237,20 +237,20 @@ export class WeeklyResetTimerWidget implements Widget {
             const sliderDisplay = displayMode === 'slider'
                 ? `${slider} ${formatPercent(percent, format)}`
                 : slider;
-            return formatRawOrLabeledValue(item, 'Weekly Reset ', sliderDisplay);
+            return formatRawOrLabeledValue(item, '5h Reset ', sliderDisplay);
         }
 
         if (dateMode) {
             const timezone = getUsageTimezone(item);
             const locale = getUsageLocale(item);
-            const resetAt = formatUsageResetAt(usageData.weeklyResetAt, compact, timezone, locale, isUsage12HourClock(item), isUsageWeekdayEnabled(item));
+            const resetAt = formatUsageResetAt(usageData.fiveHourResetAt, compact, timezone, locale, isUsage12HourClock(item), isUsageWeekdayEnabled(item));
             if (resetAt) {
-                return formatRawOrLabeledValue(item, 'Weekly Reset: ', resetAt);
+                return formatRawOrLabeledValue(item, '5h Reset: ', resetAt);
             }
         }
 
         const remainingTime = formatUsageDuration(window.remainingMs, compact, useDays);
-        return formatRawOrLabeledValue(item, 'Weekly Reset: ', remainingTime);
+        return formatRawOrLabeledValue(item, '5h Reset: ', remainingTime);
     }
 
     getCustomKeybinds(item?: WidgetItem): CustomKeybind[] {
