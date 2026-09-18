@@ -18,7 +18,7 @@ on:
       codex_version:
         description: Codex version to build (auto = highest stable upstream release that this repo patches)
         type: choice
-        options: ["auto", "0.154.0", "0.153.4", "0.153.0", "0.152.1"]
+        options: ["auto", "0.155.0", "0.154.0", "0.153.4", "0.153.0", "0.152.1"]
         default: "auto"
       platforms:
         description: Target platforms to build (arm64,x64 or arm64)
