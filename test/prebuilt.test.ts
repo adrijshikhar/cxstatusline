@@ -213,8 +213,9 @@ describe("detect CLI exit codes", () => {
     const env = { ...process.env };
     delete env.GITHUB_STEP_SUMMARY;
     delete env.GITHUB_OUTPUT;
+    delete env.GITHUB_EVENT_NAME;
     try {
-      execFileSync(process.execPath, ["scripts/prebuilt.ts", "detect", "--codex-version", codexVersion], {
+      execFileSync(process.execPath, ["scripts/prebuilt.ts", "detect", "--codex-version", codexVersion, "--event", "workflow_dispatch"], {
         cwd: root,
         encoding: "utf8",
         env,
@@ -243,6 +244,17 @@ describe("detect CLI exit codes", () => {
     } finally {
       if (previous === undefined) delete process.env.GITHUB_STEP_SUMMARY;
       else process.env.GITHUB_STEP_SUMMARY = previous;
+    }
+  });
+
+  test("detect CLI exit codes isolate from an inherited GITHUB_EVENT_NAME=schedule", () => {
+    const previous = process.env.GITHUB_EVENT_NAME;
+    process.env.GITHUB_EVENT_NAME = "schedule";
+    try {
+      expect(runDetectCli("9.9.9").status).toBe(3);
+    } finally {
+      if (previous === undefined) delete process.env.GITHUB_EVENT_NAME;
+      else process.env.GITHUB_EVENT_NAME = previous;
     }
   });
 
