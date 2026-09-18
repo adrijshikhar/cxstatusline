@@ -16,7 +16,11 @@ import { RUST_NOTICES_MARKER } from "./rust-licenses";
 /** The deployment-target ceiling the release promises. */
 export const MAX_MINOS = "14.0";
 
-const MACHO_ARCH: Record<Platform, string> = { "darwin-arm64": "arm64", "darwin-x64": "x86_64" };
+const MACHO_ARCH: Partial<Record<Platform, string>> = { "darwin-arm64": "arm64", "darwin-x64": "x86_64" };
+const ELF_MACHINE: Partial<Record<Platform, string>> = {
+  "linux-x64": "Advanced Micro Devices X86-64",
+  "linux-arm64": "AArch64",
+};
 
 export interface VerifyOptions {
   readonly outDir: string;
@@ -107,6 +111,25 @@ function checkMachO(staged: string, o: VerifyOptions, checks: string[]): void {
   checks.push("Mach-O arch/linkage/minos verified");
 }
 
+function checkElf(staged: string, o: VerifyOptions, checks: string[]): void {
+  for (const name of ["codex", "codex-code-mode-host"] as const) {
+    const file = join(staged, name);
+    const header = probe("readelf", ["-h", file]);
+    if (!header.includes("ELF64")) {
+      throw new Error(`${name}: expected ELF64 binary`);
+    }
+    const expected = ELF_MACHINE[o.platform];
+    if (expected && !header.includes(expected)) {
+      throw new Error(`${name}: ELF machine does not match ${expected} for ${o.platform}`);
+    }
+    const dynamic = probe("readelf", ["-d", file]);
+    if (!dynamic.includes("DYNAMIC")) {
+      throw new Error(`${name}: binary is not dynamically linked`);
+    }
+  }
+  checks.push("ELF arch/linkage verified");
+}
+
 function checkSmoke(staged: string, o: VerifyOptions, checks: string[]): void {
   validateVersion(probe(join(staged, "codex"), ["--version"]), o.codexVersion);
   if (!probe(join(staged, "codex-code-mode-host"), ["--help"]).includes("--listen")) {
@@ -159,8 +182,13 @@ export async function verifyOutput(o: VerifyOptions): Promise<VerifyReport> {
     checks.push("archive passes the installer's five-file validator");
     await checkExtractedDigests(staged, artifact, checks);
     checkRustNotices(staged, checks);
-    if (o.skipMacho) checks.push("Mach-O arch/linkage/minos SKIPPED");
-    else checkMachO(staged, o, checks);
+    if (o.skipMacho) {
+      checks.push(o.platform.startsWith("linux-") ? "ELF arch/linkage SKIPPED" : "Mach-O arch/linkage/minos SKIPPED");
+    } else if (o.platform.startsWith("linux-")) {
+      checkElf(staged, o, checks);
+    } else {
+      checkMachO(staged, o, checks);
+    }
     checkSmoke(staged, o, checks);
   } finally {
     rmSync(staged, { recursive: true, force: true });

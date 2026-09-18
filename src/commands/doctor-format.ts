@@ -1,5 +1,6 @@
 import chalk from "chalk";
 import type { DoctorLine } from "./doctor";
+import { PLATFORMS } from "../distribution";
 import { renderBox, renderHeader, renderSectionTitle, symbols } from "../ui/box";
 import { VERSION } from "../version-info";
 
@@ -37,7 +38,7 @@ function formatValue(raw: unknown, ok: boolean | null): string {
   if (value === "absent" || value === "none" || value === "never" || value.startsWith("n/a")) {
     return chalk.dim(value);
   }
-  if (value === "free" || value === "ours" || value === "darwin-arm64" || value === "darwin-x64") {
+  if (value === "free" || value === "ours" || (PLATFORMS as readonly string[]).includes(value)) {
     return chalk.green(value);
   }
   return chalk.white(value);

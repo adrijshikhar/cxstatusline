@@ -177,8 +177,8 @@ jobs:
           set -o pipefail
           {
             uname -m
-            sw_vers
-            bun -e 'if (process.platform !== "darwin" || process.arch !== process.env.EXPECTED_ARCH) throw new Error("wrong native runner")'
+            if command -v sw_vers >/dev/null 2>&1; then sw_vers; fi
+            bun -e 'if (process.arch !== process.env.EXPECTED_ARCH) throw new Error("wrong native runner")'
             df -h .
           } 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
       # Clones the exact upstream tag and applies the exact patch; `--check` first, never a fixup.
@@ -213,7 +213,13 @@ jobs:
           set -o pipefail
           {
             if ! command -v just >/dev/null || ! command -v cargo-nextest >/dev/null || ! command -v cargo-about >/dev/null || ! command -v cargo-deny >/dev/null; then
-              brew install just cargo-nextest cargo-about cargo-deny
+              if command -v brew >/dev/null 2>&1; then
+                brew install just cargo-nextest cargo-about cargo-deny
+              elif command -v cargo-binstall >/dev/null 2>&1; then
+                cargo binstall -y --locked cargo-nextest cargo-about cargo-deny just
+              else
+                cargo install --locked cargo-nextest cargo-about cargo-deny just
+              fi
             fi
             cd upstream/codex-rs
             rustup show active-toolchain
@@ -263,17 +269,25 @@ jobs:
           # kept as a second file because cargo can rewrite the lockfile during the build.
           git -C upstream diff --cached -- codex-rs/Cargo.lock > provenance/Cargo.lock.patched.diff
           git -C upstream diff -- codex-rs/Cargo.lock > provenance/Cargo.lock.build.diff
-          shasum -a 256 upstream/codex-rs/Cargo.lock > provenance/Cargo.lock.sha256
+          (sha256sum upstream/codex-rs/Cargo.lock 2>/dev/null || shasum -a 256 upstream/codex-rs/Cargo.lock) > provenance/Cargo.lock.sha256
           {
             echo "upstream_commit=$UPSTREAM_COMMIT"
             echo "source_commit=$SOURCE_COMMIT"
             uname -m
-            sw_vers
+            if command -v sw_vers >/dev/null 2>&1; then sw_vers; fi
             rustc --version
           } > provenance/environment.txt
           for bin in codex codex-code-mode-host; do
-            vtool -show-build "upstream/codex-rs/target/release/$bin" >> provenance/macho.txt
-            otool -L "upstream/codex-rs/target/release/$bin" >> provenance/macho.txt
+            if command -v vtool >/dev/null 2>&1; then
+              vtool -show-build "upstream/codex-rs/target/release/$bin" >> provenance/macho.txt
+            fi
+            if command -v otool >/dev/null 2>&1; then
+              otool -L "upstream/codex-rs/target/release/$bin" >> provenance/macho.txt
+            fi
+            if command -v readelf >/dev/null 2>&1; then
+              readelf -h "upstream/codex-rs/target/release/$bin" >> provenance/elf.txt
+              readelf -d "upstream/codex-rs/target/release/$bin" >> provenance/elf.txt
+            fi
           done
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()

@@ -83,7 +83,11 @@ function resolveSource(flags: Record<string, string>, run: GhRunner, event: stri
 export interface MatrixEntry {
   readonly runner: string | readonly string[];
   readonly arch: "arm64" | "x64";
-  readonly target: "aarch64-apple-darwin" | "x86_64-apple-darwin";
+  readonly target:
+    | "aarch64-apple-darwin"
+    | "x86_64-apple-darwin"
+    | "x86_64-unknown-linux-gnu"
+    | "aarch64-unknown-linux-gnu";
   readonly platform: Platform;
 }
 
@@ -111,6 +115,22 @@ export function buildMatrix(platforms: readonly Platform[], selfHosted: boolean)
         arch: "x64",
         target: "x86_64-apple-darwin",
         platform: "darwin-x64",
+      };
+    }
+    if (platform === "linux-x64") {
+      return {
+        runner: "ubuntu-latest",
+        arch: "x64",
+        target: "x86_64-unknown-linux-gnu",
+        platform: "linux-x64",
+      };
+    }
+    if (platform === "linux-arm64") {
+      return {
+        runner: "ubuntu-24.04-arm",
+        arch: "arm64",
+        target: "aarch64-unknown-linux-gnu",
+        platform: "linux-arm64",
       };
     }
     throw new Error(`unknown platform ${String(platform)}`);
@@ -280,7 +300,7 @@ export async function runDetect(flags: Record<string, string>): Promise<void> {
   const event = flags["event"] ?? process.env.GITHUB_EVENT_NAME ?? "workflow_dispatch";
   const selfHosted = flags["self-hosted"] === "true";
   const platforms = releasePlatforms(flags);
-  if (selfHosted && platforms.includes("darwin-x64")) {
+  if (selfHosted && platforms.some((p) => p !== "darwin-arm64")) {
     throw new Error("self-hosted runner is arm64 only");
   }
   const matrix = buildMatrix(platforms, selfHosted);

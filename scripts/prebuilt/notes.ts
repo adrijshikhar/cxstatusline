@@ -67,6 +67,8 @@ function architecturesSection(platforms: readonly Platform[]): string {
   const descriptions = platforms.map((p) => {
     if (p === "darwin-arm64") return "darwin-arm64 (Apple Silicon)";
     if (p === "darwin-x64") return "darwin-x64 (Intel)";
+    if (p === "linux-x64") return "linux-x64 (Linux x86_64)";
+    if (p === "linux-arm64") return "linux-arm64 (Linux aarch64)";
     return p;
   });
   return `${descriptions.join(", ")}.`;

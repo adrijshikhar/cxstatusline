@@ -15,6 +15,7 @@ import {
   emit,
   git,
   patchesDir,
+  releasePlatform,
   required,
   resetDirectory,
   root,
@@ -71,7 +72,7 @@ export async function runPackage(flags: Record<string, string>): Promise<void> {
   const frozenCommit = sourceCommit(required(flags, "source-commit"));
   const stagingDir = resolve(required(flags, "staging"));
   const outDir = resolve(required(flags, "out"));
-  const platform = platformFor(process.platform, process.arch);
+  const platform = flags["platform"] ? releasePlatform(flags) : platformFor(process.platform, process.arch);
   const workflowUrl = flags["workflow-url"] ?? workflowUrlFromEnv(process.env);
   if (workflowUrl === null || workflowUrl === "true") {
     throw new Error("no workflow run URL: pass --workflow-url or run inside GitHub Actions");
@@ -115,7 +116,7 @@ export async function runVerify(flags: Record<string, string>): Promise<void> {
     outDir: resolve(required(flags, "out")),
     cxVersion: flags["cx-version"],
     codexVersion: required(flags, "codex-version"),
-    platform: platformFor(process.platform, process.arch),
+    platform: flags["platform"] ? releasePlatform(flags) : platformFor(process.platform, process.arch),
     skipMacho: flags["skip-macho"] === "true",
   });
   summary([

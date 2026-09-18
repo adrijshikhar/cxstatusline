@@ -6,7 +6,7 @@ set -euo pipefail
 upstream="$1"
 target="$2"
 case "$target" in
-  aarch64-apple-darwin|x86_64-apple-darwin) ;;
+  aarch64-apple-darwin|x86_64-apple-darwin|x86_64-unknown-linux-gnu|aarch64-unknown-linux-gnu) ;;
   *) echo "Unsupported V8 target: $target" >&2; exit 1 ;;
 esac
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
@@ -32,6 +32,6 @@ awk -v archive="$archive" -v binding="$binding" '
     if ($2 == archive) a++; else if ($2 == binding) b++; else exit 1 }
   END { if (NR != 2 || a != 1 || b != 1) exit 1 }
 ' "$staging/$checksums"
-(cd "$staging" && tr -d '\r' < "$checksums" | shasum -a 256 -c -)
+(cd "$staging" && tr -d '\r' < "$checksums" | (sha256sum -c - 2>/dev/null || shasum -a 256 -c -))
 printf 'RUSTY_V8_ARCHIVE=%s\nRUSTY_V8_SRC_BINDING_PATH=%s\n' \
   "$staging/$archive" "$staging/$binding" >> "$GITHUB_ENV"

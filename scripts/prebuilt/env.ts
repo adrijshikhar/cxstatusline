@@ -9,7 +9,7 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import type { Platform } from "../../src/distribution";
+import { PLATFORMS, type Platform } from "../../src/distribution";
 
 export const root = resolve(import.meta.dir, "..", "..");
 
@@ -46,8 +46,6 @@ export function optional(flags: Record<string, string>, name: string): string | 
   return value === undefined || value === "" || value === "true" ? null : value;
 }
 
-const PLATFORMS: readonly Platform[] = ["darwin-arm64", "darwin-x64"];
-
 /**
  * The platform of the *release*, which is a property of the release and not of the machine asking.
  * `detect` and `report` run on Linux runners and only ever handle names and digests, so deriving
@@ -68,15 +66,21 @@ export function releasePlatforms(flags: Record<string, string>): Platform[] {
   }
   const value = flags["platforms"];
   if (value === undefined || value === "true") return ["darwin-arm64"];
+  if (value === "all") return [...PLATFORMS];
+  if (value === "darwin") return ["darwin-arm64", "darwin-x64"];
+  if (value === "linux") return ["linux-x64", "linux-arm64"];
   const tokens = value.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
-  return tokens.map((token) => {
-    if (token === "arm64") return "darwin-arm64";
-    if (token === "x64") return "darwin-x64";
+  return tokens.flatMap((token) => {
+    if (token === "arm64") return ["darwin-arm64"];
+    if (token === "x64") return ["darwin-x64"];
+    if (token === "darwin") return ["darwin-arm64", "darwin-x64"];
+    if (token === "linux") return ["linux-x64", "linux-arm64"];
+    if (token === "all") return [...PLATFORMS];
     const found = PLATFORMS.find((p) => p === token);
     if (found === undefined) {
       throw new Error(`--platforms must be one of ${PLATFORMS.join(", ")} or arm64, x64 (got ${JSON.stringify(token)})`);
     }
-    return found;
+    return [found];
   });
 }
 
