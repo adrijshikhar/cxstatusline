@@ -7,6 +7,10 @@ import { VERSION } from "./version-info";
 import { resolvePaths } from "./paths";
 import { realContext, type Context } from "./context";
 import { appendLog, describeOutcome, runAcquisition, runInstall, runPatch, runUpdate, simulateDrift } from "./patch/run";
+import { loadState, upstreamFor } from "./patch/acquire";
+import { readUpstreamVersion } from "./codex/upstream";
+import { loadManifest, supportedCodexVersions } from "./patch/manifest";
+import { promptCodexVersion } from "./ui/prompt-version";
 import { installHook, uninstallHook } from "./hook/install";
 import { realHookDeps, runHook } from "./hook/run";
 import { doctorReport, formatDoctor } from "./commands/doctor";
@@ -35,13 +39,15 @@ export interface MainDeps {
    */
   readonly context?: (env: Env, io: { say(line: string): void; log(line: string): void }) => Context;
   readonly transport?: TransportOptions;
+  readonly promptVersion?: typeof promptCodexVersion;
 }
 
 export const USAGE = `usage: cxstatusline [command]
 
   (no command)                open the interactive configuration TUI (TTY only)
   render                      read payload v1 on stdin, print one to three ANSI lines
-  install [--compile]         install the published Codex pair (--compile builds it from source)
+  install [--compile] [--codex-version <v>] [-y]
+                              install the published Codex pair (--compile builds it from source)
   patch [--force]             build and install the patched Codex from source
   patch --simulate-drift <v>  record <v> as the installed version so the next session sees drift
   update [--compile|--force]  run upstream's own updater, then install the pair for it
@@ -94,16 +100,83 @@ async function patchCommand(argv: readonly string[], io: MainIo, deps: MainDeps)
 }
 
 /**
- * `install` and `install --compile`. Anything else after `install` is a typo, not a default:
- * silently ignoring an unknown flag would let `install --compiled` quietly download instead.
+ * `install [--compile] [--codex-version <v>] [-y]`:
+ * Installs the Codex pair. If in an interactive terminal and no version is specified, prompts
+ * the user with supported versions from the patch manifest.
  */
 async function installCommand(argv: readonly string[], io: MainIo, deps: MainDeps): Promise<number> {
-  const flags = argv.slice(1);
-  if (flags.length > 1 || (flags.length === 1 && flags[0] !== "--compile")) {
-    io.stderr(USAGE);
-    return 2;
+  let compile = false;
+  let codexVersion: string | undefined;
+  let yes = false;
+
+  let i = 1;
+  while (i < argv.length) {
+    const arg = argv[i]!;
+    if (arg === "--compile") {
+      compile = true;
+      i++;
+    } else if (arg === "-y" || arg === "--yes") {
+      yes = true;
+      i++;
+    } else if (arg === "--codex-version") {
+      i++;
+      if (i >= argv.length || argv[i]!.startsWith("-")) {
+        io.stderr("--codex-version requires a version argument\n");
+        return 2;
+      }
+      codexVersion = argv[i]!;
+      i++;
+    } else if (arg.startsWith("--codex-version=")) {
+      const v = arg.slice("--codex-version=".length);
+      if (!v) {
+        io.stderr("--codex-version requires a version argument\n");
+        return 2;
+      }
+      codexVersion = v;
+      i++;
+    } else {
+      io.stderr(USAGE);
+      return 2;
+    }
   }
-  return runInstall(contextFor(io, deps), { compile: flags[0] === "--compile" }, deps.transport);
+
+  const ctx = contextFor(io, deps);
+
+  if (io.isTTY === true && !yes && !codexVersion) {
+    try {
+      const manifest = loadManifest(ctx.patchesDir);
+      const supported = supportedCodexVersions(manifest);
+      if (supported.length > 0) {
+        let defaultVersion: string | undefined;
+        try {
+          const located = upstreamFor(ctx, loadState(ctx));
+          if ("bin" in located) {
+            const upstream = readUpstreamVersion(located.bin, ctx.run);
+            if (upstream) {
+              const semverStr = `${upstream.major}.${upstream.minor}.${upstream.patch}`;
+              if (supported.includes(semverStr)) {
+                defaultVersion = semverStr;
+              }
+            }
+          }
+        } catch {
+          // ignore detection error
+        }
+
+        const prompter = deps.promptVersion ?? promptCodexVersion;
+        codexVersion = await prompter({
+          supportedVersions: supported,
+          defaultVersion,
+          isTTY: true,
+          say: (l) => io.stdout(`${l}\n`),
+        });
+      }
+    } catch {
+      // If manifest fails to load, runInstall will surface it during acquisition
+    }
+  }
+
+  return runInstall(ctx, { compile, codexVersion }, deps.transport);
 }
 
 /**

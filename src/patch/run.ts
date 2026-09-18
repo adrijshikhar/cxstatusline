@@ -107,12 +107,17 @@ export function runPatch(ctx: Context, opts: { force: boolean }, transport: Tran
   });
 }
 
+export interface InstallOptions {
+  readonly compile: boolean;
+  readonly codexVersion?: string;
+}
+
 /**
- * `cxstatusline install [--compile]`: acquire a pair, then merge the SessionStart hook.
+ * `cxstatusline install [--compile] [--codex-version <v>]`: acquire a pair, then merge the SessionStart hook.
  * Why the hook write is caught: the pair is already active at that point, so a hand-broken
  * hooks.json must not make `install` look like it did nothing.
  */
-export async function runInstall(ctx: Context, opts: { compile: boolean }, transport: TransportOptions = {}): Promise<number> {
+export async function runInstall(ctx: Context, opts: InstallOptions, transport: TransportOptions = {}): Promise<number> {
   ctx.say(renderInstallHeader(opts.compile));
   const progress = createInstallProgressTracker({
     isTTY: process.stdout?.isTTY,
@@ -122,7 +127,15 @@ export async function runInstall(ctx: Context, opts: { compile: boolean }, trans
 
   let outcome: PatchOutcome;
   try {
-    outcome = await runAcquisition(ctx, { source: opts.compile ? "compiled" : "prebuilt", force: true }, progress.transport);
+    outcome = await runAcquisition(
+      ctx,
+      {
+        source: opts.compile ? "compiled" : "prebuilt",
+        force: true,
+        targetVersion: opts.codexVersion,
+      },
+      progress.transport,
+    );
   } finally {
     progress.finish();
   }

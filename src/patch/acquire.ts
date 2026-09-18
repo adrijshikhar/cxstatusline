@@ -135,9 +135,10 @@ async function acquireLocked(
   if (targetSemver) {
     versionToAcquire = targetSemver;
   } else {
+    const bin = "bin" in located ? located.bin : "codex";
     const upstream = "bin" in located ? readUpstreamVersion(located.bin, ctx.run) : null;
     if (!upstream) {
-      const reason = `could not read a version from ${located.bin} --version`;
+      const reason = `could not read a version from ${bin} --version`;
       recordFailure(ctx, state, "unknown", reason);
       return { kind: "refused", reason };
     }
