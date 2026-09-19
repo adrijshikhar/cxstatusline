@@ -17,12 +17,14 @@ export function parseDiffShortStat(stat: string): GitChangeCounts {
   };
 }
 
+export const GIT_EXEC_TIMEOUT = 5_000;
+
 export const defaultGitRunner: GitRunner = (args: string[], cwd: string): string => {
   const result = spawnSync("git", args, {
     cwd,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
-    timeout: 300,
+    timeout: GIT_EXEC_TIMEOUT,
     env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
     windowsHide: true,
   });
