@@ -73,7 +73,7 @@ const ARCHIVE_PREFIX = "cxstatusline-codex";
 const HEX40 = /^[0-9a-f]{40}$/;
 const HEX64 = /^[0-9a-f]{64}$/;
 const ISO_8601 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
-const WORKFLOW_URL = /^https:\/\/github\.com\/adrijshikhar\/cxstatusline\/actions\/runs\/\d+$/;
+const WORKFLOW_URL = /^https:\/\/github\.com\/adrijshikhar\/cxstatusline\/actions\/runs\/(\d+|local-docker)$/;
 
 // ---- Version helpers ----
 
