@@ -393,4 +393,30 @@ describe("publishRelease", () => {
     const uploaded = fake2.of("release upload").slice(1).map((c) => c[3]!.split("/").pop());
     expect(uploaded).toEqual([x64, "manifest.json", "SHA256SUMS"]);
   });
+
+  test("appends a new platform to an existing published release and unifies manifest", async () => {
+    const dirDarwin = await releaseDir(SOURCE);
+    const h = handles();
+    const fake = releaseServer(h);
+    const outcome1 = await publishRelease(publishArgs(dirDarwin, fake.run));
+    expect(outcome1.kind).toBe("published");
+    expect(h.draft.value).toBe(false);
+
+    const newSource = "c".repeat(40);
+    const dirLinux = await multiReleaseDir(["linux-x64"], newSource);
+    const outcome2 = await publishRelease({
+      ...publishArgs(dirLinux, fake.run),
+      sourceCommit: newSource,
+      platforms: ["linux-x64"],
+    });
+    expect(outcome2.kind).toBe("published");
+
+    const filenames = h.assets.map((a) => a.name).sort();
+    const arm64 = `cxstatusline-codex-${CODEX}-darwin-arm64.tar.gz`;
+    const linuxX64 = `cxstatusline-codex-${CODEX}-linux-x64.tar.gz`;
+    expect(filenames).toEqual([arm64, linuxX64, "SHA256SUMS", "manifest.json"].sort());
+
+    const unifiedManifest = JSON.parse(readFileSync(join(dirLinux, "manifest.json"), "utf8"));
+    expect(unifiedManifest.artifacts.map((a: { platform: string }) => a.platform).sort()).toEqual(["darwin-arm64", "linux-x64"].sort());
+  });
 });

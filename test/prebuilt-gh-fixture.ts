@@ -72,7 +72,10 @@ export async function releaseDir(sourceCommit = SOURCE, patchSha256 = PATCH_SHA)
 }
 
 /** Multi-platform release directory: archives for each platform + merged manifest.json + SHA256SUMS. */
-export async function multiReleaseDir(platforms: readonly Platform[] = ["darwin-arm64", "darwin-x64"]): Promise<string> {
+export async function multiReleaseDir(
+  platforms: readonly Platform[] = ["darwin-arm64", "darwin-x64"],
+  sourceCommit = SOURCE,
+): Promise<string> {
   const stage = tmp("staging-multi");
   for (const name of ARCHIVE_ENTRIES) {
     const executable = name === "codex" || name === "codex-code-mode-host";
@@ -93,7 +96,7 @@ export async function multiReleaseDir(platforms: readonly Platform[] = ["darwin-
         platform,
         upstreamCommit: "b".repeat(40),
         patchSha256: PATCH_SHA,
-        sourceCommit: SOURCE,
+        sourceCommit,
         workflowUrl: RUN_URL,
         createdAt: "2026-09-07T00:00:00Z",
         archive,
@@ -155,7 +158,12 @@ export function releaseServer(h: Handles, extra: Record<string, (a: readonly str
       const file = a[3]!;
       const name = file.slice(file.lastIndexOf("/") + 1);
       cpSync(file, join(server, name));
-      h.assets.push({ name, size: readFileSync(file).length });
+      const existingIdx = h.assets.findIndex((asset) => asset.name === name);
+      if (existingIdx >= 0) {
+        h.assets[existingIdx] = { name, size: readFileSync(file).length };
+      } else {
+        h.assets.push({ name, size: readFileSync(file).length });
+      }
       return ok();
     },
     "release download": (a) => {

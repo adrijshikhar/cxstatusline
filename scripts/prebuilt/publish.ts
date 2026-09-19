@@ -10,7 +10,7 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { type ExpectedRelease, type Platform } from "../../src/distribution";
+import { type ExpectedRelease, type Platform, type ReleaseManifest } from "../../src/distribution";
 import { blockedIssueTitle } from "./detect";
 import { ghText, type GhRunner } from "./gh";
 import { parseProvenance, releaseNotes, releaseTitle, type BuildIdentity } from "./notes";
@@ -24,6 +24,7 @@ import {
   planUploads,
   verifyReleaseDir,
   type ExpectedIdentity,
+  type ReleaseAsset,
   type VerifiedSet,
 } from "./release";
 
@@ -138,7 +139,7 @@ async function reverifyUploaded(o: PublishOptions, set: VerifiedSet): Promise<vo
 export async function publishRelease(o: PublishOptions): Promise<PublishOutcome> {
   const platforms = o.platforms ?? (o.platform ? [o.platform] : ["darwin-arm64"]);
   const release = { cxVersion: o.cxVersion, codexVersion: o.codexVersion, platforms };
-  const set = await verifyReleaseDir(o.dir, release);
+  let set = await verifyReleaseDir(o.dir, release);
   if (set.manifest.sourceCommit !== o.sourceCommit) {
     throw new Error(
       `the downloaded artifact was built from ${set.manifest.sourceCommit} but this run resolved `
@@ -175,7 +176,50 @@ export async function publishRelease(o: PublishOptions): Promise<PublishOutcome>
       );
     }
   } else if (verdict.state === "published-partial") {
-    // published-partial: we don't need provenance checks because the manifest identity already matched
+    // published-partial: download existing manifest and merge any previously published platform artifacts
+    const publishedManifestFile = downloadAsset(o.run, o.tag, "manifest.json", join(o.tmpRoot, "published-manifest"));
+    const publishedManifest = JSON.parse(readFileSync(publishedManifestFile, "utf8")) as ReleaseManifest;
+    const newPlatforms = new Set(set.manifest.artifacts.map((a) => a.platform));
+    const retainedArtifacts = publishedManifest.artifacts.filter((a) => !newPlatforms.has(a.platform));
+
+    if (retainedArtifacts.length > 0) {
+      const unifiedArtifacts = [...retainedArtifacts, ...set.manifest.artifacts].sort((a, b) =>
+        a.platform.localeCompare(b.platform),
+      );
+      const unifiedManifest: ReleaseManifest = {
+        ...set.manifest,
+        artifacts: unifiedArtifacts,
+      };
+      writeFileSync(join(o.dir, "manifest.json"), `${JSON.stringify(unifiedManifest, null, 2)}\n`);
+
+      // Merge SHA256SUMS as well so all archives have their checksums present
+      const publishedSumsFile = downloadAsset(o.run, o.tag, "SHA256SUMS", join(o.tmpRoot, "published-sums"));
+      const publishedSums = parseChecksums(readFileSync(publishedSumsFile, "utf8"));
+      const localSums = parseChecksums(readFileSync(join(o.dir, "SHA256SUMS"), "utf8"));
+      const manifestDigest = await sha256File(join(o.dir, "manifest.json"));
+
+      const unifiedSums: Record<string, string> = { ...publishedSums, ...localSums };
+      unifiedSums["manifest.json"] = manifestDigest.sha256;
+
+      const sumsLines = Object.keys(unifiedSums)
+        .sort()
+        .map((filename) => `${unifiedSums[filename]}  ${filename}\n`)
+        .join("");
+      writeFileSync(join(o.dir, "SHA256SUMS"), sumsLines);
+
+      const sumsDigest = await sha256File(join(o.dir, "SHA256SUMS"));
+      const updatedAssets: ReleaseAsset[] = [
+        ...set.assets.filter((a) => a.name !== "manifest.json" && a.name !== "SHA256SUMS"),
+        { name: "manifest.json", size: manifestDigest.size },
+        { name: "SHA256SUMS", size: sumsDigest.size },
+      ];
+      set = {
+        ...set,
+        manifest: unifiedManifest,
+        manifestSha256: manifestDigest.sha256,
+        assets: updatedAssets,
+      };
+    }
   }
 
   const existing = verdict.state === "absent" ? [] : verdict.view.assets;

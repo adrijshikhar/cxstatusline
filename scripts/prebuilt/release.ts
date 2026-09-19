@@ -211,8 +211,9 @@ export function inspectRelease(run: GhRunner, tag: string): ReleaseView {
 export function downloadAsset(run: GhRunner, tag: string, name: string, dir: string): string {
   if (!SAFE_ASSET_NAME.test(name)) throw new Error(`refusing to download unusable asset name ${JSON.stringify(name)}`);
   mkdirSync(dir, { recursive: true });
-  ghText(run, ["release", "download", tag, "--pattern", name, "--dir", dir]);
   const file = join(dir, name);
+  if (existsSync(file)) rmSync(file, { force: true });
+  ghText(run, ["release", "download", tag, "--pattern", name, "--dir", dir]);
   if (!existsSync(file)) throw new Error(`gh release download ${tag} did not produce ${name}`);
   return file;
 }
@@ -249,7 +250,7 @@ export async function checkExistingRelease(c: ExistingCheck): Promise<ExistingVe
     const raw = JSON.parse(readFileSync(file, "utf8"));
     
     if (missing.length > 0) {
-      if (raw.sourceCommit === c.expected.sourceCommit && raw.patchSha256 === c.expected.patchSha256) {
+      if (raw.patchSha256 === c.expected.patchSha256) {
         return { state: "published-partial", view, missing };
       }
       return { state: "published", view, identical: false, detail: `published release is missing ${missing.join(", ")}` };
@@ -272,7 +273,7 @@ export async function checkExistingRelease(c: ExistingCheck): Promise<ExistingVe
     }
     
     if (!valid) {
-      if (raw.sourceCommit === c.expected.sourceCommit && raw.patchSha256 === c.expected.patchSha256) {
+      if (raw.patchSha256 === c.expected.patchSha256) {
         return { state: "published-partial", view, missing };
       }
       return { state: "published", view, identical: false, detail: "published release manifest is invalid for requested platforms" };
