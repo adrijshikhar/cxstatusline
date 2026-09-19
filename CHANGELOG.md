@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.5.1...v0.6.0) (2026-09-18)
+
+
+### Features
+
+* **distribution:** add Linux support ([#31](https://github.com/adrijshikhar/cxstatusline/issues/31)) ([#60](https://github.com/adrijshikhar/cxstatusline/issues/60)) ([a6089fb](https://github.com/adrijshikhar/cxstatusline/commit/a6089fb14a4a0090b382cb7ea6fc5b8d98d5c108))
+* **distribution:** independent prebuilt versioning ([#53](https://github.com/adrijshikhar/cxstatusline/issues/53)) ([52db4de](https://github.com/adrijshikhar/cxstatusline/commit/52db4de94bf2fff3214b3df2ed2f6257064a2399))
+* **install:** allow selecting Codex version via CLI flag and interactive prompt ([#57](https://github.com/adrijshikhar/cxstatusline/issues/57)) ([dbc47d5](https://github.com/adrijshikhar/cxstatusline/commit/dbc47d5a6c56e2fa6e7d4fa7b179bf292f0cbbdc))
+* **website:** landing page simplification and playground refinements ([#58](https://github.com/adrijshikhar/cxstatusline/issues/58)) ([57ca195](https://github.com/adrijshikhar/cxstatusline/commit/57ca195439a2103e61863c1f8f54207eb7899375))
+* **widgets:** add five-hour usage and reset timer widgets ([#59](https://github.com/adrijshikhar/cxstatusline/issues/59)) ([a8a6bc6](https://github.com/adrijshikhar/cxstatusline/commit/a8a6bc6b0e413aeb7a44912dd52c417745449981))
+
 ## [0.5.1](https://github.com/adrijshikhar/cxstatusline/compare/v0.5.0...v0.5.1) (2026-09-18)
 
 
