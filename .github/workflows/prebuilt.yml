@@ -89,7 +89,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REQUESTED_CODEX_VERSION: ${{ inputs.codex_version || 'auto' }}
-          REQUESTED_PLATFORMS: ${{ inputs.self_hosted && 'arm64' || inputs.platforms || 'arm64,x64' }}
+          REQUESTED_PLATFORMS: ${{ inputs.self_hosted && (inputs.platforms == 'all' && 'darwin-arm64,linux-arm64' || inputs.platforms == 'arm64' && 'darwin-arm64,linux-arm64' || inputs.platforms == 'darwin' && 'darwin-arm64' || inputs.platforms == 'linux' && 'linux-arm64' || inputs.platforms) || inputs.platforms || 'all' }}
           SELF_HOSTED: ${{ inputs.self_hosted && 'true' || 'false' }}
         run: |
           set -o pipefail
@@ -181,8 +181,17 @@ jobs:
             bun -e 'if (process.arch !== process.env.EXPECTED_ARCH) throw new Error("wrong native runner")'
             df -h .
           } 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
+      - name: Build via Docker (Linux target on macOS runner)
+        if: runner.os == 'macOS' && startsWith(matrix.platform, 'linux-')
+        run: |
+          set -o pipefail
+          ./scripts/build-prebuilt-docker.sh \
+            --platform "$PLATFORM" \
+            --codex-version "$CODEX_VERSION" \
+            --workflow-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
       # Clones the exact upstream tag and applies the exact patch; `--check` first, never a fixup.
       - name: Fetch exact upstream and apply patch
+        if: !(runner.os == 'macOS' && startsWith(matrix.platform, 'linux-'))
         id: build
         run: |
           set -o pipefail
@@ -194,6 +203,7 @@ jobs:
       # re-cloned every run (see `resetDirectory` in scripts/prebuilt.ts) - only compiled artifacts
       # and downloaded crates are reused.
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        if: !(runner.os == 'macOS' && startsWith(matrix.platform, 'linux-'))
         with:
           path: |
             upstream/codex-rs/target
@@ -205,10 +215,12 @@ jobs:
             ${{ hashFiles('upstream/codex-rs/Cargo.lock') }}-
             ${{ steps.build.outputs.patch_sha256 }}
       - name: Prepare verified Codex V8 archive and bindings
+        if: !(runner.os == 'macOS' && startsWith(matrix.platform, 'linux-'))
         run: |
           set -o pipefail
           bash scripts/setup-ci-v8.sh "$GITHUB_WORKSPACE/upstream" "$V8_TARGET" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
       - name: Prepare Rust test tools
+        if: !(runner.os == 'macOS' && startsWith(matrix.platform, 'linux-'))
         run: |
           set -o pipefail
           {
@@ -241,23 +253,27 @@ jobs:
             rustup show active-toolchain
           } 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
       - name: Focused patched Rust tests
+        if: !(runner.os == 'macOS' && startsWith(matrix.platform, 'linux-'))
         working-directory: upstream
         run: |
           set -o pipefail
           just test --release -p codex-tui cxstatusline --retries 0 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
       - name: Build synchronized executable pair
+        if: !(runner.os == 'macOS' && startsWith(matrix.platform, 'linux-'))
         working-directory: upstream/codex-rs
         run: |
           set -o pipefail
           cargo build --release -p codex-cli --bin codex \
             -p codex-code-mode-host --bin codex-code-mode-host 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
       - name: Audit Rust dependency licenses and generate notices
+        if: !(runner.os == 'macOS' && startsWith(matrix.platform, 'linux-'))
         run: |
           set -o pipefail
           bun scripts/prebuilt.ts rust-notices --upstream "$GITHUB_WORKSPACE/upstream" \
             --out "$RUNNER_TEMP/rust-notices.md" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
       # `out/` ends up holding exactly the three release assets; nothing else may be added to it.
       - name: Package release assets
+        if: !(runner.os == 'macOS' && startsWith(matrix.platform, 'linux-'))
         run: |
           set -o pipefail
           bun scripts/prebuilt.ts package \
@@ -269,12 +285,14 @@ jobs:
             --platform "$PLATFORM" \
             --out "$GITHUB_WORKSPACE/out" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
       - name: Verify release assets
+        if: !(runner.os == 'macOS' && startsWith(matrix.platform, 'linux-'))
         run: |
           set -o pipefail
           bun scripts/prebuilt.ts verify --out "$GITHUB_WORKSPACE/out" \
             --codex-version "$CODEX_VERSION" \
             --platform "$PLATFORM" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
       - name: Record build provenance
+        if: !(runner.os == 'macOS' && startsWith(matrix.platform, 'linux-'))
         env:
           UPSTREAM_COMMIT: ${{ steps.build.outputs.upstream_commit }}
         run: |

@@ -53,6 +53,10 @@ while [[ $# -gt 0 ]]; do
       REMOTE_HOST="$2"
       shift 2
       ;;
+    --workflow-url)
+      WORKFLOW_URL="$2"
+      shift 2
+      ;;
     --skip-tests)
       SKIP_TESTS=true
       shift
@@ -199,6 +203,24 @@ echo "==> Running build inside container..."
       --out /workspace/out \
       --codex-version "$CODEX_VERSION" \
       --platform "$PLATFORM"
+
+    echo "==> Recording build provenance..."
+    mkdir -p /workspace/provenance
+    cp /tmp/rust-notices.md /workspace/provenance/
+    git -C /workspace/upstream diff --cached -- codex-rs/Cargo.lock > /workspace/provenance/Cargo.lock.patched.diff || true
+    git -C /workspace/upstream diff -- codex-rs/Cargo.lock > /workspace/provenance/Cargo.lock.build.diff || true
+    (sha256sum /workspace/upstream/codex-rs/Cargo.lock 2>/dev/null || shasum -a 256 /workspace/upstream/codex-rs/Cargo.lock) > /workspace/provenance/Cargo.lock.sha256 || true
+    {
+      echo "source_commit=$SOURCE_COMMIT"
+      uname -m
+      rustc --version
+    } > /workspace/provenance/environment.txt
+    for bin in codex codex-code-mode-host; do
+      if command -v readelf >/dev/null 2>&1; then
+        readelf -h "/workspace/upstream/codex-rs/target/release/$bin" >> /workspace/provenance/elf.txt || true
+        readelf -d "/workspace/upstream/codex-rs/target/release/$bin" >> /workspace/provenance/elf.txt || true
+      fi
+    done
 
     echo "==> Build and verification successful for $PLATFORM!"
     ls -lh /workspace/out

@@ -98,6 +98,24 @@ describe("buildMatrix", () => {
     }]);
   });
 
+  test("self-hosted runner maps both darwin-arm64 and linux-arm64", () => {
+    const m = buildMatrix(["darwin-arm64", "linux-arm64"], true);
+    expect(m).toEqual([
+      {
+        runner: ["self-hosted", "macOS", "ARM64", "m5-pro"],
+        arch: "arm64",
+        target: "aarch64-apple-darwin",
+        platform: "darwin-arm64",
+      },
+      {
+        runner: ["self-hosted", "macOS", "ARM64", "m5-pro"],
+        arch: "arm64",
+        target: "aarch64-unknown-linux-gnu",
+        platform: "linux-arm64",
+      },
+    ]);
+  });
+
   test("hosted runner maps each platform to its runner and target", () => {
     const m = buildMatrix(["darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64"], false);
     expect(m).toHaveLength(4);
