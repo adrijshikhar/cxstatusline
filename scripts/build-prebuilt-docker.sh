@@ -132,6 +132,7 @@ echo "==> Running build inside container..."
   -v "$REPO_ROOT:/workspace" \
   -v cxstatusline-cargo-cache:/usr/local/cargo/registry \
   -v cxstatusline-cargo-git:/usr/local/cargo/git \
+  -v cxstatusline-rustup-cache:/usr/local/rustup \
   -w /workspace \
   -e CODEX_VERSION="$CODEX_VERSION" \
   -e SOURCE_COMMIT="$SOURCE_COMMIT" \
@@ -144,6 +145,9 @@ echo "==> Running build inside container..."
     export RUNNER_TEMP=/tmp
     export GITHUB_WORKSPACE=/workspace
     export GITHUB_ENV=/tmp/cx-env.sh
+    export CARGO_BUILD_JOBS=4
+    export CARGO_TERM_COLOR=never
+    export CARGO_PROFILE_RELEASE_DEBUG=0
     touch /tmp/cx-env.sh
 
     echo "==> Installing Bun dependencies..."
