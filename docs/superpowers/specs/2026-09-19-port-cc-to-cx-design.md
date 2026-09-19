@@ -66,66 +66,88 @@ Every upstream commit is assigned to one of four categories:
 Baseline commit: `016be1fcf19453bd4362439b197e9cf841d7006a` (`v2.2.29`)  
 Target commit: `05554cd087249167d570aed3c869915b6a18d4d2` (`v2.2.30`)
 
-### 4.1 Commit Triage & Action Items
+### 4.1 Commit Triage & Detailed Implementation Mechanics
 
 1. **`747b7f1` - `feat(widgets): give the remaining git and jj widgets symbol slots (#574)`**
    - **Category**: A (Direct Port)
-   - **Target**: `src/widgets/git/*.ts`, `src/widgets/jj/*.ts`, `src/types/`.
-   - **Action**: Add custom symbol slots to remaining git/jj widgets matching upstream options.
+   - **Target**: `src/widgets/GitChanges.ts`, `src/widgets/shared/symbol-override.tsx`, `test/widgets/git-changes.test.ts`.
+   - **Details**:
+     - `GitChanges` currently hardcodes `(+insertions,-deletions)`.
+     - Define two named `SymbolSlot`s on `GitChangesWidget`: `symbolInsertions` (default `+`) and `symbolDeletions` (default `-`).
+     - Render using `getSlotSymbol(item, slot)` so users can customize with overrides (e.g. `(▲42,▼10)` or `(42,10)` when cleared).
+     - Add glyph keybind `g` exposing `renderEditor` via `symbol-override.tsx`.
+     - Add unit tests verifying default rendering, slot overrides, cleared symbols, and editor keybind.
 
 2. **`558c5bd` - `perf(terminal): reduce terminal width probing overhead (#501)`**
    - **Category**: A (Direct Port)
-   - **Target**: `src/utils/terminal.ts`.
-   - **Action**: Cache terminal width probing results to reduce repeated exec/ioctl overhead.
+   - **Target**: `src/utils/terminal.ts`, `src/types/Settings.ts`.
+   - **Details**:
+     - Add `terminalWidthCacheTtlSeconds: z.number().default(5)` to `SettingsSchema` in `src/types/Settings.ts`.
+     - Support `CXSTATUSLINE_WIDTH` environment variable alongside backward-compatible `CCSTATUSLINE_WIDTH`.
+     - Add in-memory session caching for the multi-ancestor process walk when no controlling TTY is detected, preventing repeated expensive `ps` process walks on every render tick.
+     - Preserve immediate detection when the terminal is resized.
 
 3. **`273d997` & `ef7f973` - `fix: add timeout to the cached git runner (#585, #559)`**
    - **Category**: A (Direct Port)
-   - **Target**: `src/widgets/git/` or cached runner utilities.
-   - **Action**: Enforce timeout bounds on git command execution to prevent hangs on huge repos.
+   - **Target**: `src/utils/git.ts`.
+   - **Details**:
+     - Standardize git execution timeout with a constant `GIT_EXEC_TIMEOUT = 5_000` in `defaultGitRunner`.
+     - Ensure blocking git calls on slow network filesystems or hanging credential helpers time out cleanly and return `null` instead of freezing the statusline process.
 
 4. **`f45823d` - `fix: default flex mode to full (#590)`**
    - **Category**: A (Direct Port)
-   - **Target**: `src/utils/renderer.ts` / settings schemas.
-   - **Action**: Update default flex mode to `full`.
+   - **Target**: `src/types/Settings.ts`, `test/`.
+   - **Details**:
+     - Update line 28 in `src/types/Settings.ts`: `flexMode: FlexModeSchema.default("full")` (replacing `"full-minus-40"`).
+     - Update corresponding test assertions in `test/` where default settings are asserted.
 
 5. **`06786da` - `Add llms.txt for LLM/agent-readable project summary (#527)`**
    - **Category**: A (Direct Port)
    - **Target**: `llms.txt`.
-   - **Action**: Add project-level `llms.txt` summarizing cxstatusline for AI agents.
+   - **Details**:
+     - Add `llms.txt` tailored to `cxstatusline` and OpenAI Codex CLI.
+     - Document config location (`~/.config/cxstatusline/settings.json`), Codex patch mechanism, telemetry integration, and CLI options (`--config`, `--preview`).
 
 6. **`f370720` - `feat(usage): let the reset timers hide their no-data placeholders (#542)`**
    - **Category**: B (Adapt to Codex)
-   - **Target**: `src/widgets/five-hour-reset-timer.ts` / reset timer widgets.
-   - **Action**: Support hiding placeholder text when no reset time data is present using `hide` metadata.
+   - **Target**: `src/widgets/FiveHourResetTimer.ts`, `src/widgets/WeeklyResetTimer.ts`, `src/widgets/shared/usage-display.ts`, `test/widgets/`.
+   - **Details**:
+     - Declare `USAGE_NO_DATA_HIDEABLE_STATE` (`key: 'no-data', label: 'when usage data is unavailable'`) on `FiveHourResetTimerWidget` and `WeeklyResetTimerWidget`.
+     - When `hide: 'no-data'` is enabled on the item metadata, return `null` instead of `[Loading]` or `[No Reset Time]`.
+     - **Keybind collision fix**: The shared hide checklist in the items editor binds `h`. Remap mode-specific conflicting keybinds:
+       - Weekly Reset Timer's `'(h)ours only'` $\rightarrow$ `'(o)nly hours'` (`key: 'o'`).
+       - Shared `12/24 (h)our'` format toggle $\rightarrow$ `'12/24 (f)ormat'` (`key: 'f'`).
+     - Update unit tests for `FiveHourResetTimer` and `WeeklyResetTimer` verifying `no-data` hiding and updated keybinds.
 
 7. **`1acae9a` - `refactor(usage): extract the usage-percent widgets onto a shared module (#545)`**
    - **Category**: B (Adapt to Codex)
-   - **Target**: `src/widgets/` usage helpers.
-   - **Action**: Extract shared usage-percent logic where applicable to Codex telemetry.
+   - **Target**: `src/widgets/FiveHourUsage.ts`, `src/widgets/WeeklyUsage.ts`.
+   - **Details**:
+     - Align shared usage display helpers and formatting logic between `FiveHourUsage` and `WeeklyUsage`.
 
 8. **`75175cd` - `feat(custom-command): cache output behind an opt-in TTL and honor the timeout (#539)`**
-   - **Category**: Done (Already implemented in `src/widgets/CachedCommand.ts` and `test/widgets/cached-command.test.ts`).
-   - **Action**: Verify parity against upstream implementation.
+   - **Category**: Done
+   - **Details**: Already implemented in `src/widgets/shared/cached-command.ts` and `src/widgets/CustomCommand.tsx`; verified by 26 existing tests in `test/widgets/cached-command.test.ts`.
 
 9. **`339691e` - `fix(usage): parse a model-scoped weekly limit at 0% with no resets_at as real zero usage (#534)`**
-   - **Category**: B/C
-   - **Action**: Inspect if relevant to Codex quota/usage parsing; adapt if applicable.
+   - **Category**: B (Adapt to Codex)
+   - **Details**: Verify Codex rate-limit telemetry handles 0% utilization without falling back to missing-data states.
 
 10. **`0551b06` & `282c5a3` - Claude keychain & OAuth token fingerprinting (`#573`, `#536`)**
     - **Category**: C (Skip)
-    - **Reason**: Claude-specific authentication; not applicable to Codex CLI.
+    - **Reason**: Claude-specific macOS keychain reading and Claude refresh token caching. Not applicable to Codex.
 
 11. **`1c2f718` - `Add claudenews to Related Projects (#584)`**
     - **Category**: C (Skip)
-    - **Reason**: Claude-specific project link.
+    - **Reason**: Claude-only community tool.
 
 12. **`2ae993d`, `d6c2a35`, `2a98563` - Dev dependency bumps (`#578`, `#579`, `#589`)**
     - **Category**: D (Tooling)
-    - **Reason**: Keep cxstatusline's existing Bun/Node 22-tested dependencies.
+    - **Reason**: Retain tested Bun / TypeScript 5 / Chalk 5.5 dev environment.
 
 13. **`05554cd` - `Version bump and docs update`**
     - **Category**: Metadata
-    - **Action**: Update `scripts/upstream-ccstatusline.json` `baseCommit` to `05554cd087249167d570aed3c869915b6a18d4d2`.
+    - **Action**: Bump `scripts/upstream-ccstatusline.json` `baseCommit` to `05554cd087249167d570aed3c869915b6a18d4d2` and update `NOTICE`.
 
 ---
 
