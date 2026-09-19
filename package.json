@@ -31,7 +31,8 @@
     "check:package": "bun run scripts/check-package.ts",
     "upstream:watch": "bun run scripts/upstream-watch.ts",
     "probe:stdio": "bun run scripts/probe-detached-stdio.ts",
-    "link:local": "bun run build && mkdir -p \"$HOME/.local/bin\" && ln -sfn \"$PWD/dist/cxstatusline.js\" \"$HOME/.local/bin/cxstatusline\" && cxstatusline --version"
+    "link:local": "bun run build && mkdir -p \"$HOME/.local/bin\" && ln -sfn \"$PWD/dist/cxstatusline.js\" \"$HOME/.local/bin/cxstatusline\" && cxstatusline --version",
+    "prepare": "git config core.hooksPath .githooks 2>/dev/null || true"
   },
   "dependencies": {
     "https-proxy-agent": "^9.1.0",

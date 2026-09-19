@@ -28,6 +28,16 @@ and custom commands remain outside the catalog. No `@ts-nocheck`. Include reprod
 evidence in PRs. Never commit credentials, personal settings, logs or private planning documents.
 See [SECURITY.md](SECURITY.md) for sensitive reports.
 
+## Branching & Pull Requests
+
+Direct pushes to `main` are strictly blocked. All contributions—whether from humans or AI agents—must follow this workflow:
+
+1. Create a dedicated branch: `git checkout -b <type>/<description>` (e.g. `feat/...`, `fix/...`, `chore/...`).
+2. Verify all local checks pass: `bun test && bun run typecheck && bun run build && bun run check:package`.
+3. Push your branch: `git push -u origin <branch-name>`.
+4. Open a Pull Request using Conventional Commits format in the title (e.g. `fix: ...` or `feat: ...`).
+
+
 ## Adding a new Codex version
 
 To add support for a newly released upstream Codex version:
