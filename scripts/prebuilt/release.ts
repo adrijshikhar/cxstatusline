@@ -5,7 +5,7 @@
  * without importing the upload flow. Everything here either reads or classifies; nothing here
  * creates, edits, uploads or deletes.
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { validateManifest, type ExpectedRelease, type Platform, type ReleaseManifest } from "../../src/distribution";
 import { ghText, type GhRunner } from "./gh";
