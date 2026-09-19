@@ -139,6 +139,7 @@ echo "==> Running build inside container..."
   -e PLATFORM="$PLATFORM" \
   -e TARGET="$TARGET" \
   -e SKIP_TESTS="$SKIP_TESTS" \
+  -e WORKFLOW_URL="${WORKFLOW_URL:-https://github.com/adrijshikhar/cxstatusline/actions/runs/local-docker}" \
   "$IMAGE_NAME" \
   bash -c '
     set -euo pipefail
@@ -189,6 +190,7 @@ echo "==> Running build inside container..."
       --upstream /workspace/upstream \
       --staging /tmp/staging \
       --rust-notices /tmp/rust-notices.md \
+      --workflow-url "$WORKFLOW_URL" \
       --platform "$PLATFORM" \
       --out /workspace/out
 
