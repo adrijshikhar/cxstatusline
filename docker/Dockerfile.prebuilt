@@ -1,0 +1,39 @@
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# System dependencies for Codex Rust build and V8 bindings
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    git \
+    pkg-config \
+    libssl-dev \
+    cmake \
+    ninja-build \
+    binutils \
+    ca-certificates \
+    unzip \
+    python3 \
+    jq \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust & Rustup
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:/root/.bun/bin:/usr/local/bin:$PATH
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+
+# Install cargo tools (just, cargo-nextest, cargo-about, cargo-deny) via cargo-binstall with fallback
+RUN curl -fsSL https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash && \
+    (cargo binstall -y --locked cargo-nextest cargo-about cargo-deny just || \
+     (cargo install --locked cargo-nextest cargo-deny just && cargo install --locked cargo-about --features cli))
+
+# Install Bun
+RUN curl -fsSL https://bun.sh/install | bash && \
+    ln -s /root/.bun/bin/bun /usr/local/bin/bun
+
+WORKDIR /workspace
+
+CMD ["/bin/bash"]
