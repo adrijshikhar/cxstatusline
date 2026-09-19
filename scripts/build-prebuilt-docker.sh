@@ -3,7 +3,7 @@
 # Supports running locally or on a remote Docker host (e.g. M5 Pro over SSH).
 set -euo pipefail
 
-export PATH="/Applications/Docker.app/Contents/Resources/bin:/usr/local/bin:$PATH"
+export PATH="/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
