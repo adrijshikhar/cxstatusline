@@ -1,0 +1,16 @@
+#!/bin/sh
+
+# Guardrail: Prevent direct pushes to main branch
+while read local_ref local_oid remote_ref remote_oid
+do
+	if [ "$remote_ref" = "refs/heads/main" ]; then
+		echo "\033[1;31m[GUARDRAIL ERROR] Direct push to 'main' is strictly blocked.\033[0m" >&2
+		echo "\033[0;33mPlease push to a feature or fix branch and open a Pull Request:\033[0m" >&2
+		echo "  1. git checkout -b <branch-name>" >&2
+		echo "  2. git push -u origin <branch-name>" >&2
+		echo "  3. gh pr create --title \"<type>: ...\"" >&2
+		exit 1
+	fi
+done
+
+exit 0
