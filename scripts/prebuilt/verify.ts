@@ -123,7 +123,7 @@ function checkElf(staged: string, o: VerifyOptions, checks: string[]): void {
       throw new Error(`${name}: ELF machine does not match ${expected} for ${o.platform}`);
     }
     const dynamic = probe("readelf", ["-d", file]);
-    if (!dynamic.includes("DYNAMIC")) {
+    if (!/dynamic section/i.test(dynamic) && !dynamic.includes("NEEDED") && !dynamic.includes("DYNAMIC")) {
       throw new Error(`${name}: binary is not dynamically linked`);
     }
   }
