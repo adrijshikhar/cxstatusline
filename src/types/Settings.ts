@@ -35,6 +35,7 @@ export const SettingsSchema = z.object({
   overrideBackgroundColor: z.string().optional(),
   overrideForegroundColor: z.string().optional(),
   globalBold: z.boolean().default(false),
+  terminalWidthCacheTtlSeconds: z.number().default(5),
   minimalistMode: z.boolean().default(false),
   numberFormat: GlobalNumberFormatSchema.optional(),
   powerline: PowerlineConfigSchema.default({

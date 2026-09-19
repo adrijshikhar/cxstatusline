@@ -32,6 +32,7 @@ const threeRowSettings: Settings = {
   defaultPaddingSide: "both",
   inheritSeparatorColors: false,
   globalBold: false,
+  terminalWidthCacheTtlSeconds: 5,
   minimalistMode: false,
   powerline: {
     enabled: false,
