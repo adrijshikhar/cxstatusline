@@ -314,6 +314,16 @@ export async function runReport(options: RunReportOptions): Promise<number> {
   try {
     const issues = listOwnIssues(o.run, o.input.repo);
     if (stage !== null) {
+      if (!o.input.publishRequested && o.input.event === "workflow_dispatch") {
+        o.summary([
+          `## Prebuilt run failed at ${stage} (dry run)`,
+          "",
+          `Run: ${runUrl}`,
+          "",
+          "Issue creation is suppressed for manual non-publishing dispatches (publish=false).",
+        ]);
+        return 1;
+      }
       const done = upsertFailure(o, issues, stage, tmpRoot, completed);
       o.summary([`## Prebuilt run failed at ${stage}`, "", `- ${done}`, "", `Run: ${runUrl}`]);
       return 1;

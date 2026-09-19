@@ -209,6 +209,21 @@ describe("runReport", () => {
     expect(fake.of("issue edit")).toHaveLength(0);
   });
 
+  test("suppresses issue creation for a failure on a manual non-publishing run", async () => {
+    const fake = fakeGh({ [LOOKUP]: () => listOut([]) });
+    const code = await runReport({
+      run: fake.run,
+      input: reportInput({
+        results: results({ native: "failure", publish: "skipped" }),
+        publishRequested: false,
+      }),
+      summary: () => {},
+    });
+    expect(code).toBe(1);
+    expect(fake.of("issue create")).toHaveLength(0);
+    expect(fake.of("issue edit")).toHaveLength(0);
+  });
+
   test("an unresolved detection failure uses the detection title", async () => {
     const fake = fakeGh({ [LOOKUP]: () => listOut([]), "issue create": () => ok() });
     await runReport({

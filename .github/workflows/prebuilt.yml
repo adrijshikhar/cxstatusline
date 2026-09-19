@@ -91,6 +91,7 @@ jobs:
           REQUESTED_CODEX_VERSION: ${{ inputs.codex_version || 'auto' }}
           REQUESTED_PLATFORMS: ${{ inputs.self_hosted && (inputs.platforms == 'all' && 'darwin-arm64,linux-arm64' || inputs.platforms == 'arm64' && 'darwin-arm64,linux-arm64' || inputs.platforms == 'darwin' && 'darwin-arm64' || inputs.platforms == 'linux' && 'linux-arm64' || inputs.platforms) || inputs.platforms || 'all' }}
           SELF_HOSTED: ${{ inputs.self_hosted && 'true' || 'false' }}
+          PUBLISH_REQUESTED: ${{ github.event_name == 'schedule' || inputs.publish == true }}
         run: |
           set -o pipefail
           bun scripts/prebuilt.ts detect \
@@ -98,7 +99,8 @@ jobs:
             --event "$GITHUB_EVENT_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --platforms "$REQUESTED_PLATFORMS" \
-            --self-hosted "$SELF_HOSTED" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-detect.log"
+            --self-hosted "$SELF_HOSTED" \
+            --publish-requested "$PUBLISH_REQUESTED" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-detect.log"
       # The evidence `report` excerpts from. `if: always()` so a failed step's log still ships,
       # and one artifact name per job because v4 artifacts are immutable.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

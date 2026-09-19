@@ -272,6 +272,7 @@ function finish(
   resolved: Resolved,
   platforms: readonly Platform[],
   matrix: readonly MatrixEntry[],
+  publishRequested: boolean = true,
 ): void {
   const frozen = {
     codex_version: detection.codexVersion,
@@ -289,6 +290,17 @@ function finish(
     matrix: JSON.stringify(matrix),
   };
   if (existing.state === "published" && !existing.identical) {
+    if (!publishRequested) {
+      summary([
+        `## Prebuilt ${detection.tag}`,
+        "",
+        `already published: ${existing.url}`,
+        "",
+        "Skipping build because publish=false (dry-run).",
+      ]);
+      emit({ ...frozen, patches_from: resolved.patchesFrom, should_build: "false" });
+      return;
+    }
     // Immutability: the tag is taken by different bytes. Only a CX version bump resolves it.
     blockedExit(frozen, blockedIssueTitle(detection.codexVersion), immutabilityMessage(detection.tag, existing.detail));
   }
@@ -312,6 +324,8 @@ function finish(
 export async function runDetect(flags: Record<string, string>): Promise<void> {
   const event = flags["event"] ?? process.env.GITHUB_EVENT_NAME ?? "workflow_dispatch";
   const selfHosted = flags["self-hosted"] === "true";
+  const publishFlag = flags["publish-requested"];
+  const publishRequested = publishFlag === "true" || (publishFlag === undefined && event === "schedule");
   let platforms = releasePlatforms(flags);
   if (selfHosted && (flags["platforms"] === "all" || flags["platforms"] === "arm64")) {
     platforms = ["darwin-arm64", "linux-arm64"];
@@ -331,5 +345,5 @@ export async function runDetect(flags: Record<string, string>): Promise<void> {
   const patchSha256 = (await sha256File(patches.patchPath(detection.patchFile))).sha256;
   const expected = { sourceCommit: source.sourceCommit, patchSha256 };
   const existing = await releaseState(execGh, detection, expected, platforms);
-  finish(detection, source, existing, { patchSha256, pinned, patchesFrom: patches.describe }, platforms, matrix);
+  finish(detection, source, existing, { patchSha256, pinned, patchesFrom: patches.describe }, platforms, matrix, publishRequested);
 }
