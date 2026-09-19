@@ -212,15 +212,31 @@ jobs:
         run: |
           set -o pipefail
           {
+            export PATH="$HOME/.cargo/bin:$PATH"
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
             if ! command -v just >/dev/null || ! command -v cargo-nextest >/dev/null || ! command -v cargo-about >/dev/null || ! command -v cargo-deny >/dev/null; then
               if command -v brew >/dev/null 2>&1; then
                 brew install just cargo-nextest cargo-about cargo-deny
-              elif command -v cargo-binstall >/dev/null 2>&1; then
-                cargo binstall -y --locked cargo-nextest cargo-about cargo-deny just
               else
-                cargo install --locked cargo-nextest cargo-about cargo-deny just
+                if ! command -v cargo-binstall >/dev/null 2>&1; then
+                  curl -fsSL https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash || true
+                fi
+                if command -v cargo-binstall >/dev/null 2>&1; then
+                  cargo binstall -y --locked cargo-nextest cargo-about cargo-deny just
+                else
+                  cargo install --locked cargo-nextest cargo-deny just
+                  cargo install --locked cargo-about --features cli
+                fi
               fi
             fi
+            command -v just >/dev/null || { echo "::error::just not found in PATH"; exit 1; }
+            command -v cargo-nextest >/dev/null || { echo "::error::cargo-nextest not found in PATH"; exit 1; }
+            command -v cargo-about >/dev/null || { echo "::error::cargo-about not found in PATH"; exit 1; }
+            command -v cargo-deny >/dev/null || { echo "::error::cargo-deny not found in PATH"; exit 1; }
+            cargo about --version
+            cargo deny --version
+            cargo nextest --version
+            just --version
             cd upstream/codex-rs
             rustup show active-toolchain
           } 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
