@@ -43,7 +43,7 @@ Upstream changes must be ported regularly to ensure feature parity, bugfix align
   ```json
   {
     "repo": "sirmalloc/ccstatusline",
-    "baseCommit": "016be1fcf19453bd4362439b197e9cf841d7006a"
+    "baseCommit": "05554cd087249167d570aed3c869915b6a18d4d2"
   }
   ```
 - To inspect new upstream commits:
