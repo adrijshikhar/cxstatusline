@@ -143,7 +143,11 @@ Target commit: `05554cd087249167d570aed3c869915b6a18d4d2` (`v2.2.30`)
 
 12. **`2ae993d`, `d6c2a35`, `2a98563` - Dev dependency bumps (`#578`, `#579`, `#589`)**
     - **Category**: D (Tooling)
-    - **Reason**: Retain tested Bun / TypeScript 5 / Chalk 5.5 dev environment.
+    - **Reason**: Deferred for independent planning. Retaining tested Bun / TypeScript 5 / Chalk 5.5 dev environment.
+    - **Architectural Rationale**:
+      - **Chalk 5 vs 6**: `ink@6.2.0` and `gradient-string@3.0.0` (from `ink-gradient`) have peer/runtime dependencies on `chalk@^5.3.0`. Upgrading root `devDependencies` to `chalk@^6.0.0` prevents package managers from deduplicating Chalk, resulting in both Chalk 5.6.2 and Chalk 6.0.0 being bundled into `dist/cxstatusline.js` and creating redundant license entries in `THIRD_PARTY_LICENSES.txt`. Keeping `chalk@^5.5.0` ensures full deduplication across `cxstatusline`, `ink`, and `ink-gradient`.
+      - **TypeScript 5 vs 7**: Upstream `ccstatusline` aliased `@typescript/native` (`npm:typescript@^7.0.2`) as an experimental preview while maintaining `@typescript/typescript6` as primary. For `cxstatusline`, `typescript ^5` is the battle-tested, stable compiler matching our `@types/*` packages and Bun bundler.
+      - **Future Planning**: Dev-dependency upgrades should be isolated to dedicated `chore/deps` PRs and evaluated once upstream GUI/TUI dependencies (such as Ink) support Chalk 6 natively.
 
 13. **`05554cd` - `Version bump and docs update`**
     - **Category**: Metadata

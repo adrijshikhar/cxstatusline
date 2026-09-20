@@ -91,7 +91,12 @@ Upstream changes to dev-dependencies, build configurations, linting rules, or re
 
 **Handling Action:**
 1. If the upstream dependency bump solves a verified bug or security vulnerability compatible with our stack, create a dedicated chore commit.
-2. Otherwise, mark as **Category D (Skipped / Retained existing)** in the triage record.
+2. Otherwise, mark as **Category D (Skipped / Retained existing)** in the triage record and plan upgrades separately.
+
+**Case Study: v2.2.30 Chalk 6 & TypeScript 7 Deferral**
+- *Chalk*: Upstream bumped `chalk` to `6.0.0`. In `cxstatusline`, `ink@6.2.0` and `gradient-string@3.0.0` (used in `ink-gradient`) explicitly require `chalk@^5.3.0`. Upgrading root `chalk` to 6 breaks npm/bun deduplication, resulting in dual versions of Chalk (5.6.2 and 6.0.0) being installed and bundled into `dist/cxstatusline.js`. We deliberately retain `chalk ^5.5.0` to preserve clean deduplication.
+- *TypeScript*: Upstream aliased `@typescript/native` preview to `npm:typescript@^7.0.2` while keeping `typescript` on version 6. `cxstatusline` keeps `typescript ^5` as its tested compiler for `tsc --noEmit`.
+- *Rule*: Major dev-dependency upgrades must be planned and tested on separate `chore/deps` branches rather than piggybacking on feature/parity ports.
 
 ---
 
