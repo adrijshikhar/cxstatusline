@@ -43,16 +43,23 @@ def classify_commit(title: str) -> str:
     return "A (Direct)"
 
 
-def parse_commits_payload(raw: Dict[str, Any]) -> List[Dict[str, Any]]:
+def parse_commits_payload(raw: Any) -> List[Dict[str, Any]]:
     """Extract list of commits with short sha, title, and assigned category."""
-    commits = raw.get("commits", [])
+    if isinstance(raw, list):
+        commits = raw
+    elif isinstance(raw, dict):
+        commits = raw.get("commits", [])
+    else:
+        commits = []
     results = []
     for c in commits:
+        if not isinstance(c, dict):
+            continue
         sha = c.get("sha", "")
         short_sha = sha[:7] if sha else "unknown"
         commit_info = c.get("commit", {})
-        message = commit_info.get("message", "")
-        title = message.split("\n")[0].strip() if message else ""
+        message = commit_info.get("message", "") if isinstance(commit_info, dict) else ""
+        title = message.split("\n")[0].strip() if message else c.get("title", "")
         category = classify_commit(title)
         results.append({
             "sha": sha,
