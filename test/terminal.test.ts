@@ -1,4 +1,5 @@
-import { describe, expect, it, beforeEach } from "bun:test";
+import { describe, expect, it, beforeEach, spyOn } from "bun:test";
+import * as childProcess from "child_process";
 import { SettingsSchema } from "../src/types/Settings";
 import {
   getTerminalWidth,
@@ -52,26 +53,78 @@ describe("terminal width settings & caching", () => {
     }
   });
 
+  it("validates terminalWidthCacheTtlSeconds in SettingsSchema with min(0) and max(300)", () => {
+    const parsedDefault = SettingsSchema.parse({});
+    expect(parsedDefault.terminalWidthCacheTtlSeconds).toBe(5);
+    expect(SettingsSchema.parse({ terminalWidthCacheTtlSeconds: 0 }).terminalWidthCacheTtlSeconds).toBe(0);
+    expect(SettingsSchema.parse({ terminalWidthCacheTtlSeconds: 300 }).terminalWidthCacheTtlSeconds).toBe(300);
+    expect(() => SettingsSchema.parse({ terminalWidthCacheTtlSeconds: -1 })).toThrow();
+    expect(() => SettingsSchema.parse({ terminalWidthCacheTtlSeconds: 301 })).toThrow();
+  });
+
   it("clears memoized width when resetTerminalWidthCache is called", () => {
-    const original = process.env.CXSTATUSLINE_WIDTH;
+    const origCx = process.env.CXSTATUSLINE_WIDTH;
+    const origCc = process.env.CCSTATUSLINE_WIDTH;
+    delete process.env.CXSTATUSLINE_WIDTH;
+    delete process.env.CCSTATUSLINE_WIDTH;
+
+    let mockWidth = 160;
+    const spy = spyOn(childProcess, "execFileSync").mockImplementation(((file: string, args?: readonly string[]) => {
+      if (file === "tput") return `${mockWidth}\n`;
+      if (file === "ps") {
+        if (args?.includes("ppid=")) return "9999\n";
+        if (args?.includes("tty=")) return "ttys001\n";
+      }
+      if (file === "stty") {
+        return `24 ${mockWidth}\n`;
+      }
+      throw new Error(`Unexpected command: ${file}`);
+    }) as any);
+
     try {
-      process.env.CXSTATUSLINE_WIDTH = "160";
       expect(getTerminalWidth()).toBe(160);
-      process.env.CXSTATUSLINE_WIDTH = "200";
+      mockWidth = 200;
+      // Without resetting cache, width remains 160
+      expect(getTerminalWidth()).toBe(160);
       resetTerminalWidthCache();
       expect(getTerminalWidth()).toBe(200);
     } finally {
-      process.env.CXSTATUSLINE_WIDTH = original;
+      spy.mockRestore();
+      if (origCx !== undefined) process.env.CXSTATUSLINE_WIDTH = origCx;
+      if (origCc !== undefined) process.env.CCSTATUSLINE_WIDTH = origCc;
     }
   });
 
   it("re-probes when ttlSeconds is 0 (caching disabled)", () => {
-    const original = process.env.CXSTATUSLINE_WIDTH;
+    const origCx = process.env.CXSTATUSLINE_WIDTH;
+    const origCc = process.env.CCSTATUSLINE_WIDTH;
+    delete process.env.CXSTATUSLINE_WIDTH;
+    delete process.env.CCSTATUSLINE_WIDTH;
+
+    let mockWidth = 100;
+    const spy = spyOn(childProcess, "execFileSync").mockImplementation(((file: string, args?: readonly string[]) => {
+      if (file === "tput") return `${mockWidth}\n`;
+      if (file === "ps") {
+        if (args?.includes("ppid=")) return "9999\n";
+        if (args?.includes("tty=")) return "ttys001\n";
+      }
+      if (file === "stty") {
+        return `24 ${mockWidth}\n`;
+      }
+      throw new Error(`Unexpected command: ${file}`);
+    }) as any);
+
     try {
-      process.env.CXSTATUSLINE_WIDTH = "100";
-      expect(getTerminalWidth({ ttlSeconds: 0 })).toBe(100);
+      expect(getTerminalWidth({ ttlSeconds: 5 })).toBe(100);
+      mockWidth = 130;
+      // Cached call with ttl returns 100
+      expect(getTerminalWidth({ ttlSeconds: 5 })).toBe(100);
+      // ttlSeconds: 0 bypasses cache and re-probes
+      expect(getTerminalWidth({ ttlSeconds: 0 })).toBe(130);
     } finally {
-      process.env.CXSTATUSLINE_WIDTH = original;
+      spy.mockRestore();
+      if (origCx !== undefined) process.env.CXSTATUSLINE_WIDTH = origCx;
+      if (origCc !== undefined) process.env.CCSTATUSLINE_WIDTH = origCc;
     }
   });
 

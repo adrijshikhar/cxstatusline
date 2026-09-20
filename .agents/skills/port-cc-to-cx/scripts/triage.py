@@ -22,25 +22,25 @@ def classify_commit(title: str) -> str:
     if re.search(r"\b(keychain|oauth|auth|claudenews|anthropic)\b", normalized, re.I) or re.search(
         r"claude\s*(token|login|tier)", normalized, re.I
     ):
-        return "Category C (Skip)"
+        return "C (Skip)"
 
     # Category D: Dev-dependencies, build config, CI, bumps
     if re.search(r"^chore\((deps|deps-dev|ci|release)\)", normalized, re.I) or re.search(
         r"\b(deps-dev|dependency|dependencies)\b", normalized, re.I
     ) or re.search(r"\bbump\s+(typescript|biome|chalk|react|ink|eslint)\b", normalized, re.I):
-        return "Category D (Tooling)"
+        return "D (Tooling)"
 
     # Category B: Usage, session telemetry, rate limits, reset timers
     if re.search(r"\b(usage|rate[ -]?limit|reset[ -]?timer|session|telemetry|five[ -]?hour|weekly)\b", normalized, re.I) or re.search(
         r"\bno-data\b", normalized, re.I
     ):
-        return "Category B (Adapt)"
+        return "B (Adapt)"
 
     # Category A: Direct port (widgets, git, terminal, layout, powerline, etc.)
     if re.search(r"\b(widget|widgets|git|jj|terminal|flex|width|command|symbol|powerline|ansi|layout|theme|llms\.txt|preview)\b", normalized, re.I):
-        return "Category A (Direct)"
+        return "A (Direct)"
 
-    return "Category A (Direct)"
+    return "A (Direct)"
 
 
 def parse_commits_payload(raw: Dict[str, Any]) -> List[Dict[str, Any]]:

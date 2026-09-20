@@ -34,8 +34,17 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   exit 1
 fi
 
-# Update scripts/upstream-ccstatusline.json using node/bun or python
-node -e "
+# Update scripts/upstream-ccstatusline.json using node or bun fallback
+if command -v node >/dev/null 2>&1; then
+  JS_CMD="node"
+elif command -v bun >/dev/null 2>&1; then
+  JS_CMD="bun"
+else
+  echo "Error: Neither 'node' nor 'bun' command was found in PATH." >&2
+  exit 1
+fi
+
+"$JS_CMD" -e "
 const fs = require('fs');
 const file = process.argv[1];
 const repo = process.argv[2];
