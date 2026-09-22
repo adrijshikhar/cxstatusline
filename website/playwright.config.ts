@@ -10,7 +10,7 @@ const serverEnv: Record<string, string> = {
 
 const webServer = mode === "dev"
   ? {
-      command: "bun run dev -- --host 127.0.0.1 --port 4173",
+      command: "bun run dev -- --host 127.0.0.1 --port 4173 --ignore-lock",
       url: "http://127.0.0.1:4173/",
       reuseExistingServer: false,
       timeout: 30_000,

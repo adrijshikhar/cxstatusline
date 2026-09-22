@@ -1,10 +1,16 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { test, expect, describe } from "bun:test";
+import { execSync } from "node:child_process";
+import { beforeAll, describe, expect, test } from "bun:test";
 
 const distDir = join(import.meta.dir, "../dist");
 
 describe("SEO Artifacts and Discovery Verification", () => {
+  beforeAll(() => {
+    if (!existsSync(join(distDir, "index.html"))) {
+      execSync("bun run build", { cwd: join(import.meta.dir, ".."), stdio: "ignore" });
+    }
+  });
   test("sitemap-index.xml and sitemap-0.xml exist and are non-empty", () => {
     const sitemapIndex = join(distDir, "sitemap-index.xml");
     const sitemap0 = join(distDir, "sitemap-0.xml");
@@ -68,5 +74,8 @@ describe("SEO Artifacts and Discovery Verification", () => {
 
     // Refined H1
     expect(html).toContain("OpenAI Codex statusline, customized.");
+
+    // Visible GEO Overview passage
+    expect(html).toContain("cxstatusline is an open-source statusline customization tool for OpenAI Codex CLI.");
   });
 });

@@ -6,7 +6,7 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "test": "bun test test/seo-artifacts.test.ts",
+    "test": "astro build && bun test src test/*.test.ts",
     "test:e2e:dev": "PLAYWRIGHT_MODE=dev bunx playwright test",
     "test:e2e:prod": "PLAYWRIGHT_MODE=production bunx playwright test",
     "test:e2e": "bun run test:e2e:dev && bun run test:e2e:prod"
