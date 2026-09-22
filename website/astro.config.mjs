@@ -1,12 +1,14 @@
 import { defineConfig } from "astro/config";
 import react from "@astrojs/react";
+import sitemap from "@astrojs/sitemap";
 import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath } from "node:url";
 
 const local = (path) => fileURLToPath(new URL(path, import.meta.url));
 export default defineConfig({
+  site: process.env.SITE_URL || "https://cxstatusline.adrijshikhar.dev",
   output: "static",
-  integrations: [react()],
+  integrations: [react(), sitemap()],
   devToolbar: { enabled: false },
   vite: {
     plugins: [tailwindcss()],

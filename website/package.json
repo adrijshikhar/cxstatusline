@@ -32,6 +32,7 @@
     "vite": "^7.1.0"
   },
   "devDependencies": {
+    "@astrojs/sitemap": "^3.7.4",
     "@playwright/test": "^1.63.0",
     "agentation": "^3.0.2",
     "typescript": "^5.7.3"
