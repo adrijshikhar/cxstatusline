@@ -54,7 +54,8 @@ export function executeDrift(
   }
 
   const script = action === "compare" ? "drift_compare.py" : "drift_baseline.py";
-  const url = args[1] || DEFAULT_URL;
+  const rawUrl = args[1] || DEFAULT_URL;
+  const url = rawUrl.startsWith("http://") || rawUrl.startsWith("https://") ? rawUrl : `http://${rawUrl}`;
   const extraArgs = args.slice(2);
 
   const claudeSeoPath = options.claudeSeoPath ?? resolveClaudeSeoPath(options.env);
