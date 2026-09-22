@@ -199,23 +199,6 @@ jobs:
           set -o pipefail
           bun scripts/prebuilt.ts build --codex-version "$CODEX_VERSION" \
             --upstream "$GITHUB_WORKSPACE/upstream" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
-      # Cache the Cargo build output and registry across runs. Keyed on everything that would
-      # invalidate it: OS/arch, the exact upstream tag, the toolchain upstream pins, the resolved
-      # dependency graph and the applied patch. The upstream checkout itself is still reset and
-      # re-cloned every run (see `resetDirectory` in scripts/prebuilt.ts) - only compiled artifacts
-      # and downloaded crates are reused.
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        if: ${{ runner.os != 'macOS' || !startsWith(matrix.platform, 'linux-') }}
-        with:
-          path: |
-            upstream/codex-rs/target
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: >-
-            ${{ runner.os }}-${{ runner.arch }}-${{ steps.build.outputs.upstream_tag }}-
-            ${{ hashFiles('upstream/**/rust-toolchain.toml') }}-
-            ${{ hashFiles('upstream/codex-rs/Cargo.lock') }}-
-            ${{ steps.build.outputs.patch_sha256 }}
       - name: Prepare verified Codex V8 archive and bindings
         if: ${{ runner.os != 'macOS' || !startsWith(matrix.platform, 'linux-') }}
         run: |
