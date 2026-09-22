@@ -10,6 +10,16 @@ import DotField from "../components/DotField.astro";
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Customize your Codex CLI statusline with a live desktop playground. Explore widgets, save your layout, and install cxstatusline." />
     <title>cxstatusline | Your Codex session, at a glance</title>
+    <script is:inline>
+      window.process ??= {
+        env: { CXSTATUSLINE_WEB: "1" },
+        platform: "browser",
+        argv: [],
+        stdout: {},
+        pid: 0,
+        on: () => {},
+      };
+    </script>
   </head>
 <body>
 <DotField />

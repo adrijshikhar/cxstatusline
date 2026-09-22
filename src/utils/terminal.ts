@@ -35,7 +35,7 @@ export function getPackageVersion(): string {
 function probeTerminalWidth(): number | null {
     // Preserve historical behavior on Windows: width detection is unavailable.
     // This avoids Unix fallback command behavior (e.g. 2>/dev/null) on Windows.
-    if (process.platform === 'win32') {
+    if (typeof process === 'undefined' || process.platform === 'win32') {
         return null;
     }
 
@@ -163,12 +163,12 @@ export function resetTerminalWidthCache(): void {
 }
 
 // Invalidate cache on terminal resize events
-if (typeof process.stdout?.on === 'function') {
+if (typeof process !== 'undefined' && typeof process.stdout?.on === 'function') {
     process.stdout.on('resize', () => {
         resetTerminalWidthCache();
     });
 }
-if (process.platform !== 'win32' && typeof process.on === 'function') {
+if (typeof process !== 'undefined' && process.platform !== 'win32' && typeof process.on === 'function') {
     process.on('SIGWINCH', () => {
         resetTerminalWidthCache();
     });
@@ -183,7 +183,9 @@ export interface TerminalWidthOptions {
 export function getTerminalWidth(options?: TerminalWidthOptions): number | null {
     // Explicit override. Useful when cxstatusline/ccstatusline is spawned in a context where
     // no ancestor process owns a TTY at all.
-    const overrideRaw = process.env.CXSTATUSLINE_WIDTH ?? process.env.CCSTATUSLINE_WIDTH;
+    const overrideRaw = typeof process !== 'undefined'
+        ? (process.env.CXSTATUSLINE_WIDTH ?? process.env.CCSTATUSLINE_WIDTH)
+        : undefined;
     if (overrideRaw) {
         const override = parsePositiveInteger(overrideRaw);
         if (override !== null) {
