@@ -74,8 +74,8 @@ describe("loadManifest", () => {
 describe("candidate metadata", () => {
   test("the shipped manifest names the newest explicitly supported version and covers it", () => {
     const shipped = loadManifest(join(import.meta.dir, "..", "patches"));
-    expect(shipped.candidate).toBe("0.155.0");
-    expect(resolvePatch(shipped, v(shipped.candidate!))?.file).toBe("codex-0.155.0.patch");
+    expect(shipped.candidate).toBe("0.155.1");
+    expect(resolvePatch(shipped, v(shipped.candidate!))?.file).toBe("codex-0.155.1.patch");
   });
   test("the field is optional and never widens resolution", () => {
     const dir = manifestDir('{"version":1,"tag_prefix":"rust-v","patches":[{"min":"0.153.0","max":"0.153.0","file":"f.patch"}]}');
