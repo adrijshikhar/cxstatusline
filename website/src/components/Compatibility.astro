@@ -8,7 +8,7 @@ const issueBody = [
   "<!-- e.g. 0.156.0 or the version you want supported -->",
   "",
   "### Platform / Architecture",
-  "<!-- e.g. macOS (Apple Silicon), macOS (Intel), Linux (x64) -->",
+  "<!-- e.g. macOS (Apple Silicon), macOS (Intel), Linux (x64), Linux (arm64) -->",
   "",
   "### Current behavior / error (if attempted)",
   "<!-- e.g. output of `cxstatusline install --codex-version X.Y.Z` or `cxstatusline doctor` -->",
@@ -28,7 +28,7 @@ const requestVersionIssueUrl = `https://github.com/adrijshikhar/cxstatusline/iss
     <div class="compatibility-title-group">
       <h2 id="compatibility-title">Compatibility matrix.</h2>
       <p class="compatibility-desc">
-        Any version of cxstatusline can install and patch any supported Codex release. Select your version interactively during installation or target one directly with <code>--codex-version</code>.
+        Any version of cxstatusline can install and patch any supported Codex release on macOS and Linux. Select your version interactively during installation or target one directly with <code>--codex-version</code>.
       </p>
     </div>
     <div class="compatibility-hint">
@@ -56,7 +56,16 @@ const requestVersionIssueUrl = `https://github.com/adrijshikhar/cxstatusline/iss
             )}
           </div>
           <div class="compatibility-platforms">
-            {release.platforms.join(", ")}
+            <div class="platform-badges">
+              {release.platforms.map((platform) => (
+                <span
+                  class="platform-badge"
+                  title={`${platform.name} (${platform.arch})`}
+                >
+                  {platform.name}
+                </span>
+              ))}
+            </div>
           </div>
           <div class="compatibility-flag">
             <code>--codex-version {release.version}</code>
