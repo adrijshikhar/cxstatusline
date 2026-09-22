@@ -33,14 +33,14 @@
 - Consumes: `process.env.SITE_URL ?? "https://cxstatusline.adrijshikhar.dev"`
 - Produces: `dist/sitemap-index.xml`, `dist/sitemap-0.xml`, `dist/robots.txt`, and `dist/llms.txt`
 
-- [ ] **Step 1: Install `@astrojs/sitemap` integration**
+- [x] **Step 1: Install `@astrojs/sitemap` integration**
 
 Run:
 ```bash
 cd website && bun add -d @astrojs/sitemap
 ```
 
-- [ ] **Step 2: Update `website/astro.config.mjs`**
+- [x] **Step 2: Update `website/astro.config.mjs`**
 
 Add `site` configuration and `sitemap()` integration:
 ```javascript
@@ -83,7 +83,7 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 3: Create `website/src/pages/robots.txt.ts`**
+- [x] **Step 3: Create `website/src/pages/robots.txt.ts`**
 
 Write `website/src/pages/robots.txt.ts`:
 ```typescript
@@ -108,14 +108,14 @@ export const GET: APIRoute = ({ site }) => {
 };
 ```
 
-- [ ] **Step 4: Copy root `llms.txt` to `website/public/llms.txt`**
+- [x] **Step 4: Copy root `llms.txt` to `website/public/llms.txt`**
 
 Run:
 ```bash
 cp llms.txt website/public/llms.txt
 ```
 
-- [ ] **Step 5: Verify static build generates sitemap and robots.txt**
+- [x] **Step 5: Verify static build generates sitemap and robots.txt**
 
 Run:
 ```bash
@@ -123,7 +123,7 @@ cd website && bun run build
 ```
 Verify that `website/dist/sitemap-index.xml` and `website/dist/robots.txt` exist and contain the sitemap URL.
 
-- [ ] **Step 6: Commit Task 1**
+- [x] **Step 6: Commit Task 1**
 
 ```bash
 git add website/package.json website/bun.lock website/astro.config.mjs website/src/pages/robots.txt.ts website/public/llms.txt
@@ -141,7 +141,7 @@ git commit -m "feat(website): configure site URL, sitemap integration, dynamic r
 - Consumes: None
 - Produces: `website/public/og-image.png` (1200×630 PNG)
 
-- [ ] **Step 1: Generate high-resolution 1200×630 terminal preview graphic**
+- [x] **Step 1: Generate high-resolution 1200×630 terminal preview graphic**
 
 Create a script or canvas renderer to output `website/public/og-image.png` with:
 - Canvas dimensions: 1200 × 630 pixels.
@@ -153,7 +153,7 @@ Create a script or canvas renderer to output `website/public/og-image.png` with:
   `[  main* ] [ +12 -4 ] [ 5h: [=====-] 82% ] [ gpt-5-codex ] [ 20:45 ]`
 - Output: Save to `website/public/og-image.png`.
 
-- [ ] **Step 2: Verify file dimensions and size**
+- [x] **Step 2: Verify file dimensions and size**
 
 Run:
 ```bash
@@ -161,7 +161,7 @@ sips -g pixelWidth -g pixelHeight website/public/og-image.png
 ```
 Expected: `pixelWidth: 1200`, `pixelHeight: 630`.
 
-- [ ] **Step 3: Commit Task 2**
+- [x] **Step 3: Commit Task 2**
 
 ```bash
 git add website/public/og-image.png
@@ -180,7 +180,7 @@ git commit -m "feat(website): add 1200x630 dark terminal Open Graph preview asse
 - Consumes: `Astro.site`, `package.json#version`, optional component props
 - Produces: Fully rendered `<title>`, `<meta>`, canonical `<link>`, Open Graph, Twitter cards, and `<script type="application/ld+json">`
 
-- [ ] **Step 1: Create `website/src/components/SEO.astro`**
+- [x] **Step 1: Create `website/src/components/SEO.astro`**
 
 ```astro
 ---
@@ -276,7 +276,7 @@ const jsonLd = {
 <script type="application/ld+json" is:inline set:html={JSON.stringify(jsonLd)} />
 ```
 
-- [ ] **Step 2: Update `website/src/layouts/BaseLayout.astro`**
+- [x] **Step 2: Update `website/src/layouts/BaseLayout.astro`**
 
 Replace the existing hardcoded `<title>` and `<meta name="description">` tags with `<SEO />`:
 ```astro
@@ -328,7 +328,7 @@ const { title, description, image, canonical, noindex } = Astro.props;
 </html>
 ```
 
-- [ ] **Step 3: Verify build emits metadata and JSON-LD**
+- [x] **Step 3: Verify build emits metadata and JSON-LD**
 
 Run:
 ```bash
@@ -338,7 +338,7 @@ Verify that `website/dist/index.html` contains:
 - `og:image` with `https://cxstatusline.adrijshikhar.dev/og-image.png`
 - `<script type="application/ld+json">` with `SoftwareApplication`
 
-- [ ] **Step 4: Commit Task 3**
+- [x] **Step 4: Commit Task 3**
 
 ```bash
 git add website/src/components/SEO.astro website/src/layouts/BaseLayout.astro
@@ -359,21 +359,21 @@ git commit -m "feat(website): add centralized SEO component with Open Graph and 
 - Consumes: Existing terminal transcript and Accordion styling
 - Produces: Enhanced keyword presence, balanced mobile line wraps, clean AEO/GEO passage citability
 
-- [ ] **Step 1: Update `Hero.astro` heading**
+- [x] **Step 1: Update `Hero.astro` heading**
 
 In `website/src/components/Hero.astro`, update line 14:
 ```astro
       <h1 id="intro-title">OpenAI Codex statusline, customized.</h1>
 ```
 
-- [ ] **Step 2: Update mobile heading width in `website/src/styles/global.css`**
+- [x] **Step 2: Update mobile heading width in `website/src/styles/global.css`**
 
 In `website/src/styles/global.css` line 125, update mobile `.intro h1`:
 ```css
   .intro h1 { max-width: 28ch; font-size: 19px; line-height: 1.35; }
 ```
 
-- [ ] **Step 3: Add accessible citation passage to `website/src/pages/index.astro`**
+- [x] **Step 3: Add accessible citation passage to `website/src/pages/index.astro`**
 
 In `website/src/pages/index.astro`, insert before `<Features />`:
 ```astro
@@ -389,7 +389,7 @@ In `website/src/pages/index.astro`, insert before `<Features />`:
     </section>
 ```
 
-- [ ] **Step 4: Add high-intent developer FAQ entries in `website/src/components/Faq.tsx`**
+- [x] **Step 4: Add high-intent developer FAQ entries in `website/src/components/Faq.tsx`**
 
 Add questions to the `questions` array:
 ```typescript
@@ -404,14 +404,14 @@ const questions = [
 ] as const;
 ```
 
-- [ ] **Step 5: Verify build compiles cleanly without styling defects**
+- [x] **Step 5: Verify build compiles cleanly without styling defects**
 
 Run:
 ```bash
 cd website && bun run build
 ```
 
-- [ ] **Step 6: Commit Task 4**
+- [x] **Step 6: Commit Task 4**
 
 ```bash
 git add website/src/components/Hero.astro website/src/styles/global.css website/src/pages/index.astro website/src/components/Faq.tsx
@@ -430,7 +430,7 @@ git commit -m "feat(website): refine H1 keyword alignment, mobile CSS width, GEO
 - Consumes: `website/dist/`
 - Produces: Zero test failures across artifact checks and E2E browser suites
 
-- [ ] **Step 1: Write `website/test/seo-artifacts.test.ts`**
+- [x] **Step 1: Write `website/test/seo-artifacts.test.ts`**
 
 ```typescript
 import { existsSync, readFileSync } from "node:fs";
@@ -507,7 +507,7 @@ describe("SEO Artifacts and Discovery Verification", () => {
 });
 ```
 
-- [ ] **Step 2: Run Bun test on SEO artifacts**
+- [x] **Step 2: Run Bun test on SEO artifacts**
 
 Run:
 ```bash
@@ -515,7 +515,7 @@ cd website && bun run build && bun test test/seo-artifacts.test.ts
 ```
 Expected: PASS (5 passed, 0 failed).
 
-- [ ] **Step 3: Run full Playwright E2E regression suite**
+- [x] **Step 3: Run full Playwright E2E regression suite**
 
 Run:
 ```bash
@@ -523,7 +523,7 @@ cd website && bun run test:e2e
 ```
 Expected: All dev and prod E2E tests pass cleanly with zero regressions on playground interactivity.
 
-- [ ] **Step 4: Commit Task 5**
+- [x] **Step 4: Commit Task 5**
 
 ```bash
 git add website/test/seo-artifacts.test.ts
@@ -536,14 +536,14 @@ git commit -m "test(website): add automated SEO artifact, Open Graph, and JSON-L
 
 **Files:** None (Execution & Verification)
 
-- [ ] **Step 1: Start preview server in background**
+- [x] **Step 1: Start preview server in background**
 
 Run:
 ```bash
 cd website && bun run preview --port 4321
 ```
 
-- [ ] **Step 2: Run `claude-seo` Page Audit**
+- [x] **Step 2: Run `claude-seo` Page Audit**
 
 Execute:
 ```bash
@@ -551,7 +551,7 @@ Execute:
 ```
 Verify title length, meta description, heading structure, and core technical SEO score.
 
-- [ ] **Step 3: Run `claude-seo` Schema Audit**
+- [x] **Step 3: Run `claude-seo` Schema Audit**
 
 Execute:
 ```bash
@@ -559,7 +559,7 @@ Execute:
 ```
 Verify that `SoftwareApplication` and `WebSite` JSON-LD schemas validate with zero errors and no deprecated types.
 
-- [ ] **Step 4: Run `claude-seo` GEO Citability Audit**
+- [x] **Step 4: Run `claude-seo` GEO Citability Audit**
 
 Execute:
 ```bash
@@ -567,7 +567,7 @@ Execute:
 ```
 Verify that answer passages, factual density, and question headers receive high citability scores.
 
-- [ ] **Step 5: Final review and PR preparation**
+- [x] **Step 5: Final review and PR preparation**
 
 Ensure git working tree is clean and all tests pass.
 Push branch `feat/website-seo-and-geo` and open Pull Request:
