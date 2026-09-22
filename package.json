@@ -28,6 +28,7 @@
     "test": "bun test ./test ./src",
     "test:coverage": "bun test --coverage ./test ./src",
     "typecheck": "tsc --noEmit",
+    "test:website:e2e": "cd website && bun run test:e2e",
     "check:package": "bun run scripts/check-package.ts",
     "upstream:watch": "bun run scripts/upstream-watch.ts",
     "probe:stdio": "bun run scripts/probe-detached-stdio.ts",

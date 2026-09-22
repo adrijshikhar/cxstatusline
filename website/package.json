@@ -5,7 +5,10 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "preview": "astro preview"
+    "preview": "astro preview",
+    "test:e2e:dev": "PLAYWRIGHT_MODE=dev bunx playwright test",
+    "test:e2e:prod": "PLAYWRIGHT_MODE=production bunx playwright test",
+    "test:e2e": "bun run test:e2e:dev && bun run test:e2e:prod"
   },
   "dependencies": {
     "@astrojs/react": "^6.0.5",

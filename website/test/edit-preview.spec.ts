@@ -90,7 +90,7 @@ test("desktop mounts once, opens the saved editor, reloads, and downloads", asyn
   await page.goto("/");
   await waitForEditor(page);
   const preset = defaultLayout;
-  await page.evaluate(([key, value]) => localStorage.setItem(key, JSON.stringify(value)), [storageKey, preset]);
+  await page.evaluate(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), { key: storageKey, value: preset });
   await page.reload();
   await expect(page.locator("#status")).toContainText("Saved in this browser");
   await expect(page.locator("#chat-preview")).toBeVisible();
@@ -145,7 +145,10 @@ test("preview rows and installation code copy remain usable", async ({ page }) =
   await waitForEditor(page);
   const preset = defaultLayout;
   for (const lines of [1, 2, 3]) {
-    await page.evaluate(([key, value, count]) => localStorage.setItem(key, JSON.stringify({ ...value, lines: value.lines.slice(0, count) })), [storageKey, preset, lines]);
+    await page.evaluate(
+      ({ key, value, count }) => localStorage.setItem(key, JSON.stringify({ ...value, lines: value.lines.slice(0, count) })),
+      { key: storageKey, value: preset, count: lines }
+    );
     await page.reload();
     await expect(page.locator("#chat-preview")).toBeVisible();
     await expect(page.locator("#playground-skeleton")).toBeHidden();
