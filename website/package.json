@@ -6,6 +6,7 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
+    "test": "astro build && bun test src test/*.test.ts",
     "test:e2e:dev": "PLAYWRIGHT_MODE=dev bunx playwright test",
     "test:e2e:prod": "PLAYWRIGHT_MODE=production bunx playwright test",
     "test:e2e": "bun run test:e2e:dev && bun run test:e2e:prod"
@@ -32,6 +33,7 @@
     "vite": "^7.1.0"
   },
   "devDependencies": {
+    "@astrojs/sitemap": "^3.7.4",
     "@playwright/test": "^1.63.0",
     "agentation": "^3.0.2",
     "typescript": "^5.7.3"

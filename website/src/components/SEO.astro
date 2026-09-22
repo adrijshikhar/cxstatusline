@@ -1,0 +1,91 @@
+---
+import rootPkg from "../../../package.json";
+
+interface Props {
+  title?: string;
+  description?: string;
+  image?: string;
+  canonical?: string;
+  noindex?: boolean;
+}
+
+const {
+  title = "cxstatusline | Customizable Statusline & Widgets for OpenAI Codex CLI",
+  description = "Customizable statusline for OpenAI Codex CLI — 34 widgets, themes, powerline glyphs, and token trackers in your terminal footer. macOS & Linux.",
+  image = "/og-image.png",
+  canonical,
+  noindex = false,
+} = Astro.props;
+
+const siteUrl = Astro.site ? Astro.site.toString().replace(/\/$/, "") : "https://cxstatusline.adrijshikhar.dev";
+const canonicalURL = canonical ? new URL(canonical, siteUrl).href : new URL(Astro.url.pathname, siteUrl).href;
+const ogImageURL = new URL(image, siteUrl).href;
+const keywords = "OpenAI Codex, Codex CLI, statusline, powerline, terminal status bar, TUI footer, CLI widgets, token tracker, git status line";
+const softwareVersion = rootPkg.version || "0.6.0";
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "cxstatusline",
+      "operatingSystem": "macOS, Linux",
+      "applicationCategory": "DeveloperApplication",
+      "description": description,
+      "softwareVersion": softwareVersion,
+      "license": "https://opensource.org/licenses/MIT",
+      "codeRepository": "https://github.com/adrijshikhar/cxstatusline",
+      "downloadUrl": "https://www.npmjs.com/package/cxstatusline",
+      "softwareRequirements": "OpenAI Codex CLI, Node.js >= 18",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD",
+      },
+      "author": {
+        "@type": "Person",
+        "name": "Adrij Shikhar",
+        "url": "https://github.com/adrijshikhar",
+      },
+    },
+    {
+      "@type": "WebSite",
+      "name": "cxstatusline",
+      "url": siteUrl,
+      "description": "Interactive playground and documentation for cxstatusline",
+    },
+  ],
+};
+---
+
+<!-- Primary Meta Tags -->
+<title>{title}</title>
+<meta name="title" content={title} />
+<meta name="description" content={description} />
+<meta name="keywords" content={keywords} />
+<meta name="robots" content={noindex ? "noindex, nofollow" : "index, follow"} />
+<link rel="canonical" href={canonicalURL} />
+
+<!-- Open Graph / Facebook -->
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="cxstatusline" />
+<meta property="og:url" content={canonicalURL} />
+<meta property="og:title" content={title} />
+<meta property="og:description" content={description} />
+<meta property="og:image" content={ogImageURL} />
+<meta property="og:image:secure_url" content={ogImageURL} />
+<meta property="og:image:type" content="image/png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="cxstatusline - Customizable statusline for OpenAI Codex CLI" />
+
+<!-- Twitter / X -->
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:url" content={canonicalURL} />
+<meta name="twitter:title" content={title} />
+<meta name="twitter:description" content={description} />
+<meta name="twitter:image" content={ogImageURL} />
+<meta name="twitter:image:alt" content="cxstatusline - Customizable statusline for OpenAI Codex CLI" />
+
+<!-- Schema.org JSON-LD -->
+<script type="application/ld+json" is:inline set:html={JSON.stringify(jsonLd)} />
