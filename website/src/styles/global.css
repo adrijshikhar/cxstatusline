@@ -71,8 +71,10 @@ button:disabled { cursor: wait; opacity: .55; }
 .compatibility-row { min-height: 52px; padding-inline: 1.25rem; border-top: 1px solid var(--line-soft); transition: background-color 0.15s ease; }
 .compatibility-row:first-child { border-top: 0; }
 .compatibility-row:hover { background: rgba(255, 255, 255, 0.02); }
-.compatibility-row code { color: var(--text); font: inherit; }
-.compatibility-platforms { color: var(--muted); font: 12px/1.4 var(--font-mono); white-space: nowrap; }
+.compatibility-platforms { color: var(--muted); font: 12px/1.4 var(--font-mono); }
+.platform-badges { display: flex; align-items: center; gap: 0.375rem; flex-wrap: wrap; }
+.platform-badge { display: inline-flex; align-items: center; padding: 0.125rem 0.4375rem; background: var(--surface-strong); border: 1px solid var(--line); border-radius: 4px; color: var(--text); font: 11px/1.35 var(--font-mono); letter-spacing: 0.02em; cursor: default; transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease; }
+.platform-badge:hover { border-color: var(--accent); color: var(--accent-strong); background: rgba(56, 189, 248, 0.05); }
 .compatibility-flag { display: flex; align-items: center; gap: 0.375rem; }
 .compatibility-flag code { color: var(--muted); font-size: 12px; }
 .compatibility-status { display: flex; align-items: center; justify-content: flex-end; }
