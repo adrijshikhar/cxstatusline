@@ -78,4 +78,11 @@ describe("SEO Artifacts and Discovery Verification", () => {
     // Visible GEO Overview passage
     expect(html).toContain("cxstatusline is an open-source statusline customization tool for OpenAI Codex CLI.");
   });
+
+  test("SEO component conditionally renders search console verification tags", () => {
+    const indexPath = join(distDir, "index.html");
+    const html = readFileSync(indexPath, "utf-8");
+    expect(html).not.toContain('name="google-site-verification" content=""');
+    expect(html).not.toContain('name="msvalidate.01" content=""');
+  });
 });
