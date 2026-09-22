@@ -89,7 +89,7 @@ test("desktop mounts once, opens the saved editor, reloads, and downloads", asyn
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.goto("/");
   await waitForEditor(page);
-  const preset = await page.evaluate(() => fetch("/src/sample-settings.json").then((response) => response.json()));
+  const preset = defaultLayout;
   await page.evaluate(([key, value]) => localStorage.setItem(key, JSON.stringify(value)), [storageKey, preset]);
   await page.reload();
   await expect(page.locator("#status")).toContainText("Saved in this browser");
@@ -143,7 +143,7 @@ test("preview rows and installation code copy remain usable", async ({ page }) =
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await waitForEditor(page);
-  const preset = await page.evaluate(() => fetch("/src/sample-settings.json").then((response) => response.json()));
+  const preset = defaultLayout;
   for (const lines of [1, 2, 3]) {
     await page.evaluate(([key, value, count]) => localStorage.setItem(key, JSON.stringify({ ...value, lines: value.lines.slice(0, count) })), [storageKey, preset, lines]);
     await page.reload();
