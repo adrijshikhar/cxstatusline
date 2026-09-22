@@ -25,7 +25,7 @@ export const SettingsSchema = z.object({
     [],
     [],
   ]),
-  flexMode: FlexModeSchema.default("full-minus-40"),
+  flexMode: FlexModeSchema.default("full"),
   compactThreshold: z.number().min(1).max(99).default(60),
   colorLevel: ColorLevelSchema.default(2),
   defaultSeparator: z.string().optional(),
@@ -35,6 +35,7 @@ export const SettingsSchema = z.object({
   overrideBackgroundColor: z.string().optional(),
   overrideForegroundColor: z.string().optional(),
   globalBold: z.boolean().default(false),
+  terminalWidthCacheTtlSeconds: z.number().min(0).max(300).default(5),
   minimalistMode: z.boolean().default(false),
   numberFormat: GlobalNumberFormatSchema.optional(),
   powerline: PowerlineConfigSchema.default({

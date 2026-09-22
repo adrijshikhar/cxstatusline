@@ -1,0 +1,19 @@
+# cxstatusline
+
+> A highly customizable, low-overhead status line formatter for OpenAI Codex CLI. Renders a configurable terminal status line (model info, git branch/changes, context usage, timers, and custom widgets) via an interactive Ink TUI, with support for Powerline separators and themes.
+
+## Getting Started
+
+- Quick Start: Run with `npx -y cxstatusline@latest` or `bunx -y cxstatusline@latest` — launches the interactive TUI to configure your status line.
+- Native Hook Integration: Modifies Codex CLI statusline hooks to render live telemetry.
+
+## Configuration
+
+- Statusline Settings: Stored at `~/.config/cxstatusline/settings.json` by default. Override using `--config <path>`.
+- CLI Options: Run `cxstatusline --help` for options including `--preview`, `--doctor`, and `--version`.
+
+## Development
+
+- Engine: Built on Node >= 22 and Bun >= 1.4.
+- Checks: `bun test ./test ./src`, `bun run typecheck`, `bun run build`, and `bun run check:package`.
+- License: MIT.

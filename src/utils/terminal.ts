@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -33,27 +33,13 @@ export function getPackageVersion(): string {
 }
 
 function probeTerminalWidth(): number | null {
-    // Explicit override. Useful when ccstatusline is spawned in a context where
-    // no ancestor process owns a TTY at all — e.g. some Claude Code >= 2.1.139
-    // spawn paths, IDE integrations, or nested-shell scenarios where both the
-    // ancestor-walk probe and `tput cols` return nothing usable. Users can set
-    // CCSTATUSLINE_WIDTH on the statusLine command (e.g.
-    // `CCSTATUSLINE_WIDTH=200 ccstatusline ...`) to bypass probing entirely.
-    const overrideRaw = process.env.CCSTATUSLINE_WIDTH;
-    if (overrideRaw) {
-        const override = parsePositiveInteger(overrideRaw);
-        if (override !== null) {
-            return override;
-        }
-    }
-
     // Preserve historical behavior on Windows: width detection is unavailable.
     // This avoids Unix fallback command behavior (e.g. 2>/dev/null) on Windows.
     if (process.platform === 'win32') {
         return null;
     }
 
-    // Claude Code can spawn ccstatusline with piped stdio, leaving the immediate
+    // Codex/Claude Code can spawn statusline with piped stdio, leaving the immediate
     // parent process without a controlling TTY. Walk up a few ancestors until we
     // find the shell process that owns the real PTY.
     let pid = process.pid;
@@ -78,7 +64,7 @@ function probeTerminalWidth(): number | null {
 
     // Fallback: try tput cols which might work in some environments
     try {
-        const width = execSync('tput cols 2>/dev/null', {
+        const width = execFileSync('tput', ['cols'], {
             encoding: 'utf8',
             stdio: ['pipe', 'pipe', 'ignore'],
             windowsHide: true
@@ -103,10 +89,9 @@ function parsePositiveInteger(value: string): number | null {
 
 function getParentProcessId(pid: number): number | null {
     try {
-        const parentPidOutput = execSync(`ps -o ppid= -p ${pid}`, {
+        const parentPidOutput = execFileSync('ps', ['-o', 'ppid=', '-p', String(pid)], {
             encoding: 'utf8',
             stdio: ['pipe', 'pipe', 'ignore'],
-            shell: '/bin/sh',
             windowsHide: true
         }).trim();
 
@@ -118,10 +103,9 @@ function getParentProcessId(pid: number): number | null {
 
 function getTTYForProcess(pid: number): string | null {
     try {
-        const tty = execSync(`ps -o tty= -p ${pid}`, {
+        const tty = execFileSync('ps', ['-o', 'tty=', '-p', String(pid)], {
             encoding: 'utf8',
             stdio: ['pipe', 'pipe', 'ignore'],
-            shell: '/bin/sh',
             windowsHide: true
         }).replace(/\s+/g, '');
 
@@ -142,21 +126,20 @@ function getWidthForTTY(tty: string): number | null {
     // access. `stty -F` / `-f` ask stty to open the device itself (with
     // O_NOCTTY semantics) and succeed regardless of controlling-tty status.
     const devicePath = `/dev/${tty}`;
-    const attempts = [
-        `stty -F ${devicePath} size`,   // GNU coreutils (Linux)
-        `stty -f ${devicePath} size`,   // BSD stty (macOS, *BSD)
-        `stty size < ${devicePath}`     // legacy fallback
+    const attempts: string[][] = [
+        ['-F', devicePath, 'size'],   // GNU coreutils (Linux)
+        ['-f', devicePath, 'size']    // BSD stty (macOS, *BSD)
     ];
 
-    for (const cmd of attempts) {
+    for (const args of attempts) {
         try {
-            const width = execSync(`${cmd} 2>/dev/null | awk '{print $2}'`, {
+            const output = execFileSync('stty', args, {
                 encoding: 'utf8',
                 stdio: ['pipe', 'pipe', 'ignore'],
-                shell: '/bin/sh',
                 windowsHide: true
             }).trim();
-            const parsed = parsePositiveInteger(width);
+
+            const parsed = parsePositiveInteger(output.split(/\s+/)[1] ?? '');
             if (parsed !== null) {
                 return parsed;
             }
@@ -168,12 +151,64 @@ function getWidthForTTY(tty: string): number | null {
     return null;
 }
 
+let hasProbed = false;
+let cachedWidth: number | null = null;
+let lastProbeTime = 0;
+
+/** Clear the memoized width. For tests, and for the TUI to re-probe after a resize. */
+export function resetTerminalWidthCache(): void {
+    hasProbed = false;
+    cachedWidth = null;
+    lastProbeTime = 0;
+}
+
+// Invalidate cache on terminal resize events
+if (typeof process.stdout?.on === 'function') {
+    process.stdout.on('resize', () => {
+        resetTerminalWidthCache();
+    });
+}
+if (process.platform !== 'win32' && typeof process.on === 'function') {
+    process.on('SIGWINCH', () => {
+        resetTerminalWidthCache();
+    });
+}
+
+export interface TerminalWidthOptions {
+    sessionId?: string;
+    ttlSeconds?: number;
+}
+
 // Get terminal width
-export function getTerminalWidth(): number | null {
-    return probeTerminalWidth();
+export function getTerminalWidth(options?: TerminalWidthOptions): number | null {
+    // Explicit override. Useful when cxstatusline/ccstatusline is spawned in a context where
+    // no ancestor process owns a TTY at all.
+    const overrideRaw = process.env.CXSTATUSLINE_WIDTH ?? process.env.CCSTATUSLINE_WIDTH;
+    if (overrideRaw) {
+        const override = parsePositiveInteger(overrideRaw);
+        if (override !== null) {
+            return override;
+        }
+    }
+
+    const ttlSeconds = options?.ttlSeconds ?? 5;
+    const now = Date.now();
+
+    // If ttlSeconds > 0, check if we have a valid cached result within TTL
+    if (ttlSeconds > 0 && hasProbed) {
+        if (now - lastProbeTime <= ttlSeconds * 1000) {
+            return cachedWidth;
+        }
+    }
+
+    cachedWidth = probeTerminalWidth();
+    hasProbed = true;
+    lastProbeTime = now;
+
+    return cachedWidth;
 }
 
 // Check if terminal width detection is available
 export function canDetectTerminalWidth(): boolean {
-    return probeTerminalWidth() !== null;
+    return getTerminalWidth() !== null;
 }
