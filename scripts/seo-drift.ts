@@ -66,9 +66,23 @@ export function executeDrift(
   }
 
   const runnerArgs = ["run", script, "--skip-cwv", url, ...extraArgs];
+  const env: Record<string, string | undefined> = { ...(options.env ?? process.env) };
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") {
+      const target = parsed.port ? `${parsed.hostname}:${parsed.port}` : parsed.hostname;
+      const existing = env.CLAUDE_SEO_LOCAL_TARGETS ? env.CLAUDE_SEO_LOCAL_TARGETS.split(",") : [];
+      if (!existing.includes(target)) {
+        env.CLAUDE_SEO_LOCAL_TARGETS = [...existing, target].filter(Boolean).join(",");
+      }
+    }
+  } catch {
+    // Ignore URL parse error, runner will report invalid URLs
+  }
+
   const result = spawnSync(claudeSeoPath, runnerArgs, {
     stdio: options.stdio ?? "inherit",
-    env: options.env ?? process.env,
+    env,
   });
 
   if (result.error) {
@@ -76,7 +90,8 @@ export function executeDrift(
     return 1;
   }
 
-  return result.status ?? 0;
+  const exitCode = result.status ?? (result.signal ? 1 : 0);
+  return exitCode;
 }
 
 if (import.meta.main) {

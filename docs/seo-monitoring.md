@@ -209,7 +209,7 @@ Before submitting a PR or cutting a release:
    ```bash
    cd website && bun run build && bun run preview
    ```
-2. In a separate terminal, execute the drift comparison:
+2. In a separate terminal, execute the drift comparison (executed from the repository root):
    ```bash
    bun run seo:drift:compare http://127.0.0.1:4321
    ```
