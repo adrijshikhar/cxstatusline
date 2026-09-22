@@ -17,7 +17,7 @@ export default defineConfig({
         { find: /^(node:)?fs\/promises$/, replacement: local("./src/fs-promises.ts") },
         { find: /^(node:)?fs$/, replacement: local("./src/fs.ts") },
         { find: /^(node:)?(os|child_process|crypto)$/, replacement: local("./src/node-shims.ts") },
-        { find: /^(node:)?path$/, replacement: local("./node_modules/path-browserify/index.js") },
+        { find: /^(node:)?path$/, replacement: local("./src/path-shim.ts") },
       ],
     },
     define: {

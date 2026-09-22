@@ -155,6 +155,7 @@
   "inheritSeparatorColors": false,
   "globalBold": false,
   "minimalistMode": false,
+  "terminalWidthCacheTtlSeconds": 5,
   "powerline": {
     "enabled": false,
     "separators": [

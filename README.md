@@ -12,6 +12,7 @@
 *Model, context, Git, usage, and reset timers. Your terminal, your layout.*
 
 [![CI](https://github.com/adrijshikhar/cxstatusline/actions/workflows/ci.yml/badge.svg)](https://github.com/adrijshikhar/cxstatusline/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/cxstatusline.svg)](https://www.npmjs.com/package/cxstatusline)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Node.js 22+](https://img.shields.io/badge/node-%E2%89%A522-green)](https://nodejs.org/)
 
@@ -189,3 +190,8 @@ Huge shout-out to **[ccstatusline](https://github.com/sirmalloc/ccstatusline)** 
 ## License
  
 cxstatusline is [MIT licensed](LICENSE). See [SECURITY.md](SECURITY.md) for security boundaries and reporting. [NOTICE](NOTICE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) preserve upstream attribution. OpenAI Codex remains separately licensed under Apache-2.0.
+
+---
+
+📦 **npm:** [https://www.npmjs.com/package/cxstatusline](https://www.npmjs.com/package/cxstatusline)
+
