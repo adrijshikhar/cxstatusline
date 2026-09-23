@@ -42,11 +42,11 @@
   - Sorts versions descending by semver
   - Returns empty array on network failure, timeout, or invalid JSON.
 
-- [ ] **Step 1: Write unit tests in `test/prebuilt-discovery.test.ts` covering success, filtering, sorting, and error fallback**
-- [ ] **Step 2: Run `bun test test/prebuilt-discovery.test.ts` to verify failures**
-- [ ] **Step 3: Implement `fetchPublishedPrebuiltVersions` in `src/distribution/prebuilt.ts`**
-- [ ] **Step 4: Run `bun test test/prebuilt-discovery.test.ts` to verify passes**
-- [ ] **Step 5: Commit changes**
+- [x] **Step 1: Write unit tests in `test/prebuilt-discovery.test.ts` covering success, filtering, sorting, and error fallback**
+- [x] **Step 2: Run `bun test test/prebuilt-discovery.test.ts` to verify failures**
+- [x] **Step 3: Implement `fetchPublishedPrebuiltVersions` in `src/distribution/prebuilt.ts`**
+- [x] **Step 4: Run `bun test test/prebuilt-discovery.test.ts` to verify passes**
+- [x] **Step 5: Commit changes**
 
 ---
 
@@ -88,11 +88,11 @@
   - If Yes -> returns `{ version: "0.156.1", compile: true }`
   - If No -> reprompts the user or cancels.
 
-- [ ] **Step 1: Write unit tests in `test/prompt-version.test.ts` testing item annotations and source compilation confirmation**
-- [ ] **Step 2: Run `bun test test/prompt-version.test.ts` to verify failures**
-- [ ] **Step 3: Implement the updated selector in `src/ui/prompt-version.ts`**
-- [ ] **Step 4: Run `bun test test/prompt-version.test.ts` to verify passes**
-- [ ] **Step 5: Commit changes**
+- [x] **Step 1: Write unit tests in `test/prompt-version.test.ts` testing item annotations and source compilation confirmation**
+- [x] **Step 2: Run `bun test test/prompt-version.test.ts` to verify failures**
+- [x] **Step 3: Implement the updated selector in `src/ui/prompt-version.ts`**
+- [x] **Step 4: Run `bun test test/prompt-version.test.ts` to verify passes**
+- [x] **Step 5: Commit changes**
 
 ---
 
@@ -111,11 +111,11 @@
     - Otherwise, use the highest available published prebuilt version (e.g. `0.155.1`), avoiding pending versions.
   - If user confirms compilation on a pending version, sets `compile = true`.
 
-- [ ] **Step 1: Write integration tests in `test/main-install.test.ts` verifying prebuilt discovery, default selection, and compile fallback**
-- [ ] **Step 2: Run `bun test test/main-install.test.ts` to verify failure**
-- [ ] **Step 3: Implement integration in `src/main.ts`**
-- [ ] **Step 4: Run `bun test test/main-install.test.ts` to verify passes**
-- [ ] **Step 5: Commit changes**
+- [x] **Step 1: Write integration tests in `test/main-install.test.ts` verifying prebuilt discovery, default selection, and compile fallback**
+- [x] **Step 2: Run `bun test test/main-install.test.ts` to verify failure**
+- [x] **Step 3: Implement integration in `src/main.ts`**
+- [x] **Step 4: Run `bun test test/main-install.test.ts` to verify passes**
+- [x] **Step 5: Commit changes**
 
 ---
 
@@ -136,11 +136,11 @@
       - If user picks the available prebuilt, run acquisition for that target version immediately.
   - If non-interactive: print the detailed options including the available prebuilt command and exit 1.
 
-- [ ] **Step 1: Write unit tests in `test/patch-run.test.ts` verifying interactive update selector launch and non-interactive output**
-- [ ] **Step 2: Run `bun test test/patch-run.test.ts` to verify failure**
-- [ ] **Step 3: Implement interactive update fallback in `src/patch/run.ts` and `src/main.ts`**
-- [ ] **Step 4: Run `bun test test/patch-run.test.ts` to verify passes**
-- [ ] **Step 5: Commit changes**
+- [x] **Step 1: Write unit tests in `test/patch-run.test.ts` verifying interactive update selector launch and non-interactive output**
+- [x] **Step 2: Run `bun test test/patch-run.test.ts` to verify failure**
+- [x] **Step 3: Implement interactive update fallback in `src/patch/run.ts` and `src/main.ts`**
+- [x] **Step 4: Run `bun test test/patch-run.test.ts` to verify passes**
+- [x] **Step 5: Commit changes**
 
 ---
 
@@ -156,10 +156,10 @@
   - Display:
     `codex_target: 0.156.1 supported (active: 0.154.0; prebuilt pending; 0.155.1 prebuilt available on GitHub)`
 
-- [ ] **Step 1: Write test in `test/doctor.test.ts` asserting intermediate prebuilt availability line**
-- [ ] **Step 2: Implement doctor formatting update in `src/commands/doctor.ts`**
-- [ ] **Step 3: Run `bun test test/doctor.test.ts` to verify passes**
-- [ ] **Step 4: Commit changes**
+- [x] **Step 1: Write test in `test/doctor.test.ts` asserting intermediate prebuilt availability line**
+- [x] **Step 2: Implement doctor formatting update in `src/commands/doctor.ts`**
+- [x] **Step 3: Run `bun test test/doctor.test.ts` to verify passes**
+- [x] **Step 4: Commit changes**
 
 ---
 
@@ -169,8 +169,8 @@
 - Documentation: `docs/usage.md`
 - Pull Request
 
-- [ ] **Step 1: Run full test suite: `bun test ./test ./src`**
-- [ ] **Step 2: Run typecheck: `bun run typecheck`**
-- [ ] **Step 3: Run package check: `bun run check:package`**
-- [ ] **Step 4: Push branch `feat/github-prebuilt-discovery-and-selector` to `origin`**
-- [ ] **Step 5: Open Pull Request via `gh pr create` with Conventional Commits title**
+- [x] **Step 1: Run full test suite: `bun test ./test ./src`**
+- [x] **Step 2: Run typecheck: `bun run typecheck`**
+- [x] **Step 3: Run package check: `bun run check:package`**
+- [x] **Step 4: Push branch `feat/github-prebuilt-discovery-and-selector` to `origin`**
+- [x] **Step 5: Open Pull Request via `gh pr create` with Conventional Commits title**
