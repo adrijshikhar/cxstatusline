@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { compareSemver, resolveLatestVersion } from "../src/release-sync";
+import { compareSemver, resolveLatestVersion, type FetchLike } from "../src/release-sync";
 
 describe("compareSemver", () => {
   test("compares versions accurately", () => {
@@ -11,7 +11,7 @@ describe("compareSemver", () => {
 
 describe("resolveLatestVersion", () => {
   test("retains static version when npm is older (e.g. 0.5.1 vs static 0.6.0)", async () => {
-    const mockFetch: typeof fetch = async (url) => {
+    const mockFetch: FetchLike = async (url) => {
       if (String(url).includes("registry.npmjs.org")) {
         return new Response(JSON.stringify({ version: "0.5.1" }), { status: 200 });
       }
@@ -23,7 +23,7 @@ describe("resolveLatestVersion", () => {
   });
 
   test("upgrades when npm returns a newer version", async () => {
-    const mockFetch: typeof fetch = async (url) => {
+    const mockFetch: FetchLike = async (url) => {
       if (String(url).includes("registry.npmjs.org")) {
         return new Response(JSON.stringify({ version: "0.7.0" }), { status: 200 });
       }
@@ -36,7 +36,7 @@ describe("resolveLatestVersion", () => {
   });
 
   test("falls back to GitHub when npm is offline or failing", async () => {
-    const mockFetch: typeof fetch = async (url) => {
+    const mockFetch: FetchLike = async (url) => {
       if (String(url).includes("registry.npmjs.org")) {
         return new Response("Service Unavailable", { status: 503 });
       }
@@ -52,7 +52,7 @@ describe("resolveLatestVersion", () => {
   });
 
   test("returns static version when all network checks fail", async () => {
-    const mockFetch: typeof fetch = async () => {
+    const mockFetch: FetchLike = async () => {
       throw new Error("Network offline");
     };
 

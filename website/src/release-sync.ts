@@ -9,11 +9,13 @@ export function compareSemver(left: string, right: string): number {
   return lMaj - rMaj || lMin - rMin || lPat - rPat;
 }
 
+export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
 export async function resolveLatestVersion(
   staticVersion: string,
-  fetchFn: typeof fetch = fetch,
+  fetchFn: FetchLike = fetch,
 ): Promise<ResolvedRelease> {
-  let highest = { version: staticVersion, source: "static" as const };
+  let highest: ResolvedRelease = { version: staticVersion, source: "static" };
 
   const checkSource = async (
     url: string,
