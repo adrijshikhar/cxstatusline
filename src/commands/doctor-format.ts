@@ -16,7 +16,7 @@ const SECTIONS: readonly Section[] = [
   },
   {
     title: "Codex Integration",
-    keys: ["upstream", "wrapper", "hook", "policy", "drift"],
+    keys: ["upstream", "wrapper", "hook", "policy", "codex_target", "drift"],
   },
   {
     title: "Active Generation & Binaries",

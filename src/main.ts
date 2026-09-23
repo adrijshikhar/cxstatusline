@@ -265,7 +265,7 @@ export async function main(argv: readonly string[], io: MainIo, deps: MainDeps =
     return hookAdminCommand(argv[1], io, deps);
   }
   if (cmd === "doctor") {
-    io.stdout(formatDoctor(doctorReport(contextFor(io, deps))));
+    io.stdout(formatDoctor(await doctorReport(contextFor(io, deps))));
     return 0;
   }
   if (cmd === "policy") {
