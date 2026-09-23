@@ -204,10 +204,15 @@ describe("doctorReport", () => {
     writeFileSync(paths.lockFile, "134217727\n");
     expect(get(doctorReport(c), "lock")?.value).toMatch(/stale pidfile for dead pid/);
   });
-  test("behind within minor is reported but not ok=false", () => {
+  test("behind within minor is reported but not ok=false under stable-minors", () => {
+    const { c, paths, upstream } = ctx("0.152.3");
+    writeState(paths.stateFile, { ...DEFAULT_STATE, policy: "stable-minors", patched_from: "0.152.1", upstream_bin: upstream });
+    expect(get(doctorReport(c), "drift")).toMatchObject({ ok: null, value: expect.stringMatching(/behind within minor.*0\.152\.1.*0\.152\.3/) });
+  });
+  test("install due on patch bump under default policy 'every'", () => {
     const { c, paths, upstream } = ctx("0.152.3");
     writeState(paths.stateFile, { ...DEFAULT_STATE, patched_from: "0.152.1", upstream_bin: upstream });
-    expect(get(doctorReport(c), "drift")).toMatchObject({ ok: null, value: expect.stringMatching(/behind within minor.*0\.152\.1.*0\.152\.3/) });
+    expect(get(doctorReport(c), "drift")).toMatchObject({ ok: false, value: expect.stringMatching(/install due.*0\.152\.1.*0\.152\.3/) });
   });
   test("install due", () => {
     const { c, paths, upstream } = ctx("0.153.0");

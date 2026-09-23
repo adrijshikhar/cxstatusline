@@ -167,3 +167,34 @@ For commands that take longer or should not run on every redraw, configure `refr
   output does not depend on specific session payload details.
 - **Pipeline processes:** As with synchronous mode, `shell: true` terminates `/bin/sh` on timeout,
   so child processes spawned inside a shell pipeline can outlive the cap. Avoid long-running pipelines.
+
+## Update Policy & Automatic Updates
+
+cxstatusline installs a `SessionStart` hook into `~/.codex/hooks.json` to keep your patched Codex synchronized with upstream releases.
+
+### Inspecting and Setting Policy
+
+Use `cxstatusline policy` to view or change how updates are handled:
+
+```bash
+# View the current update policy
+cxstatusline policy
+
+# Set the update policy
+cxstatusline policy set every          # Default: update on every new release
+cxstatusline policy set stable-minors   # Hold patch releases, update on minor bumps
+cxstatusline policy set manual          # Never update automatically via hook
+```
+
+| Policy | Behavior |
+|---|---|
+| `every` (default) | Immediately triggers a background prebuilt acquisition on any Codex version bump (e.g. `0.155.0` → `0.155.1`). |
+| `stable-minors` | Updates only across minor releases (e.g. `0.154.x` → `0.155.x`), holding patch updates unless forced. |
+| `manual` | Disables automated background updates from the `SessionStart` hook. Updates must be triggered manually via `cxstatusline update` or `cxstatusline install`. |
+
+### How the SessionStart Hook Works
+
+1. **Direct Generation Comparison**: The hook reads `installation.json` from the active generation directory on disk to determine what is currently running, rather than relying solely on bookkeeping state.
+2. **Live GitHub Probe**: When Codex moves to a new version whose prebuilt was previously pending in CI (`release-unavailable`), the hook makes a fast live probe to GitHub (with a 5-second timeout and silent fallback) to see if prebuilts have published. If published, it immediately clears the 24-hour backoff timer and begins background acquisition.
+3. **Fail-Closed & Silent**: Network errors, timeouts, or unhandled exceptions never interrupt Codex startup or print raw stack traces. The hook returns in milliseconds and all downloads and builds run detached in the background.
+
