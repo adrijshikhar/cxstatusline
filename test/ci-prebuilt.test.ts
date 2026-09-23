@@ -3,7 +3,7 @@ import { resolveCiBuild, validateLinkage, validateVersion } from "../scripts/ci-
 
 test("CI selects only a supported exact stable patch", () => {
   expect(resolveCiBuild("0.153.0")).toEqual({ tag: "rust-v0.153.0", file: "codex-0.153.0.patch" });
-  for (const version of ["0.156.0", "0.153.0-beta.1", "0.153.0\nfile=evil", "../main", " 0.153.0"]) {
+  for (const version of ["0.157.0", "0.153.0-beta.1", "0.153.0\nfile=evil", "../main", " 0.153.0"]) {
     expect(() => resolveCiBuild(version)).toThrow();
   }
 });
