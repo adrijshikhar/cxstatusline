@@ -5,7 +5,7 @@ import type { Widget, WidgetEditorDisplay, WidgetItem } from '../types/Widget';
 export class ClaudeSessionIdWidget implements Widget {
   getDefaultColor(): string { return 'cyan'; }
   getDescription(): string { return 'Shows the current Codex session ID'; }
-  getDisplayName(): string { return 'Claude Session ID'; }
+  getDisplayName(): string { return 'Codex Session ID'; }
   getCategory(): string { return 'Core'; }
   getEditorDisplay(_item: WidgetItem): WidgetEditorDisplay { return { displayText: this.getDisplayName() }; }
   render(item: WidgetItem, context: RenderContext, _settings: Settings): string | null {
@@ -16,4 +16,7 @@ export class ClaudeSessionIdWidget implements Widget {
   supportsRawValue(): boolean { return true; }
   supportsColors(_item: WidgetItem): boolean { return true; }
 }
+
+export const CodexSessionIdWidget = ClaudeSessionIdWidget;
+export type CodexSessionIdWidget = ClaudeSessionIdWidget;
 

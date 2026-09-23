@@ -18,6 +18,7 @@ const HIDE_KEYBIND: CustomKeybind = {
 // States shared verbatim by several widgets
 export const NO_GIT_HIDEABLE_STATE: HideableState = { key: 'no-git', label: 'when not in a git repo' };
 export const ZERO_HIDEABLE_STATE: HideableState = { key: 'zero', label: 'when value is zero' };
+export const MERGE_TARGET_HIDDEN_HIDEABLE_STATE: HideableState = { key: 'merge-target-hidden', label: 'when merge target is hidden' };
 
 export function parseHideStates(value: string | undefined): string[] {
     if (value === undefined) {

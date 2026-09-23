@@ -46,6 +46,7 @@ export const WIDGET_MANIFEST: readonly WidgetManifestEntry[] = [
   { type: "session-clock", create: () => new widgets.SessionClockWidget() },
   { type: "session-name", create: () => new widgets.SessionNameWidget() },
   { type: "claude-session-id", create: () => new widgets.ClaudeSessionIdWidget() },
+  { type: "codex-session-id", create: () => new widgets.ClaudeSessionIdWidget() },
   { type: "version", create: () => new widgets.VersionWidget() },
   { type: "current-working-dir", create: () => new widgets.CurrentWorkingDirWidget() },
   { type: "sandbox-status", create: () => new widgets.SandboxStatusWidget() },

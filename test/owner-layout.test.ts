@@ -31,7 +31,7 @@ test("owner preset renders the retained three-row layout", () => {
   const rows = renderFixture("settings-v2-owner.json", "payload-v1.json");
   expect(rows.split("\n").filter(Boolean)).toHaveLength(3);
   expect(rows.split("\n").filter(Boolean).map(getVisibleText)).toEqual([
-    "Model: gpt-5-codex | Thinking: medium | Context: [███████░░░░░░░░░] 84.0k/200.0k (42%) | cwd: /Users/nemesis/Projects/my-projects/cxstatusline | ⎇ main | (+12,-3)",
+    "Model: gpt-5-codex | Thinking: medium | Context: [███████░░░░░░░░░] 84k/200k (42%) | cwd: /Users/nemesis/Projects/my-projects/cxstatusline | ⎇ main | (+12,-3)",
     "Weekly: 8.0% | Session: 2hr | In: 90.3 t/s | Out: 1.7 t/s | Cached: 520.0k",
     "Mem: 2.0G | Session: dsl | Session ID: 0192a7f0-6c3e-7c1a-9b1e-3f5c2d1a0b9c | SB: ● | v0.152.1",
   ]);

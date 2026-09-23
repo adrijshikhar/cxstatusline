@@ -53,8 +53,8 @@ export class ContextBarWidget implements Widget {
     const used = metrics.contextLengthTokens;
     if (total === null || used === null || total <= 0) return null;
     const percent = Math.max(0, Math.min(100, (used / total) * 100));
-    const usedText = formatTokens(used, tokenFormat);
-    const totalText = formatTokens(total, tokenFormat);
+    const usedText = formatTokens(used, tokenFormat, 0);
+    const totalText = formatTokens(total, tokenFormat, 0);
     const percentText = formatPercent(percent, percentFormat, 0);
     if (sliderMode(mode)) {
       const slider = makeSliderBar(percent);

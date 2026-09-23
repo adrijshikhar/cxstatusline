@@ -6,7 +6,7 @@ export const CANONICAL_WIDGET_TYPES = [
   "tokens-total", "cache-hit-rate", "input-speed", "output-speed", "total-speed",
   "five-hour-usage", "five-hour-reset-timer",
   "weekly-usage", "weekly-reset-timer",
-  "session-clock", "session-name", "claude-session-id", "version",
+  "session-clock", "session-name", "claude-session-id", "codex-session-id", "version",
   "current-working-dir", "sandbox-status", "terminal-width", "free-memory",
   "custom-text", "custom-symbol", "custom-command",
 ] as const;
