@@ -10,7 +10,8 @@ import { appendLog, describeOutcome, runAcquisition, runInstall, runPatch, runUp
 import { loadState, upstreamFor } from "./patch/acquire";
 import { readUpstreamVersion } from "./codex/upstream";
 import { loadManifest, supportedCodexVersions } from "./patch/manifest";
-import { promptCodexVersion } from "./ui/prompt-version";
+import { fetchPublishedPrebuiltVersions } from "./distribution/prebuilt";
+import { promptCodexVersion, type PromptVersionOptions, type PromptVersionSelection } from "./ui/prompt-version";
 import { installHook, uninstallHook } from "./hook/install";
 import { realHookDeps, runHook } from "./hook/run";
 import { doctorReport, formatDoctor } from "./commands/doctor";
@@ -40,7 +41,9 @@ export interface MainDeps {
    */
   readonly context?: (env: Env, io: { say(line: string): void; log(line: string): void }) => Context;
   readonly transport?: TransportOptions;
-  readonly promptVersion?: typeof promptCodexVersion;
+  readonly promptVersion?: (
+    options: PromptVersionOptions,
+  ) => Promise<PromptVersionSelection | string>;
 }
 
 export const USAGE = `usage: cxstatusline [command]
@@ -149,6 +152,15 @@ async function installCommand(argv: readonly string[], io: MainIo, deps: MainDep
       const manifest = loadManifest(ctx.patchesDir);
       const supported = supportedCodexVersions(manifest);
       if (supported.length > 0) {
+        let prebuiltVersions: string[] | undefined;
+        if (!compile) {
+          try {
+            prebuiltVersions = await fetchPublishedPrebuiltVersions(deps.transport?.fetch);
+          } catch {
+            prebuiltVersions = undefined;
+          }
+        }
+
         let defaultVersion: string | undefined;
         try {
           const located = upstreamFor(ctx, loadState(ctx));
@@ -157,7 +169,9 @@ async function installCommand(argv: readonly string[], io: MainIo, deps: MainDep
             if (upstream) {
               const semverStr = `${upstream.major}.${upstream.minor}.${upstream.patch}`;
               if (supported.includes(semverStr)) {
-                defaultVersion = semverStr;
+                if (compile || !prebuiltVersions || prebuiltVersions.includes(semverStr)) {
+                  defaultVersion = semverStr;
+                }
               }
             }
           }
@@ -165,13 +179,21 @@ async function installCommand(argv: readonly string[], io: MainIo, deps: MainDep
           // ignore detection error
         }
 
+        if (!defaultVersion && prebuiltVersions && prebuiltVersions.length > 0) {
+          defaultVersion = supported.find((v) => prebuiltVersions.includes(v));
+        }
+
         const prompter = deps.promptVersion ?? promptCodexVersion;
-        codexVersion = await prompter({
+        const result = await prompter({
           supportedVersions: supported,
+          prebuiltVersions,
           defaultVersion,
           isTTY: true,
           say: (l) => io.stdout(`${l}\n`),
         });
+        const selection = typeof result === "string" ? { version: result, compile: false } : result;
+        codexVersion = selection.version;
+        compile = compile || selection.compile;
       }
     } catch {
       // If manifest fails to load, runInstall will surface it during acquisition

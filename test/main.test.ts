@@ -266,6 +266,32 @@ describe("command dispatch", () => {
     expect(promptCalled).toBe(true);
     expect(t.out.join("")).toMatch(/staging a prebuilt Codex pair needs 2 GiB/);
   });
+  test("interactive install receives fetched prebuiltVersions and sets default to highest prebuilt", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    const mockReleases = [
+      { tag_name: "codex-v0.152.1", draft: false },
+    ];
+    const mockFetch = async () => new Response(JSON.stringify(mockReleases), { status: 200 });
+    let receivedPrebuilts: readonly string[] | undefined;
+    const promptVersion = async (opts: any) => {
+      receivedPrebuilts = opts.prebuiltVersions;
+      return { version: opts.defaultVersion, compile: false };
+    };
+    expect(await main(["install"], { ...t.io, isTTY: true, env: d.env }, {
+      ...d.deps,
+      transport: { fetch: mockFetch as any },
+      promptVersion,
+    })).toBe(1);
+    expect(receivedPrebuilts).toEqual(["0.152.1"]);
+  });
+  test("interactive install with promptVersion selecting compile proceeds in compile mode", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    const promptVersion = async () => ({ version: "0.152.1", compile: true });
+    expect(await main(["install"], { ...t.io, isTTY: true, env: d.env }, { ...d.deps, promptVersion })).toBe(1);
+    expect(t.out.join("")).toMatch(/Compiling patched Codex from source/);
+  });
   test("--internal-refresh-command is dispatched without reading stdin, produces no stdout, and is absent from USAGE", async () => {
     const t = io("");
     const throwingIo = {
