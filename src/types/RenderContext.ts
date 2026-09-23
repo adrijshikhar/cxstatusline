@@ -1,10 +1,15 @@
 import type { PayloadV1 } from "../payload";
+import type { SpeedMetrics } from "./SpeedMetrics";
 
 /** All values available to widgets for one status-line render. */
 export interface RenderContext {
   readonly data: PayloadV1;
   readonly now: Date;
   readonly terminalWidth: number | null;
+  /** Explicit or pre-calculated speed metrics for token processing rates. */
+  readonly speedMetrics?: SpeedMetrics | null;
+  /** Explicit or pre-calculated windowed speed metrics indexed by window seconds. */
+  readonly windowedSpeedMetrics?: Record<string, SpeedMetrics> | null;
   /** Deprecated input retained for callers that still construct test contexts. */
   readonly freeMemoryBytes?: number;
   /** Memory is sampled by the command once per render, never by a widget. */

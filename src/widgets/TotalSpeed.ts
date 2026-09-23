@@ -2,6 +2,7 @@ import type { RenderContext } from '../types/RenderContext';
 import type { Settings } from '../types/Settings';
 import type {
     CustomKeybind,
+    HideableState,
     Widget,
     WidgetEditorDisplay,
     WidgetEditorProps,
@@ -13,14 +14,15 @@ import {
     getSpeedWidgetDescription,
     getSpeedWidgetDisplayName,
     getSpeedWidgetEditorDisplay,
+    getSpeedWidgetHideableStates,
     renderSpeedWidgetEditor,
     renderSpeedWidgetValue
 } from './shared/speed-widget';
 
 export class TotalSpeedWidget implements Widget {
     getDefaultColor(): string { return 'cyan'; }
-    getDescription(): string { return 'Shows total session-average token speed (tokens/sec).'; }
-    getDisplayName(): string { return 'Total Speed'; }
+    getDescription(): string { return getSpeedWidgetDescription('total'); }
+    getDisplayName(): string { return getSpeedWidgetDisplayName('total'); }
     getCategory(): string { return 'Token Speed'; }
     getEditorDisplay(item: WidgetItem): WidgetEditorDisplay {
         return getSpeedWidgetEditorDisplay('total', item);
@@ -32,6 +34,10 @@ export class TotalSpeedWidget implements Widget {
 
     getCustomKeybinds(): CustomKeybind[] {
         return getSpeedWidgetCustomKeybinds();
+    }
+
+    getHideableStates(): HideableState[] {
+        return getSpeedWidgetHideableStates();
     }
 
     renderEditor(props: WidgetEditorProps) {
