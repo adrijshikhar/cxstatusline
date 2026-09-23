@@ -229,3 +229,54 @@ test("desktop import button loads custom settings and updates preview", async ({
   expect(JSON.parse(saved!)).toMatchObject({ lines: [[{ type: "git-branch" }]] });
 });
 
+test("desktop edit mode stays completely contained within laptop viewports without scrolling", async ({ page }) => {
+  // Test both a tight 1280x720 laptop screen and standard 1440x900
+  for (const viewport of [{ width: 1280, height: 720 }, { width: 1440, height: 900 }]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+    await expect(page.locator("#playground-skeleton")).toBeHidden();
+    await expect(page.locator("#edit")).toBeVisible();
+
+    // Click Edit layout
+    await page.locator("#edit").click();
+    await waitForEditor(page);
+
+    // Verify terminal-window has editing class
+    await expect(page.locator(".terminal-window")).toHaveClass(/editing/);
+
+    // Verify ASCII wordmark and lede are collapsed to save vertical space
+    await expect(page.locator(".ascii-wordmark")).toBeHidden();
+    await expect(page.locator(".lede.desktop-only")).toBeHidden();
+    await expect(page.locator(".intro-actions.desktop-only")).toBeHidden();
+
+    // Verify the terminal window bottom does NOT exceed viewport height
+    const windowBounds = await page.locator(".terminal-window").boundingBox();
+    expect(windowBounds).not.toBeNull();
+    expect(windowBounds!.y + windowBounds!.height).toBeLessThanOrEqual(viewport.height);
+
+    // Verify first screen section does not overflow viewport height and window did not scroll
+    const firstScreenBounds = await page.locator(".first-screen").boundingBox();
+    expect(firstScreenBounds).not.toBeNull();
+    expect(firstScreenBounds!.height).toBeLessThanOrEqual(viewport.height);
+    const windowScrollY = await page.evaluate(() => window.scrollY);
+    expect(windowScrollY).toBe(0);
+
+    // Verify footer bar with action buttons is fully visible
+    await expect(page.locator(".playground-meta")).toBeVisible();
+    const metaBounds = await page.locator(".playground-meta").boundingBox();
+    expect(metaBounds).not.toBeNull();
+    expect(metaBounds!.y + metaBounds!.height).toBeLessThanOrEqual(viewport.height);
+
+    // Capture screenshot artifact for verification
+    await page.screenshot({ path: `test-artifacts/edit-mode-viewport-${viewport.width}x${viewport.height}.png` });
+
+    // Exit edit mode and verify full hero restores
+    await terminalKeys(page, ["ArrowDown", "ArrowDown", "ArrowDown", "ArrowDown", "ArrowDown", "ArrowDown", "Enter"]);
+    await expect(page.locator("#terminal")).toContainText("Save the current configuration and exit?");
+    await terminalKeys(page, ["Enter"]);
+    await expect(page.locator("#chat-preview")).toBeVisible();
+    await expect(page.locator(".terminal-window")).not.toHaveClass(/editing/);
+    await expect(page.locator(".ascii-wordmark")).toBeVisible();
+  }
+});
+
