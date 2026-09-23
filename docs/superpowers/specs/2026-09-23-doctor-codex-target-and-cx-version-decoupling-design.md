@@ -51,13 +51,21 @@ This specification modernizes `cxstatusline doctor` by decoupling `cx_version` i
      - Value: `<target> supported (run cxstatusline install)`
      - Status: `ok: null`.
 
-### Requirement 3: Preserve Local `drift` Semantics
+### Requirement 3: Refine `last_attempt` Backoff Visibility
+- In PR #74, `src/hook/run.ts` introduced `probeRemoteCandidate`, which probes GitHub on SessionStart and immediately clears the 24-hour backoff if a previously unavailable release has been published.
+- In `src/commands/doctor.ts`, `lastAttemptLine` currently says:
+  `(hook retries after 24h; run cxstatusline install to retry now)`
+- Update this to accurately reflect the live probe behavior:
+  `(hook retries when release publishes or after 24h; run cxstatusline install to retry now)`
+- This prevents operator confusion when a release is published within the 24-hour window.
+
+### Requirement 4: Preserve Local `drift` Semantics
 - `drift` continues checking whether the active generation is in sync with the local upstream `@openai/codex` executable found on PATH according to the user's `state.policy`.
 - This ensures a clean separation of concerns:
-  - `codex_target`: tells the user what the newest supported/published Codex version is.
+  - `codex_target`: tells the user what the newest supported/published Codex version is (manifest + GitHub).
   - `drift`: tells the user whether their local CLI wrapper and generation are synchronized with the local `@openai/codex` binary on their system.
 
-### Requirement 4: Fast, Async Execution with Offline Guarantee
+### Requirement 5: Fast, Async Execution with Offline Guarantee
 - `doctorReport` becomes `async` and accepts optional dependency overrides (`opts?: { probe?: boolean; probeFn?: typeof probeRemoteCandidate }`).
 - CLI dispatch (`main.ts`) calls `await doctorReport(...)`.
 - The live probe has a 2-second hard timeout and catches all rejections, guaranteeing that offline users never experience delays, crashes, or stack traces.
@@ -104,3 +112,46 @@ This specification modernizes `cxstatusline doctor` by decoupling `cx_version` i
    - Run `bun run typecheck` (`tsc --noEmit`) to verify 0 typing errors.
 4. **Manual Verification**:
    - Run `bun run dist/cxstatusline.js doctor` and verify formatted output against real environment.
+
+---
+
+## 5. Complete Audit of Existing Doctor Diagnostics
+
+Every diagnostic line currently reported by `cxstatusline doctor` across all 4 sections was visited, audited, and verified:
+
+### Section 1: Core & Environment
+- `renderer`: `${ctx.cxBin} (${VERSION})` — Verified. Identifies active CLI binary and version.
+- `settings`: `${ctx.paths.settingsFile} present / absent` — Verified. Confirms user configuration status.
+- `platform`: `${platform}` or unsupported — Verified. Validates host OS/architecture (`darwin-arm64`, `linux-x64`, etc.).
+- `toolchain`: `optional for prebuilt; ...` or flags required tools for compiled builds — Verified. Correctly keeps Rust/cargo optional for prebuilts.
+
+### Section 2: Codex Integration
+- `upstream`: `${bin} ${version}` or lookup error — Verified. Inspects PATH to locate original Codex binary.
+- `wrapper`: `ours` (ok: true) / symlink / foreign / absent — Verified. Protects against foreign binary hijack.
+- `hook`: `installed (...)` / absent / unreadable — Verified. Reports hook status and advises on `/hooks` in Codex.
+- `policy`: `${state.policy}` — Verified. Displays update policy (`every`, `stable-minors`, `manual`).
+- `codex_target`: **NEW** — Compares active Codex version with `patches/manifest.json` candidate and probes live GitHub releases.
+- `drift`: Local upstream vs active generation — Verified. Separated cleanly from `codex_target`.
+
+### Section 3: Active Generation & Binaries
+- `active`: `${record.provenance.source} ${record.codexVersion}` — Verified. Checks active generation link.
+- `generation`: directory path / dangling / foreign — Verified. Checks directory containment and pointer validity.
+- `cx_version`: **FIXED** — Decoupled from CLI version (no more false red `✖` on CLI update).
+- `release`: Release tag + archive SHA256 prefix — Verified. Supports both decoupled (`codex-v0.155.1`) and legacy tags.
+- `patch`: Patch SHA256 prefix — Verified.
+- `source_commit`: Commit hash and dirty check — Verified. Flags uncommitted dirty builds.
+- `upstream_commit`: Upstream commit SHA — Verified.
+- `codex_digest`: Re-hashes `codex` binary against manifest SHA256 — Verified. Critical security check.
+- `host_digest`: Re-hashes `codex-code-mode-host` against manifest SHA256 — Verified. Critical security check.
+- `codex_version`: Runs `codex --version` inside generation dir — Verified. Functional smoke test.
+- `legal`: Checks bundled `LICENSE` and `NOTICE` — Verified. Legal compliance.
+- `bookkeeping`: Surfaced if `state.patched_from !== record.codexVersion` — Verified.
+- `legacy`: Flags old flat layouts needing revert/install — Verified.
+
+### Section 4: State & Locks
+- `state`: Path to `state.json` + corruption alert — Verified.
+- `patched_from`: `state.patched_from` — Verified.
+- `last_attempt`: **IMPROVED** — Wording refined to indicate live GitHub probe bypasses 24h backoff when a release publishes.
+- `lock`: `free`, `held by pid`, or `stale pidfile` — Verified. Concurrency safety.
+- `command_cache`: Cached command count and oldest entry age — Verified. Performance telemetry.
+
