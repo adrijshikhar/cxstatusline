@@ -13,6 +13,7 @@ import { bookkeepingLine, classifyGeneration, generationDetailLines, legacyLine,
 import { loadManifest, supportedCodexVersions } from "../patch/manifest";
 import { probeRemoteCandidate, type RemoteCandidate } from "../patch/run";
 import type { FetchLike } from "../distribution/transport";
+import { fetchPublishedPrebuiltVersions } from "../distribution/prebuilt";
 
 export interface DoctorLine {
   readonly key: string;
@@ -23,6 +24,7 @@ export interface DoctorLine {
 export interface DoctorOptions {
   readonly probe?: boolean;
   readonly probeFn?: (targetVersion: string) => Promise<RemoteCandidate | null>;
+  readonly fetchPrebuilts?: (fetchFn?: FetchLike) => Promise<string[]>;
   readonly targetVersion?: string;
 }
 
@@ -173,6 +175,37 @@ async function codexTargetLine(
     );
   }
   if (remote?.available === false) {
+    let intermediate: string | null = null;
+    if (opts?.fetchPrebuilts || (opts?.probe !== false && opts?.probeFn === undefined)) {
+      try {
+        const fetchFn: FetchLike = (url, init) =>
+          fetch(url, { ...init, signal: AbortSignal.timeout(2000) });
+        const prebuilts = await (opts?.fetchPrebuilts ?? fetchPublishedPrebuiltVersions)(fetchFn);
+        const intermediatePrebuilt = prebuilts.find((v) => {
+          const s = parseSemver(v);
+          return (
+            s !== null &&
+            parsedActive !== null &&
+            parsedTarget !== null &&
+            compareSemver(s, parsedActive) > 0 &&
+            compareSemver(s, parsedTarget) < 0
+          );
+        });
+        if (intermediatePrebuilt) {
+          intermediate = intermediatePrebuilt;
+        }
+      } catch {
+        intermediate = null;
+      }
+    }
+
+    if (intermediate) {
+      return line(
+        "codex_target",
+        `${target} supported (active: ${effectivePatchedFrom}; prebuilt pending; ${intermediate} prebuilt available on GitHub)`,
+        null,
+      );
+    }
     return line(
       "codex_target",
       `${target} supported (active: ${effectivePatchedFrom}; prebuilt pending; run cxstatusline install --compile)`,

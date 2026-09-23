@@ -526,6 +526,23 @@ describe("doctorReport", () => {
     });
   });
 
+  test("codex_target: reports intermediate prebuilt available when target candidate is pending", async () => {
+    const { env, root } = tmpEnv();
+    const paths = resolvePaths(env);
+    const c = bareCtx(env, paths, "0.154.0");
+    activatePair(stagePair(root, { version: "0.154.0" }), c);
+
+    const lines = await doctorReport(c, {
+      targetVersion: "0.156.1",
+      probeFn: async () => ({ version: "0.156.1", available: false }),
+      fetchPrebuilts: async () => ["0.155.1", "0.154.0"],
+    });
+    expect(get(lines, "codex_target")).toMatchObject({
+      ok: null,
+      value: "0.156.1 supported (active: 0.154.0; prebuilt pending; 0.155.1 prebuilt available on GitHub)",
+    });
+  });
+
   test("codex_target: reports supported with install update guidance when probe errors or times out", async () => {
     const { env, root } = tmpEnv();
     const paths = resolvePaths(env);
