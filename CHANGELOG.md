@@ -3,6 +3,21 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.8.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.7.0...v0.8.0) (2026-09-23)
+
+
+### Features
+
+* **cli:** live GitHub prebuilt discovery, smart version selector, and update fallback ([#91](https://github.com/adrijshikhar/cxstatusline/issues/91)) ([bdb48b6](https://github.com/adrijshikhar/cxstatusline/commit/bdb48b657fcbe8658cedbcf4ca8e072efb1325fa))
+* support Codex 0.156.1 ([#86](https://github.com/adrijshikhar/cxstatusline/issues/86)) ([51e2098](https://github.com/adrijshikhar/cxstatusline/commit/51e2098b7f9b8d3f4643cd0efeb819de49cc1138))
+
+
+### Bug Fixes
+
+* **patch:** resolve test signature and struct fields for codex 0.156.1 ([#90](https://github.com/adrijshikhar/cxstatusline/issues/90)) ([c3fe5ba](https://github.com/adrijshikhar/cxstatusline/commit/c3fe5ba81a812346da5c969b65029271f2bb9b1f))
+* **prebuilt:** strip credsStore in temporary DOCKER_CONFIG for headless builds ([#88](https://github.com/adrijshikhar/cxstatusline/issues/88)) ([ac005c8](https://github.com/adrijshikhar/cxstatusline/commit/ac005c8b6eae355f7535955fefe4983c38981c5f))
+* **widgets:** align widget hideable states, decorative collapsing, and Codex session branding with upstream ([#84](https://github.com/adrijshikhar/cxstatusline/issues/84)) ([5b02aec](https://github.com/adrijshikhar/cxstatusline/commit/5b02aec30ba7871af63f5ff8d15bddefc64d95a8))
+
 ## [0.7.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.6.0...v0.7.0) (2026-09-23)
 
 
