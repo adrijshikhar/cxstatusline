@@ -13,10 +13,11 @@ import {
   type ReleaseManifest,
 } from "../distribution";
 import { activeGeneration, readInstallation } from "../patch/generation";
+import { compareSemver, parseSemver } from "../version";
 import { VERSION } from "../version-info";
 import { extractArchive } from "./archive";
 import { ARTIFACT_FILES } from "./files";
-import { ARCHIVE_MAX_BYTES, MANIFEST_MAX_BYTES, downloadAsset, sanitize, type TransportOptions } from "./transport";
+import { ARCHIVE_MAX_BYTES, MANIFEST_MAX_BYTES, downloadAsset, sanitize, type FetchLike, type TransportOptions } from "./transport";
 
 /** The release asset holding the manifest. The archive's name comes from the manifest itself. */
 const MANIFEST_ASSET = "manifest.json";
@@ -219,3 +220,52 @@ export async function preparePrebuilt(
     rmSync(download, { recursive: true, force: true });
   }
 }
+
+/**
+ * Queries GitHub Releases for published prebuilt releases (tag `codex-v<semver>`).
+ * Returns discrete Codex versions sorted descending by semver.
+ * Fails safely to empty array on timeout (5s), network error, or invalid responses.
+ */
+export async function fetchPublishedPrebuiltVersions(
+  fetchFn?: FetchLike,
+  repo: string = "adrijshikhar/cxstatusline",
+): Promise<string[]> {
+  const fetcher = fetchFn ?? (globalThis.fetch as unknown as FetchLike);
+  try {
+    const headers: Record<string, string> = {
+      accept: "application/vnd.github+json",
+      "user-agent": "cxstatusline",
+    };
+    if (process.env.GITHUB_TOKEN) {
+      headers.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+    }
+    const res = await fetcher(`https://api.github.com/repos/${repo}/releases?per_page=100`, {
+      headers,
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as unknown;
+    if (!Array.isArray(data)) return [];
+    const versions = new Set<string>();
+    for (const item of data) {
+      if (typeof item === "object" && item !== null) {
+        const tag = (item as { tag_name?: unknown }).tag_name;
+        const draft = (item as { draft?: unknown }).draft;
+        if (typeof tag === "string" && !draft && tag.startsWith("codex-v")) {
+          const v = tag.slice("codex-v".length);
+          if (parseSemver(v)) {
+            versions.add(v);
+          }
+        }
+      }
+    }
+    return Array.from(versions).sort((a, b) => {
+      const semA = parseSemver(a)!;
+      const semB = parseSemver(b)!;
+      return compareSemver(semB, semA);
+    });
+  } catch {
+    return [];
+  }
+}
+

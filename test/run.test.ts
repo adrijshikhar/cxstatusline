@@ -609,4 +609,67 @@ describe("runUpdate", () => {
     expect(readFileSync(paths.wrapperPath, "utf8")).toContain("codex-real");
     expect(said.join("\n")).toMatch(/refusing to overwrite it/);
   });
+  test("non-interactive update when prebuilt missing but newer prebuilt exists prints guidance and exits 1", async () => {
+    const { c, said } = ctx({ upstreamVersion: "0.153.0", noRust: true });
+    const fetchPrebuilts = async () => ["0.155.1", "0.155.0", "0.153.0"];
+    const mockFetch = mockFetchLatest("0.156.1");
+    const res = await runUpdate(c, {
+      isTTY: false,
+      fetchPrebuilts,
+    }, { fetch: mockFetch });
+    expect(res).toBe(1);
+    const output = said.join("\n");
+    expect(output).toMatch(/Upstream Codex update available: 0\.153\.0 -> 0\.156\.1/);
+    expect(output).toMatch(/Newer prebuilt available: Codex 0\.155\.1 is published and ready to install/);
+    expect(output).toMatch(/cxstatusline install --codex-version 0\.155\.1/);
+  });
+  test("interactive update when newer prebuilt exists and user selects choice 1 installs available prebuilt", async () => {
+    const f = releaseFixture({ cxVersion: VERSION, codexVersion: "0.155.1" });
+    const { c, paths, said } = ctx({
+      upstreamVersion: "0.153.0",
+      stagedVersion: "0.155.1",
+      noRust: true,
+      manifest: JSON.stringify({
+        version: 1,
+        tag_prefix: "rust-v",
+        patches: [{ min: "0.152.1", max: "0.155.1", file: "p.patch" }],
+      }),
+    });
+    const fetchPrebuilts = async () => ["0.155.1", "0.153.0"];
+    const mockFetch = mockFetchLatest("0.156.1");
+    let asked = false;
+    const ask = async () => {
+      asked = true;
+      return "1";
+    };
+
+    await withServer(routesFor(f), async (baseUrl) => {
+      const res = await runUpdate(c, {
+        isTTY: true,
+        ask,
+        fetchPrebuilts,
+      }, { baseUrl, fetch: mockFetch });
+      expect(res).toBe(0);
+    });
+
+    expect(asked).toBe(true);
+    expect(readState(paths.stateFile).state.patched_from).toBe("0.155.1");
+    expect(said.join("\n")).toMatch(/Installing prebuilt binaries for Codex 0\.155\.1/);
+  });
+  test("interactive update when user selects cancel exits 0 without modifying system", async () => {
+    const { c, paths, said } = ctx({ upstreamVersion: "0.153.0", noRust: true });
+    const fetchPrebuilts = async () => ["0.155.1", "0.153.0"];
+    const mockFetch = mockFetchLatest("0.156.1");
+    const ask = async () => "4";
+
+    const res = await runUpdate(c, {
+      isTTY: true,
+      ask,
+      fetchPrebuilts,
+    }, { fetch: mockFetch });
+
+    expect(res).toBe(0);
+    expect(said.join("\n")).toMatch(/Update cancelled/);
+    expect(readState(paths.stateFile).state.patched_from).toBeNull();
+  });
 });

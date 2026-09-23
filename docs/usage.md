@@ -198,3 +198,39 @@ cxstatusline policy set manual          # Never update automatically via hook
 2. **Live GitHub Probe**: When Codex moves to a new version whose prebuilt was previously pending in CI (`release-unavailable`), the hook makes a fast live probe to GitHub (with a 5-second timeout and silent fallback) to see if prebuilts have published. If published, it immediately clears the 24-hour backoff timer and begins background acquisition.
 3. **Fail-Closed & Silent**: Network errors, timeouts, or unhandled exceptions never interrupt Codex startup or print raw stack traces. The hook returns in milliseconds and all downloads and builds run detached in the background.
 
+## Installing & Updating Versions
+
+### Interactive Version Selection
+
+When running `cxstatusline install` interactively without specifying a version, cxstatusline queries GitHub Releases directly to discover published prebuilts:
+
+```text
+Select Codex version to install:
+  1) 0.156.1 [compile from source - prebuilt pending]
+  2) 0.155.1 [prebuilt available] (recommended / default)
+  3) 0.155.0 [prebuilt available]
+  4) 0.154.0 [prebuilt available]
+```
+
+- Published releases are marked `[prebuilt available]`. The highest published prebuilt version is automatically selected as the default.
+- Versions pending CI prebuilt publication are labeled `[compile from source - prebuilt pending]`. Selecting a pending version prompts for confirmation before attempting to compile from source.
+
+### Smart Update Fallback
+
+When upstream Codex releases a new version that is still building in CI, running `cxstatusline update` checks for intermediate published prebuilts:
+
+```text
+Warning: Upstream Codex update available: 0.154.0 -> 0.156.1.
+However, cxstatusline has not yet published prebuilt binaries for Codex 0.156.1.
+Newer prebuilt available: Codex 0.155.1 is published and ready to install.
+
+How would you like to proceed?
+  1) Install latest available prebuilt (Codex 0.155.1) [recommended]
+  2) Compile Codex 0.156.1 from source
+  3) Update to stock Codex 0.156.1 anyway
+  4) Cancel
+```
+
+Pressing Enter immediately installs the highest available prebuilt without replacing your launcher with stock Codex or failing with a 404 error.
+
+
