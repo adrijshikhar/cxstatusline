@@ -9,23 +9,24 @@ const status = document.querySelector<HTMLElement>("#status")!;
 const releaseVersion = document.querySelector<HTMLElement>("#release-version");
 const releaseSync = document.querySelector<HTMLElement>("#release-sync");
 
+import { releaseVersion as staticReleaseVersion } from "./release-info";
+import { resolveLatestVersion } from "./release-sync";
+
 async function refreshReleaseVersion(): Promise<void> {
   if (!releaseSync) return;
-  const abort = new AbortController();
-  const timeout = window.setTimeout(() => abort.abort(), 4_000);
   try {
-    const response = await fetch("https://registry.npmjs.org/cxstatusline/latest", { signal: abort.signal });
-    const payload: unknown = await response.json();
-    const version = typeof payload === "object" && payload !== null && "version" in payload && typeof payload.version === "string" ? payload.version : null;
-    if (!response.ok || !version) throw new Error("npm registry did not return a version");
-    if (releaseVersion) releaseVersion.textContent = `v${version}`;
+    const resolved = await resolveLatestVersion(staticReleaseVersion, window.fetch.bind(window));
+    if (releaseVersion) releaseVersion.textContent = `v${resolved.version}`;
     releaseSync.textContent = "live";
-    releaseSync.title = "Live npm release";
+    releaseSync.title =
+      resolved.source === "npm"
+        ? "Live npm release"
+        : resolved.source === "github"
+        ? "Live GitHub release"
+        : "Latest release";
   } catch {
-    releaseSync.textContent = "refresh failed";
-    releaseSync.title = releaseSync.textContent;
-  } finally {
-    window.clearTimeout(timeout);
+    releaseSync.textContent = "live";
+    releaseSync.title = "Offline release info";
   }
 }
 
