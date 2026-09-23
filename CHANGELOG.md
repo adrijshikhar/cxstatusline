@@ -3,6 +3,40 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.7.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.6.0...v0.7.0) (2026-09-23)
+
+
+### Features
+
+* **ci:** support multi-platform darwin-arm64 and linux-arm64 builds on self-hosted runner ([1a70319](https://github.com/adrijshikhar/cxstatusline/commit/1a70319e1f0f27ff1f4ca01944aff933f5dfff0b))
+* direct version sync, live GitHub probe, and update policy configuration ([#74](https://github.com/adrijshikhar/cxstatusline/issues/74)) ([6b4092b](https://github.com/adrijshikhar/cxstatusline/commit/6b4092bf59bdabe033ab051432aaca6a8ad87eea))
+* **docker:** add local Docker build script and Dockerfile for Linux prebuilts ([8f37feb](https://github.com/adrijshikhar/cxstatusline/commit/8f37febf9231b39bfcb8108a21f33c35a9ba8057))
+* **docker:** set CARGO_BUILD_JOBS to 8 for 20GB memory limit ([0ec65cd](https://github.com/adrijshikhar/cxstatusline/commit/0ec65cd89ad077d61e09c4c6a8d8098110a019e8))
+* support Codex 0.155.1 ([#71](https://github.com/adrijshikhar/cxstatusline/issues/71)) ([018bb21](https://github.com/adrijshikhar/cxstatusline/commit/018bb214ac7dfb5fc19f114a33ee825ec493147d))
+* **upstream:** add port-cc-to-cx skill and port ccstatusline v2.2.30 ([#66](https://github.com/adrijshikhar/cxstatusline/issues/66)) ([042bcf5](https://github.com/adrijshikhar/cxstatusline/commit/042bcf594fd99ff084fcd52a8b08ddfd5ca8505f))
+* **website:** add search console verification, Cloudflare analytics, and SEO drift monitoring ([#73](https://github.com/adrijshikhar/cxstatusline/issues/73)) ([0476eb5](https://github.com/adrijshikhar/cxstatusline/commit/0476eb5d83eae688f6acddef9beb99a5bb7abd7a))
+* **website:** implement SEO, Open Graph, JSON-LD schema, and GEO citability ([#72](https://github.com/adrijshikhar/cxstatusline/issues/72)) ([c7db496](https://github.com/adrijshikhar/cxstatusline/commit/c7db49689ce7d1a9dc51be5e4d1e66af41a21398))
+
+
+### Bug Fixes
+
+* **ci:** ensure cargo-about is installed with cli feature on Linux runners ([f93a255](https://github.com/adrijshikhar/cxstatusline/commit/f93a255487ab6763a2c65a92b0cdca10d85f025e))
+* **ci:** handle non-publishing dry runs gracefully and suppress issue creation ([df1f7a5](https://github.com/adrijshikhar/cxstatusline/commit/df1f7a5a5763fc4f258584b8fb99440c1339c4f5))
+* **ci:** wrap step if expressions in valid YAML syntax ([5fd734e](https://github.com/adrijshikhar/cxstatusline/commit/5fd734eaafc8a3fa07af9a0c96422eb0fd135bee))
+* **distribution:** allow local-docker run url in release manifest validation ([ee4e738](https://github.com/adrijshikhar/cxstatusline/commit/ee4e7387f32c7cc669ca763b3e7eea75861d428a))
+* **docker:** ensure full system PATH in build-prebuilt-docker.sh ([cb98069](https://github.com/adrijshikhar/cxstatusline/commit/cb98069459fcd3dd5708f0944bffbdba7d22d6bd))
+* **docker:** limit CARGO_BUILD_JOBS=4 to avoid container OOM ([cb8db8f](https://github.com/adrijshikhar/cxstatusline/commit/cb8db8f6adda3e8a3b840d5ae4e79f902371ca86))
+* **doctor:** decouple cx_version, add codex_target diagnostic, and refine backoff messaging ([#80](https://github.com/adrijshikhar/cxstatusline/issues/80)) ([0806390](https://github.com/adrijshikhar/cxstatusline/commit/080639075a81ce13d4d58dbd6312a9820a61397e))
+* **prebuilt:** allow appending missing platform assets to published releases ([3cd67af](https://github.com/adrijshikhar/cxstatusline/commit/3cd67afa51cb9519b6739f848ceb3b254c232dfc))
+* **prebuilt:** deduplicate release notes title heading and update platforms on partial publish ([#82](https://github.com/adrijshikhar/cxstatusline/issues/82)) ([f8df26e](https://github.com/adrijshikhar/cxstatusline/commit/f8df26e79c4d962abe4fc09341a0dbee1f56c765))
+* **prebuilt:** default WORKFLOW_URL in docker build when outside GHA ([9ad098e](https://github.com/adrijshikhar/cxstatusline/commit/9ad098e7057311f6f3d934c8673da3136806e216))
+* **prebuilt:** import rmSync in release.ts ([c937e9c](https://github.com/adrijshikhar/cxstatusline/commit/c937e9cff3720974bed9cc340e4adc5951510292))
+* resumable prebuilt downloads, stream idle timeout, and terminal progress cursor handling ([#78](https://github.com/adrijshikhar/cxstatusline/issues/78)) ([6e5f7c9](https://github.com/adrijshikhar/cxstatusline/commit/6e5f7c940467db5c11a2320f76079891d8860182))
+* **security:** resolve dependabot vulnerabilities and harden prebuilt workflow ([#69](https://github.com/adrijshikhar/cxstatusline/issues/69)) ([e87edb4](https://github.com/adrijshikhar/cxstatusline/commit/e87edb4282b9d9547ffd439f4abc94dabac42beb))
+* **verify:** check dynamic section and NEEDED in readelf -d output for ELF verification ([42e0ca3](https://github.com/adrijshikhar/cxstatusline/commit/42e0ca330c8f3320abf528c703939d698d7f9a5b))
+* **website:** guard process in terminal utils and test production preview in playwright ([#70](https://github.com/adrijshikhar/cxstatusline/issues/70)) ([f5c5d4e](https://github.com/adrijshikhar/cxstatusline/commit/f5c5d4e623ac1b17a403c9d70e7a5da1585e71dd))
+* **widgets:** port full speed widget architecture, window editor, and metrics from upstream ccstatusline ([#81](https://github.com/adrijshikhar/cxstatusline/issues/81)) ([cf914ac](https://github.com/adrijshikhar/cxstatusline/commit/cf914ac0fbdae49263cf921ab4f6cc313e0c5b31))
+
 ## [0.6.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.5.1...v0.6.0) (2026-09-18)
 
 
