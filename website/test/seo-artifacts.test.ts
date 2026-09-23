@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { beforeAll, describe, expect, test } from "bun:test";
@@ -77,6 +77,13 @@ describe("SEO Artifacts and Discovery Verification", () => {
 
     // Visible GEO Overview passage
     expect(html).toContain("cxstatusline is an open-source statusline customization tool for OpenAI Codex CLI.");
+
+    // Default robots is index, follow
+    expect(html).toContain('<meta name="robots" content="index, follow">');
+
+    // WebSite schema URL exactly matches canonical
+    expect(html).toContain('"@type":"WebSite"');
+    expect(html).toContain('"url":"https://cxstatusline.adrijshikhar.dev/"');
   });
 
   test("SEO component conditionally renders search console verification tags", () => {
@@ -92,9 +99,19 @@ describe("SEO Artifacts and Discovery Verification", () => {
     expect(html).not.toContain("static.cloudflareinsights.com/beacon.min.js");
   });
 
-  test("renders verification tags and Cloudflare beacon when environment variables are set", () => {
+  test("renders verification tags, Cloudflare beacon, and supports noindex and custom canonical", () => {
     const tempOutDir = join(import.meta.dir, "../dist-env-test");
+    const testPagePath = join(import.meta.dir, "../src/pages/test-noindex.astro");
     try {
+      writeFileSync(
+        testPagePath,
+        `---
+import SEO from "../components/SEO.astro";
+---
+<SEO noindex={true} canonical="https://cxstatusline.adrijshikhar.dev/custom-canonical" />
+`
+      );
+
       execSync("bunx astro build --outDir dist-env-test", {
         cwd: join(import.meta.dir, ".."),
         env: {
@@ -113,7 +130,15 @@ describe("SEO Artifacts and Discovery Verification", () => {
       expect(html).toContain('<meta name="msvalidate.01" content="test-bing-token-456"');
       expect(html).toContain('src="https://static.cloudflareinsights.com/beacon.min.js"');
       expect(html).toContain("test-cf-token-789");
+
+      // Verify noindex and custom canonical on the test page
+      const testNoindexPath = join(tempOutDir, "test-noindex/index.html");
+      expect(existsSync(testNoindexPath)).toBe(true);
+      const noindexHtml = readFileSync(testNoindexPath, "utf-8");
+      expect(noindexHtml).toContain('<meta name="robots" content="noindex, nofollow">');
+      expect(noindexHtml).toContain('<link rel="canonical" href="https://cxstatusline.adrijshikhar.dev/custom-canonical">');
     } finally {
+      rmSync(testPagePath, { force: true });
       rmSync(tempOutDir, { recursive: true, force: true });
     }
   });

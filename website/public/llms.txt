@@ -14,6 +14,6 @@
 
 ## Development
 
-- Engine: Built on Node >= 22 and Bun >= 1.4.
+- Engine: Built on Node >= 22 and Bun >= 1.4 (runtime supports Node.js >= 18 and Bun >= 1.2).
 - Checks: `bun test ./test ./src`, `bun run typecheck`, `bun run build`, and `bun run check:package`.
 - License: MIT.
