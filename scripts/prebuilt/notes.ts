@@ -82,8 +82,6 @@ function architecturesSection(platforms: readonly Platform[]): string {
 export function releaseNotes(i: NotesInput): string {
   const platforms = i.platforms ?? (i.platform ? [i.platform] : ["darwin-arm64"]);
   return [
-    `# ${releaseTitle(i)}`,
-    "",
     `Built from cxstatusline commit ${i.sourceCommit}${i.cxVersion ? ` (package version ${i.cxVersion})` : ""} and `
       + `openai/codex ${i.upstreamTag} (${i.upstreamCommit}) with patch ${i.patchFile} `
       + `sha256 ${i.patchSha256}.`,

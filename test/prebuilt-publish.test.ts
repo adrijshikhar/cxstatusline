@@ -17,6 +17,7 @@ import {
   provenanceMarker,
   publishRelease,
   releaseNotes,
+  releaseTitle,
   selectSourceRelease,
   verifyReleaseDir,
   type NotesInput,
@@ -160,10 +161,11 @@ describe("release notes", () => {
   });
 
   test("carries every required disclosure", () => {
+    expect(releaseTitle(notesInput)).toBe(`[Prebuilt] Codex ${CODEX} (darwin-arm64)`);
     const notes = releaseNotes(notesInput);
     expect(notes).not.toMatch(/private/i);
+    expect(notes).not.toMatch(/^# /m);
     const disclosures = [
-      `Codex ${CODEX} (darwin-arm64)`,
       `Built from cxstatusline commit ${SOURCE} (package version ${CX})`,
       `patch codex-${CODEX}.patch sha256 ${PATCH_SHA}`,
       "darwin-arm64 only (Apple Silicon); Intel is not built in this release.",
@@ -195,8 +197,11 @@ describe("release notes", () => {
   });
 
   test("formats multiple architectures in title and notes", () => {
+    expect(releaseTitle({ codexVersion: CODEX, platforms: ["darwin-arm64", "darwin-x64"] })).toBe(
+      `[Prebuilt] Codex ${CODEX} (darwin-arm64, darwin-x64)`,
+    );
     const notes = releaseNotes({ ...notesInput, platforms: ["darwin-arm64", "darwin-x64"] });
-    expect(notes).toContain(`Codex ${CODEX} (darwin-arm64, darwin-x64)`);
+    expect(notes).not.toMatch(/^# /m);
     expect(notes).toContain("darwin-arm64 (Apple Silicon), darwin-x64 (Intel).");
   });
 });
