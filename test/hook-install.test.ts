@@ -37,6 +37,9 @@ describe("isOurGroup", () => {
   test("returns false for unrelated hooks", () => {
     expect(isOurGroup({ hooks: [{ type: "command", command: "'/Users/x/.caveman/bin/caveman-proxy' native-hook codex" }] })).toBe(false);
   });
+  test("gracefully handles hooks with missing or undefined command", () => {
+    expect(isOurGroup({ hooks: [{ type: "command" } as unknown as { type: "command"; command: string }] })).toBe(false);
+  });
 });
 
 describe("mergeHook", () => {

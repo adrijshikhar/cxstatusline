@@ -128,8 +128,8 @@ export async function runHook(ctx: Context, stdin: string, deps: HookDeps): Prom
   if (corrupt) {
     messages.push("cxstatusline: state.json was corrupt; recovered what was in state.json.bak. Run `cxstatusline doctor`.");
   }
-  const activeInstalled = readInstallation(ctx.paths)?.codexVersion ?? read.patched_from;
-  if (activeInstalled === null) return done();
+  const activeGeneration = readInstallation(ctx.paths)?.codexVersion;
+  if ((activeGeneration ?? read.patched_from) === null) return done();
 
   // Upstream first: the wrapper decision below needs its version, and calling ensureWrapper before
   // this point would replace upstream's symlink - the only thing resolveUpstream can re-resolve from.
@@ -139,9 +139,9 @@ export async function runHook(ctx: Context, stdin: string, deps: HookDeps): Prom
     return done();
   }
   let { state, upstream } = located;
-  const currentInstalled = readInstallation(ctx.paths)?.codexVersion ?? state.patched_from;
-  if (currentInstalled === null) return done();
-  const patched = parseSemver(currentInstalled);
+  const effectiveInstalled = activeGeneration ?? state.patched_from;
+  if (effectiveInstalled === null) return done();
+  const patched = parseSemver(effectiveInstalled);
   const drift = needsRepatch(upstream, patched, state.policy);
 
   if (!drift) maintainWrapper(ctx, messages);
@@ -172,7 +172,7 @@ export async function runHook(ctx: Context, stdin: string, deps: HookDeps): Prom
 
   if (drift) {
     deps.spawnDetached(ctx.cxBin, ["hook", "acquire"], ctx.paths.patchLog);
-    messages.push(`cxstatusline: Codex updated to ${upstream.raw} (installed pair is from ${currentInstalled}). Installing the new pair in the background - reopen Codex in a few minutes. Log: ${ctx.paths.patchLog}`);
+    messages.push(`cxstatusline: Codex updated to ${upstream.raw} (installed pair is from ${effectiveInstalled}). Installing the new pair in the background - reopen Codex in a few minutes. Log: ${ctx.paths.patchLog}`);
   }
   return done();
 }
