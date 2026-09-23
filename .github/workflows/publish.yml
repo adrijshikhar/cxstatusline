@@ -1,14 +1,13 @@
-name: Release & Publish
+name: Publish Release & npm
+
 on:
   push:
-    branches:
-      - main
     tags:
       - "v*.*.*"
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Optional tag to release if triggering manually (e.g. v0.4.1)'
+        description: 'Optional tag to release if triggering manually (e.g. v0.7.1)'
         required: false
 
 permissions:
@@ -16,41 +15,21 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: publish-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  release-please:
-    name: Release Please (PR & Tag)
-    runs-on: ubuntu-latest
-    if: github.repository == 'adrijshikhar/cxstatusline' && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
-    outputs:
-      releases_created: ${{ steps.release.outputs.releases_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
-    steps:
-      - uses: googleapis/release-please-action@v5.0.0
-        id: release
-        with:
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
-
   build-and-verify:
     name: Build & Verify Release
     runs-on: macos-15
-    needs: release-please
-    if: |
-      github.repository == 'adrijshikhar/cxstatusline' &&
-      (needs.release-please.outputs.releases_created == 'true' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')
+    if: github.repository == 'adrijshikhar/cxstatusline'
     outputs:
       tag_name: ${{ steps.tag.outputs.tag }}
     steps:
       - name: Determine Target Git Ref
         id: target
         run: |
-          if [ -n "${{ needs.release-please.outputs.tag_name }}" ]; then
-            echo "ref=${{ needs.release-please.outputs.tag_name }}" >> "$GITHUB_OUTPUT"
-          elif [ -n "${{ github.event.inputs.tag }}" ]; then
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
             echo "ref=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
           else
             echo "ref=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
@@ -72,9 +51,7 @@ jobs:
       - name: Resolve Release Tag
         id: tag
         run: |
-          if [ -n "${{ needs.release-please.outputs.tag_name }}" ]; then
-            echo "tag=${{ needs.release-please.outputs.tag_name }}" >> "$GITHUB_OUTPUT"
-          elif [ -n "${{ github.event.inputs.tag }}" ]; then
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
             echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
           else
             echo "tag=v$(node -p 'require("./package.json").version')" >> "$GITHUB_OUTPUT"
@@ -99,7 +76,7 @@ jobs:
   publish-npm:
     name: Publish to npm
     runs-on: ubuntu-latest
-    needs: [release-please, build-and-verify]
+    needs: build-and-verify
     environment: npm
     permissions:
       contents: write

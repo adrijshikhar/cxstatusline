@@ -258,22 +258,19 @@ you, and never deletes a draft on its own.
 published, a release's assets are never replaced - differing bytes always mean a new CX version and
 therefore a new tag.
 
-### npm and source release procedure (`release.yml`)
+### npm and source release procedure (`release-please.yml` & `publish.yml`)
 
-The unified release and npm publication workflow (`.github/workflows/release.yml`) runs on push to `main`, tags matching `v*.*.*`, or manual `workflow_dispatch`:
+The decoupled release architecture isolates pull request tracking from gated package publication:
 
-1. **`release-please`** (on `ubuntu-latest`):
-   - Uses `googleapis/release-please-action@v4` with `release-please-config.json` and `.release-please-manifest.json`.
-   - Automatically tracks Conventional Commits and maintains an open Release PR.
-   - When the Release PR is merged to `main`, creates the GitHub release and git tag.
-2. **`publish-npm`** (on `macos-15`, gated by `environment: npm` with owner required reviewer):
-   - Triggers when `releases_created == 'true'` or when a `v*.*.*` tag is pushed.
-   - Checks out the target release tag with full history.
-   - Runs `bun run typecheck` and `bun test`.
-   - Release build: `CXSTATUSLINE_RELEASE_BUILD=1 bun run build` and `bun run check:package`.
-   - Packs the npm tarball with `npm pack` and writes `SHA256SUMS`.
-   - Attaches the packed `.tgz` and `SHA256SUMS` to the GitHub release.
-   - Publishes to npm registry with `npm publish --provenance --access public` via OIDC Trusted Publishing.
+1. **`release-please.yml`** (runs on push to `main` and `workflow_dispatch`):
+   - Uses `googleapis/release-please-action@v5` with `release-please-config.json` and `.release-please-manifest.json`.
+   - Tracks Conventional Commits and maintains an open Release PR.
+   - When the Release PR is merged to `main`, creates the GitHub release and pushes Git tag `v*.*.*` via `RELEASE_PLEASE_TOKEN`.
+   - Executes in ~15 seconds with no manual approval gates, ensuring merges on `main` are never blocked.
+2. **`publish.yml`** (triggers strictly on tag push `v*.*.*` or manual `workflow_dispatch`):
+   - Concurrency is scoped to the tag ref (`publish-${{ github.ref }}`), completely decoupling manual approval gates from `main`.
+   - **`build-and-verify`** (on `macos-15`): Checks out the release tag, verifies types (`bun run typecheck`), executes the test suite (`bun test`), builds production artifacts (`CXSTATUSLINE_RELEASE_BUILD=1 bun run build`), checks packaging (`bun run check:package`), and records `SHA256SUMS`.
+   - **`publish-npm`** (on `ubuntu-latest`, gated by `environment: npm` with owner required reviewer): Attaches the packed `.tgz` and checksums to the GitHub release, and publishes to the npm registry with `npm publish --provenance --access public` via OIDC Trusted Publishing.
 
 
 ### Known acceptance gap
