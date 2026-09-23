@@ -18,6 +18,7 @@ const skeleton = document.querySelector<HTMLElement>("#playground-skeleton")!;
 const terminalElement = document.querySelector<HTMLElement>("#terminal")!;
 const shell = document.querySelector<HTMLElement>(".terminal-shell")!;
 const chat = document.querySelector<HTMLElement>("#chat-preview")!;
+const terminalWindow = document.querySelector<HTMLElement>(".terminal-window");
 let savedSettings = SettingsSchema.parse(defaultLayout);
 let view: "editor" | "preview" = "preview";
 let mounted: ReturnType<typeof mountInkInXterm> | undefined;
@@ -92,6 +93,7 @@ async function renderEditor(): Promise<void> {
   view = "editor";
   chat.hidden = true;
   editButton.hidden = true;
+  terminalWindow?.classList.add("editing");
   shell.classList.remove("preview");
   setEditorStatus();
   terminalElement.inert = true;
@@ -102,6 +104,8 @@ async function renderEditor(): Promise<void> {
   mountView(editorView(), () => {
     terminalElement.inert = false;
     focusCurrentView();
+    // Dispatch resize so fit addon immediately aligns with the compact container
+    window.dispatchEvent(new Event("resize"));
   });
 }
 
@@ -109,6 +113,7 @@ function showPreview(focus = true, rerender = true): void {
   view = "preview";
   chat.hidden = false;
   editButton.hidden = false;
+  terminalWindow?.classList.remove("editing");
   shell.classList.add("preview");
   terminalElement.inert = true;
   if (mounted) {
@@ -119,6 +124,7 @@ function showPreview(focus = true, rerender = true): void {
     }
   }
   setStatus(hasSavedSettings ? "Saved in this browser" : "Default settings preview", hasSavedSettings ? "status-saved" : "status-muted");
+  window.dispatchEvent(new Event("resize"));
   if (focus) focusCurrentView();
 }
 
