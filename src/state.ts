@@ -32,7 +32,7 @@ export interface State {
 
 export const DEFAULT_STATE: State = {
   version: 1,
-  policy: "stable-minors",
+  policy: "every",
   patched_from: null,
   upstream_bin: null,
   launcher_restore: null,

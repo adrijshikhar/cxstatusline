@@ -7,6 +7,7 @@ import { realHookDeps, runHook } from "../src/hook/run";
 import { resolvePaths } from "../src/paths";
 import { WRAPPER_MARKER_V2, installWrapper, isOurWrapper } from "../src/patch/wrapper";
 import { createGeneration, swapPointer } from "../src/patch/generation";
+import { probeRemoteCandidate } from "../src/patch/run";
 import { DEFAULT_STATE, readState, writeState, RELEASE_UNAVAILABLE, type State } from "../src/state";
 import { fakeExec, tmpEnv } from "./helpers";
 
@@ -73,7 +74,7 @@ const startup = JSON.stringify({ session_id: "s", cwd: "/", hook_event_name: "Se
 const msg = (stdout: string): string => (stdout ? (JSON.parse(stdout) as { systemMessage: string }).systemMessage : "");
 
 describe("runHook", () => {
-  test("a newer launcher wins while the saved old release still exists", () => {
+  test("a newer launcher wins while the saved old release still exists", async () => {
     const { ctx, deps, paths, spawned, root, upstream } = setup({});
     const newer = join(root, "new-codex");
     writeFileSync(newer, "NEW");
@@ -81,19 +82,19 @@ describe("runHook", () => {
     rmSync(paths.wrapperPath);
     symlinkSync(newer, paths.wrapperPath);
     const run = fakeExec((cmd) => ({ stdout: `codex-cli ${cmd === newer ? "0.153.0" : "0.152.1"}\n` })).run;
-    expect(msg(runHook({ ...ctx, run }, startup, deps).stdout)).toMatch(/0\.153\.0.*background/);
+    expect(msg((await runHook({ ...ctx, run }, startup, deps)).stdout)).toMatch(/0\.153\.0.*background/);
     expect(spawned).toEqual([["/cx", "hook", "acquire"]]);
     expect(readlinkSync(paths.wrapperPath)).toBe(newer);
     expect(existsSync(upstream)).toBe(true);
     expect(readState(paths.stateFile).state).toMatchObject({ upstream_bin: newer, launcher_restore: { kind: "symlink", target: newer } });
   });
-  test("an active install takes precedence over an old failed attempt", () => {
+  test("an active install takes precedence over an old failed attempt", async () => {
     const { ctx, deps, paths, spawned } = setup({ last_attempt: { at: "t", ok: false, version: "0.153.0", reason: "old failure" } }, "0.153.0");
     writeFileSync(paths.lockFile, `${process.pid}\n`);
-    expect(msg(runHook(ctx, startup, deps).stdout)).toMatch(/already in progress/);
+    expect(msg((await runHook(ctx, startup, deps)).stdout)).toMatch(/already in progress/);
     expect(spawned).toEqual([]);
   });
-  test("upstream discovery preserves a build result written after the initial read", () => {
+  test("upstream discovery preserves a build result written after the initial read", async () => {
     const { ctx, deps, paths, spawned, upstream } = setup({ upstream_bin: "/gone" });
     rmSync(paths.wrapperPath);
     symlinkSync(upstream, paths.wrapperPath);
@@ -101,121 +102,127 @@ describe("runHook", () => {
       writeState(paths.stateFile, { ...readState(paths.stateFile).state, patched_from: "0.153.0", last_attempt: { at: "new", ok: true, version: "0.153.0" } });
       return { stdout: "codex-cli 0.153.0" };
     }).run;
-    runHook({ ...ctx, run }, startup, deps);
+    await runHook({ ...ctx, run }, startup, deps);
     expect(readState(paths.stateFile).state).toMatchObject({ upstream_bin: upstream, patched_from: "0.153.0", last_attempt: { at: "new", ok: true } });
     expect(spawned).toEqual([]);
   });
-  test("a broken current launcher is reported without falling back to the old release", () => {
+  test("a broken current launcher is reported without falling back to the old release", async () => {
     const { ctx, deps, paths, spawned } = setup({});
     rmSync(paths.wrapperPath);
     symlinkSync("/missing/new-codex", paths.wrapperPath);
     const run = fakeExec(cmd => cmd === "/missing/new-codex" ? { status: 127 } : { stdout: "codex-cli 0.152.1" }).run;
-    expect(msg(runHook({ ...ctx, run }, startup, deps).stdout)).toContain("did not report a version");
+    expect(msg((await runHook({ ...ctx, run }, startup, deps)).stdout)).toContain("did not report a version");
     expect(readlinkSync(paths.wrapperPath)).toBe("/missing/new-codex");
     expect(spawned).toEqual([]);
   });
-  test("healthy start: no output, nothing spawned", () => {
+  test("healthy start: no output, nothing spawned", async () => {
     const { ctx, deps, spawned } = setup({});
-    expect(runHook(ctx, startup, deps).stdout).toBe("");
+    expect((await runHook(ctx, startup, deps)).stdout).toBe("");
     expect(spawned).toEqual([]);
   });
-  test("compact source: always silent, even with drift", () => {
+  test("compact source: always silent, even with drift", async () => {
     const { ctx, deps, spawned } = setup({}, "0.153.0");
-    expect(runHook(ctx, JSON.stringify({ source: "compact" }), deps).stdout).toBe("");
+    expect((await runHook(ctx, JSON.stringify({ source: "compact" }), deps)).stdout).toBe("");
     expect(spawned).toEqual([]);
   });
-  test("an unknown future source is silent too (whitelist, not blacklist)", () => {
+  test("an unknown future source is silent too (whitelist, not blacklist)", async () => {
     const { ctx, deps, spawned } = setup({}, "0.153.0");
-    expect(runHook(ctx, JSON.stringify({ source: "some-future-source" }), deps).stdout).toBe("");
+    expect((await runHook(ctx, JSON.stringify({ source: "some-future-source" }), deps)).stdout).toBe("");
     expect(spawned).toEqual([]);
   });
-  test("resume and clear are acted on", () => {
+  test("resume and clear are acted on", async () => {
     for (const source of ["resume", "clear"]) {
       const { ctx, deps, spawned } = setup({}, "0.153.0");
-      runHook(ctx, JSON.stringify({ source }), deps);
+      await runHook(ctx, JSON.stringify({ source }), deps);
       expect(spawned).toEqual([["/cx", "hook", "acquire"]]);
     }
   });
-  test("drift under stable-minors: spawns patch detached and says so", () => {
+  test("drift under stable-minors: spawns patch detached and says so", async () => {
     const { ctx, deps, spawned, paths } = setup({}, "0.153.0");
-    const r = runHook(ctx, startup, deps);
+    const r = await runHook(ctx, startup, deps);
     expect(spawned).toEqual([["/cx", "hook", "acquire"]]);
     expect(msg(r.stdout)).toMatch(/0\.153\.0.*0\.152\.1.*background.*reopen/i);
     expect(readState(paths.stateFile).state.patched_from).toBe("0.152.1"); // the child writes it, not us
   });
-  test("on drift the wrapper is NOT re-placed, so the stale binary cannot take over", () => {
+  test("on drift the wrapper is NOT re-placed, so the stale binary cannot take over", async () => {
     const { ctx, deps, paths, upstream } = setup({}, "0.153.0");
     rmSync(paths.wrapperPath);
     symlinkSync(upstream, paths.wrapperPath); // upstream's installer took the path back
-    const r = runHook(ctx, startup, deps);
+    const r = await runHook(ctx, startup, deps);
     expect(readlinkSync(paths.wrapperPath)).toBe(upstream); // left alone during the install window
     expect(msg(r.stdout)).not.toMatch(/restored the cxstatusline wrapper/);
   });
-  test("patch release within the minor: silent hold", () => {
+  test("patch release within the minor: acquires under default policy 'every'", async () => {
     const { ctx, deps, spawned } = setup({}, "0.152.2");
-    expect(runHook(ctx, startup, deps).stdout).toBe("");
+    const r = await runHook(ctx, startup, deps);
+    expect(msg(r.stdout)).toMatch(/0\.152\.2.*0\.152\.1.*background.*reopen/i);
+    expect(spawned).toEqual([["/cx", "hook", "acquire"]]);
+  });
+  test("patch release within the minor: silent hold under stable-minors", async () => {
+    const { ctx, deps, spawned } = setup({ policy: "stable-minors" }, "0.152.2");
+    expect((await runHook(ctx, startup, deps)).stdout).toBe("");
     expect(spawned).toEqual([]);
   });
-  test("lock held by a live process: says the install is in progress, no spawn", () => {
+  test("lock held by a live process: says the install is in progress, no spawn", async () => {
     const { ctx, deps, spawned, paths } = setup({}, "0.153.0");
     mkdirSync(paths.stateDir, { recursive: true });
     writeFileSync(paths.lockFile, `${process.pid}\n`);
-    expect(msg(runHook(ctx, startup, deps).stdout)).toMatch(/install for Codex 0\.153\.0 is already in progress/i);
+    expect(msg((await runHook(ctx, startup, deps)).stdout)).toMatch(/install for Codex 0\.153\.0 is already in progress/i);
     expect(spawned).toEqual([]);
   });
-  test("previous attempt failed for this version: reports once, does not respawn", () => {
+  test("previous attempt failed for this version: reports once, does not respawn", async () => {
     const { ctx, deps, spawned } = setup({ last_attempt: { at: "t", ok: false, version: "0.153.0", reason: "cargo build: E0425" } }, "0.153.0");
-    const r = runHook(ctx, startup, deps);
+    const r = await runHook(ctx, startup, deps);
     expect(msg(r.stdout)).toMatch(/last install attempt for 0\.153\.0 failed: cargo build: E0425/);
     expect(spawned).toEqual([]);
   });
-  test("wrapper clobbered by upstream's installer, no drift: re-placed and reported", () => {
+  test("wrapper clobbered by upstream's installer, no drift: re-placed and reported", async () => {
     const { ctx, deps, paths, upstream } = setup({});
     rmSync(paths.wrapperPath);
     symlinkSync(upstream, paths.wrapperPath);
-    const r = runHook(ctx, startup, deps);
+    const r = await runHook(ctx, startup, deps);
     expect(msg(r.stdout)).toMatch(/restored the cxstatusline wrapper/);
     expect(isOurWrapper(paths.wrapperPath)).toBe(true);
   });
-  test("patched binary missing: says so and writes NO wrapper", () => {
+  test("patched binary missing: says so and writes NO wrapper", async () => {
     const { ctx, deps, paths, upstream } = setup({});
     rmSync(paths.patchedBin);
     rmSync(paths.wrapperPath);
     symlinkSync(upstream, paths.wrapperPath);
-    const r = runHook(ctx, startup, deps);
+    const r = await runHook(ctx, startup, deps);
     expect(msg(r.stdout)).toMatch(/patched binary .* is missing/);
     expect(readlinkSync(paths.wrapperPath)).toBe(upstream);
   });
-  test("Code Mode host missing: says so and leaves the wrapper alone", () => {
+  test("Code Mode host missing: says so and leaves the wrapper alone", async () => {
     const { ctx, deps, paths } = setup({});
     rmSync(paths.patchedCodeModeHost);
-    const r = runHook(ctx, startup, deps);
+    const r = await runHook(ctx, startup, deps);
     expect(msg(r.stdout)).toMatch(/Code Mode host .* is missing/);
     expect(isOurWrapper(paths.wrapperPath)).toBe(true);
   });
-  test("a foreign file at the launcher path is reported, never overwritten", () => {
+  test("a foreign file at the launcher path is reported, never overwritten", async () => {
     const { ctx, deps, paths } = setup({});
     rmSync(paths.wrapperPath);
     writeFileSync(paths.wrapperPath, "#!/bin/sh\nexec /opt/homebrew/bin/codex-real\n");
-    const r = runHook(ctx, startup, deps);
+    const r = await runHook(ctx, startup, deps);
     expect(msg(r.stdout)).toMatch(/refusing to overwrite it/);
   });
-  test("corrupt state.json: reported, session continues", () => {
+  test("corrupt state.json: reported, session continues", async () => {
     const { ctx, deps, paths, spawned } = setup({});
     writeFileSync(paths.stateFile, "{{");
-    const r = runHook(ctx, startup, deps);
+    const r = await runHook(ctx, startup, deps);
     expect(msg(r.stdout)).toMatch(/state\.json was corrupt/);
     expect(spawned).toEqual([]);
   });
-  test("upstream binary vanished and cannot be re-resolved: reported, no spawn", () => {
+  test("upstream binary vanished and cannot be re-resolved: reported, no spawn", async () => {
     const { ctx, deps, spawned } = setup({ upstream_bin: "/gone/codex" });
     const { run } = fakeExec((cmd) => (cmd === "/gone/codex" ? { status: 127 } : { stdout: "codex-cli 0.152.1\n" }));
     // ~/.local/bin/codex is our wrapper here and PATH is empty -> re-resolve fails
-    const r = runHook({ ...ctx, run, env: { ...ctx.env, PATH: "" } }, startup, deps);
+    const r = await runHook({ ...ctx, run, env: { ...ctx.env, PATH: "" } }, startup, deps);
     expect(msg(r.stdout)).toMatch(/no upstream Codex found/);
     expect(spawned).toEqual([]);
   });
-  test("locateUpstream's write is skipped when the lock is held; the resolved value is still used in-memory", () => {
+  test("locateUpstream's write is skipped when the lock is held; the resolved value is still used in-memory", async () => {
     const { ctx, deps, paths, root } = setup({ upstream_bin: "/gone/codex" }, "0.152.1");
     // A second, PATH-discoverable upstream binary so the re-resolve branch actually succeeds
     // (tmpEnv's PATH already points at root/usr-bin).
@@ -231,21 +238,40 @@ describe("runHook", () => {
     mkdirSync(paths.stateDir, { recursive: true });
     writeFileSync(paths.lockFile, `${process.pid}\n`); // another process holds the lock
 
-    const r = runHook({ ...ctx, run }, startup, deps);
+    const r = await runHook({ ...ctx, run }, startup, deps);
 
     expect(r.stdout).toBe(""); // resolved fine in-memory: no error, no drift, no message
     expect(readState(paths.stateFile).state.upstream_bin).toBe("/gone/codex"); // NOT persisted
   });
-  test("never installed (patched_from null): silent", () => {
+  test("never installed (patched_from null): silent", async () => {
     const { ctx, deps } = setup({ patched_from: null });
-    expect(runHook(ctx, startup, deps).stdout).toBe("");
+    expect((await runHook(ctx, startup, deps)).stdout).toBe("");
   });
-  test("garbage stdin is treated as startup", () => {
+  test("state.patched_from null but generation active on disk: detects drift and acquires", async () => {
+    const { ctx, deps, paths, spawned } = setup({ patched_from: null }, "0.153.0");
+    rmSync(paths.patchedBin);
+    rmSync(paths.patchedCodeModeHost);
+    installGeneration(paths); // active generation is 0.152.1
+    const r = await runHook(ctx, startup, deps);
+    expect(msg(r.stdout)).toMatch(/Codex updated to 0\.153\.0 \(installed pair is from 0\.152\.1\)/);
+    expect(spawned).toEqual([["/cx", "hook", "acquire"]]);
+  });
+  test("generation active on disk takes precedence over state.patched_from for drift detection", async () => {
+    const { ctx, deps, paths, spawned } = setup({ patched_from: "0.153.0" }, "0.153.0");
+    rmSync(paths.patchedBin);
+    rmSync(paths.patchedCodeModeHost);
+    installGeneration(paths); // active generation is 0.152.1, but state claimed 0.153.0
+    const r = await runHook(ctx, startup, deps);
+    // Active generation is 0.152.1, upstream is 0.153.0 -> drift detected!
+    expect(msg(r.stdout)).toMatch(/Codex updated to 0\.153\.0 \(installed pair is from 0\.152\.1\)/);
+    expect(spawned).toEqual([["/cx", "hook", "acquire"]]);
+  });
+  test("garbage stdin is treated as startup", async () => {
     const { ctx, deps, spawned } = setup({}, "0.153.0");
-    runHook(ctx, "not json", deps);
+    await runHook(ctx, "not json", deps);
     expect(spawned).toHaveLength(1);
   });
-  test("a healthy generation install keeps the wrapper without any flat-layout binary", () => {
+  test("a healthy generation install keeps the wrapper without any flat-layout binary", async () => {
     const { ctx, deps, paths } = setup({});
     // The generation layout never writes paths.patchedBin, so its absence must not be reported as
     // a broken install once installation.json says a complete pair is active.
@@ -253,27 +279,76 @@ describe("runHook", () => {
     rmSync(paths.patchedCodeModeHost);
     installGeneration(paths);
     // The first pass upgrades the v1 wrapper an older install left behind...
-    expect(msg(runHook(ctx, startup, deps).stdout)).toMatch(/restored the cxstatusline wrapper/);
+    expect(msg((await runHook(ctx, startup, deps)).stdout)).toMatch(/restored the cxstatusline wrapper/);
     expect(readFileSync(paths.wrapperPath, "utf8")).toContain(WRAPPER_MARKER_V2);
     // ...and from then on a healthy generation install is silent.
-    expect(msg(runHook(ctx, startup, deps).stdout)).toBe("");
+    expect(msg((await runHook(ctx, startup, deps)).stdout)).toBe("");
     expect(isOurWrapper(paths.wrapperPath)).toBe(true);
   });
-  test("an unavailable prebuilt release is retried at most once a day", () => {
+  test("an unavailable prebuilt release is retried at most once a day", async () => {
     const attempt = { at: "2026-09-02T12:00:00Z", ok: false, version: "0.153.0", reason: RELEASE_UNAVAILABLE };
     const soon = setup({ last_attempt: attempt }, "0.153.0", "2026-09-03T11:00:00Z");
-    expect(msg(runHook(soon.ctx, startup, soon.deps).stdout)).toMatch(/no prebuilt Codex 0\.153\.0.*retry/i);
+    expect(msg((await runHook(soon.ctx, startup, soon.deps)).stdout)).toMatch(/no prebuilt Codex 0\.153\.0.*retry/i);
     expect(soon.spawned).toEqual([]);
 
     const later = setup({ last_attempt: attempt }, "0.153.0", "2026-09-03T13:00:00Z");
-    runHook(later.ctx, startup, later.deps);
+    await runHook(later.ctx, startup, later.deps);
     expect(later.spawned).toEqual([["/cx", "hook", "acquire"]]); // a newly published release is not suppressed forever
   });
-  test("stdout is either empty or exactly one JSON object with only systemMessage", () => {
+  test("live probe bypasses 24h backoff when a new prebuilt is confirmed available", async () => {
+    const attempt = { at: "2026-09-02T12:00:00Z", ok: false, version: "0.153.0", reason: RELEASE_UNAVAILABLE };
+    const { ctx, spawned } = setup({ last_attempt: attempt }, "0.153.0", "2026-09-02T13:00:00Z"); // only 1h later, normally suppressed
+    const deps = {
+      spawnDetached: (bin: string, args: string[]) => { spawned.push([bin, ...args]); },
+      probeRemote: async (ver?: string) => ({ version: ver ?? "0.153.0", available: true }),
+    };
+    const r = await runHook(ctx, startup, deps);
+    expect(msg(r.stdout)).toMatch(/Codex updated to 0\.153\.0.*background/i);
+    expect(spawned).toEqual([["/cx", "hook", "acquire"]]);
+  });
+  test("live probe failure (network/timeout) fails silently and falls back to local candidate", async () => {
+    const attempt = { at: "2026-09-02T12:00:00Z", ok: false, version: "0.153.0", reason: RELEASE_UNAVAILABLE };
+    const { ctx, spawned } = setup({ last_attempt: attempt }, "0.153.0", "2026-09-02T13:00:00Z"); // 1h later
+    const deps = {
+      spawnDetached: (bin: string, args: string[]) => { spawned.push([bin, ...args]); },
+      probeRemote: async () => { throw new Error("network timeout 5000ms"); },
+    };
+    const r = await runHook(ctx, startup, deps);
+    expect(msg(r.stdout)).toMatch(/no prebuilt Codex 0\.153\.0 pair is published yet; will retry in a day/i);
+    expect(spawned).toEqual([]);
+  });
+  test("stdout is either empty or exactly one JSON object with only systemMessage", async () => {
     const { ctx, deps } = setup({}, "0.153.0");
-    const out = runHook(ctx, startup, deps).stdout;
+    const out = (await runHook(ctx, startup, deps)).stdout;
     expect(out.includes("\n")).toBe(false);
     expect(Object.keys(JSON.parse(out) as object)).toEqual(["systemMessage"]);
+  });
+});
+
+describe("probeRemoteCandidate", () => {
+  test("returns remote candidate when release manifest exists within 5s", async () => {
+    const fakeFetch = async (url: string) => {
+      if (url.includes("codex-v0.153.0/manifest.json")) {
+        return { ok: true, status: 200 } as Response;
+      }
+      return { ok: false, status: 404 } as Response;
+    };
+    const res = await probeRemoteCandidate("0.153.0", fakeFetch as any);
+    expect(res).toEqual({ version: "0.153.0", available: true });
+  });
+
+  test("returns available false when release does not exist", async () => {
+    const fakeFetch = async () => ({ ok: false, status: 404 } as Response);
+    const res = await probeRemoteCandidate("0.153.0", fakeFetch as any);
+    expect(res).toEqual({ version: "0.153.0", available: false });
+  });
+
+  test("fails silently and returns null on timeout or network error", async () => {
+    const timeoutFetch = async () => {
+      throw new Error("AbortError: operation timed out");
+    };
+    const res = await probeRemoteCandidate("0.153.0", timeoutFetch as any);
+    expect(res).toBeNull();
   });
 });
 

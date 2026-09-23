@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { hookCommand, hookEntry, installHook, mergeHook, removeHook, uninstallHook, type HooksFile } from "../src/hook/install";
+import { hookCommand, hookEntry, installHook, isOurGroup, mergeHook, removeHook, uninstallHook, type HooksFile } from "../src/hook/install";
 import { resolvePaths } from "../src/paths";
 import { tmpEnv } from "./helpers";
 
@@ -23,6 +23,22 @@ describe("hook entry", () => {
     expect(hookEntry("/cx")).toEqual({
       hooks: [{ type: "command", command: "'/cx' hook", timeout: 10, statusMessage: "cxstatusline: checking Codex version" }],
     });
+  });
+});
+
+describe("isOurGroup", () => {
+  test("identifies group by exact statusMessage", () => {
+    expect(isOurGroup({ hooks: [{ type: "command", command: "'/x' hook", statusMessage: "cxstatusline: checking Codex version" }] })).toBe(true);
+  });
+  test("identifies group by command string fallback when statusMessage is missing or altered", () => {
+    expect(isOurGroup({ hooks: [{ type: "command", command: "'/Users/n/.local/bin/cxstatusline' hook" }] })).toBe(true);
+    expect(isOurGroup({ hooks: [{ type: "command", command: "bun /path/to/cxstatusline hook", statusMessage: "custom message" }] })).toBe(true);
+  });
+  test("returns false for unrelated hooks", () => {
+    expect(isOurGroup({ hooks: [{ type: "command", command: "'/Users/x/.caveman/bin/caveman-proxy' native-hook codex" }] })).toBe(false);
+  });
+  test("gracefully handles hooks with missing or undefined command", () => {
+    expect(isOurGroup({ hooks: [{ type: "command" } as unknown as { type: "command"; command: string }] })).toBe(false);
   });
 });
 
@@ -50,6 +66,20 @@ describe("mergeHook", () => {
     expect(moved.file.hooks.SessionStart).toHaveLength(3);
     expect(moved.file.hooks.SessionStart?.[2]?.hooks[0]?.command).toBe("'/new/cx' hook");
   });
+  test("replaces existing cxstatusline hook even if statusMessage was modified", () => {
+    const customized: HooksFile = {
+      hooks: {
+        SessionStart: [
+          { hooks: [{ type: "command", command: "'/old/cxstatusline' hook", statusMessage: "custom message" }] },
+        ],
+      },
+    };
+    const { file, changed } = mergeHook(customized, "/new/cxstatusline");
+    expect(changed).toBe(true);
+    expect(file.hooks.SessionStart).toHaveLength(1);
+    expect(file.hooks.SessionStart?.[0]?.hooks[0]?.command).toBe("'/new/cxstatusline' hook");
+    expect(file.hooks.SessionStart?.[0]?.hooks[0]?.statusMessage).toBe("cxstatusline: checking Codex version");
+  });
   test("null file -> fresh file with only our entry", () => {
     expect(mergeHook(null, "/cx").file).toEqual({ hooks: { SessionStart: [hookEntry("/cx")] } });
   });
@@ -62,6 +92,16 @@ describe("removeHook", () => {
     expect(changed).toBe(true);
     expect(file).toEqual({ hooks: {} });
     expect(removeHook(existing)).toEqual({ file: existing, changed: false });
+  });
+  test("removes hook by command fallback when statusMessage was omitted", () => {
+    const fileWithOursNoMsg: HooksFile = {
+      hooks: {
+        SessionStart: [
+          { hooks: [{ type: "command", command: "'/Users/n/.local/bin/cxstatusline' hook" }] },
+        ],
+      },
+    };
+    expect(removeHook(fileWithOursNoMsg).file).toEqual({ hooks: {} });
   });
   test("round-trips the real-shaped file back to exactly what it was", () => {
     const withOurs = mergeHook(existing, "/cx").file;

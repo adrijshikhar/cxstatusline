@@ -14,6 +14,7 @@ import { promptCodexVersion } from "./ui/prompt-version";
 import { installHook, uninstallHook } from "./hook/install";
 import { realHookDeps, runHook } from "./hook/run";
 import { doctorReport, formatDoctor } from "./commands/doctor";
+import { runPolicy } from "./commands/policy";
 import { revert } from "./commands/revert";
 import { getTerminalWidth } from "./utils/terminal";
 import { runTUI as runTUIFromApp } from "./tui/App";
@@ -53,6 +54,7 @@ export const USAGE = `usage: cxstatusline [command]
   update [--compile|--force]  run upstream's own updater, then install the pair for it
   hook [install|uninstall]    manage the SessionStart entry; bare 'hook' is what Codex runs
   doctor                      report toolchain, drift, hook and wrapper state
+  policy [get|set <policy>]   view or update policy (every, stable-minors, manual)
   revert                      restore stock Codex; keep settings
   --version
 `;
@@ -71,9 +73,9 @@ function contextFor(io: MainIo, deps: MainDeps = {}): Context {
  * `realpathSync(process.argv[1])` throws when the renderer link dangles. Both used to happen
  * before the try and took the whole hook down with a non-zero exit.
  */
-function runHookCommand(io: MainIo, deps: MainDeps): number {
+async function runHookCommand(io: MainIo, deps: MainDeps): Promise<number> {
   try {
-    const r = runHook(contextFor(io, deps), io.stdin(), realHookDeps());
+    const r = await runHook(contextFor(io, deps), io.stdin(), realHookDeps());
     if (r.stdout) io.stdout(`${r.stdout}\n`);
   } catch (e) {
     io.stdout(`${JSON.stringify({ systemMessage: `cxstatusline hook error: ${String(e)}` })}\n`);
@@ -265,6 +267,9 @@ export async function main(argv: readonly string[], io: MainIo, deps: MainDeps =
   if (cmd === "doctor") {
     io.stdout(formatDoctor(doctorReport(contextFor(io, deps))));
     return 0;
+  }
+  if (cmd === "policy") {
+    return runPolicy(contextFor(io, deps), argv.slice(1), io);
   }
   if (cmd === "revert") {
     const result = revert(contextFor(io, deps));

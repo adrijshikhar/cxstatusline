@@ -150,10 +150,17 @@ describe("runAcquisition (compiled)", () => {
   });
   test("held: same minor under stable-minors -> no build, no state change", async () => {
     const { c, paths, calls } = ctx({ upstreamVersion: "0.152.1" });
-    writeState(paths.stateFile, { ...DEFAULT_STATE, patched_from: "0.152.0", upstream_bin: "/x" });
+    writeState(paths.stateFile, { ...DEFAULT_STATE, policy: "stable-minors", patched_from: "0.152.0", upstream_bin: "/x" });
     expect(await runAcquisition(c, { source: "compiled", force: false }))
       .toEqual({ kind: "held", upstream: "0.152.1", patched: "0.152.0" });
     expect(calls.some((k) => k.cmd === "cargo")).toBe(false);
+  });
+  test("every: same minor patch bump builds and updates state", async () => {
+    const { c, paths, calls } = ctx({ upstreamVersion: "0.152.1" });
+    writeState(paths.stateFile, { ...DEFAULT_STATE, policy: "every", patched_from: "0.152.0", upstream_bin: "/x" });
+    expect(await runAcquisition(c, { source: "compiled", force: false }))
+      .toEqual({ kind: "installed", version: "0.152.1", source: "compiled", reused: false });
+    expect(calls.some((k) => k.cmd === "cargo")).toBe(true);
   });
   test("held: a freshly re-resolved upstream_bin is persisted even with no rebuild", async () => {
     const { c, paths, real } = ctx({ upstreamVersion: "0.152.1" });

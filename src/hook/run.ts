@@ -5,6 +5,7 @@ import type { Context } from "../context";
 import { acquireLock } from "../lock";
 import { describeLookup, preserveLauncherRestore, readUpstreamVersion, resolveUpstream } from "../codex/upstream";
 import { ensureWrapper, isOurWrapper, readInstallation } from "../patch/wrapper";
+import { probeRemoteCandidate, type RemoteCandidate } from "../patch/run";
 import { readState, writeState, RELEASE_RETRY_AFTER_MS, RELEASE_UNAVAILABLE, type State } from "../state";
 import { needsRepatch, parseSemver, type SemVer } from "../version";
 
@@ -26,6 +27,7 @@ export function parseHookInput(stdin: string): HookInput {
 
 export interface HookDeps {
   spawnDetached(cxBin: string, args: string[], logFile: string): void;
+  probeRemote?: (targetVersion?: string) => Promise<RemoteCandidate | null>;
 }
 
 interface Located {
@@ -112,7 +114,7 @@ function suppressed(ctx: Context, state: State, upstream: SemVer, messages: stri
 }
 
 /** SessionStart handler. Never throws, never blocks, never builds inline. */
-export function runHook(ctx: Context, stdin: string, deps: HookDeps): { stdout: string; messages: string[] } {
+export async function runHook(ctx: Context, stdin: string, deps: HookDeps): Promise<{ stdout: string; messages: string[] }> {
   const messages: string[] = [];
   const done = (): { stdout: string; messages: string[] } => ({
     stdout: messages.length ? JSON.stringify({ systemMessage: messages.join("\n") }) : "",
@@ -126,7 +128,8 @@ export function runHook(ctx: Context, stdin: string, deps: HookDeps): { stdout: 
   if (corrupt) {
     messages.push("cxstatusline: state.json was corrupt; recovered what was in state.json.bak. Run `cxstatusline doctor`.");
   }
-  if (read.patched_from === null) return done();
+  const activeGeneration = readInstallation(ctx.paths)?.codexVersion;
+  if ((activeGeneration ?? read.patched_from) === null) return done();
 
   // Upstream first: the wrapper decision below needs its version, and calling ensureWrapper before
   // this point would replace upstream's symlink - the only thing resolveUpstream can re-resolve from.
@@ -135,9 +138,10 @@ export function runHook(ctx: Context, stdin: string, deps: HookDeps): { stdout: 
     messages.push(`cxstatusline: ${located}`);
     return done();
   }
-  const { state, upstream } = located;
-  if (state.patched_from === null) return done();
-  const patched = parseSemver(state.patched_from);
+  let { state, upstream } = located;
+  const effectiveInstalled = activeGeneration ?? state.patched_from;
+  if (effectiveInstalled === null) return done();
+  const patched = parseSemver(effectiveInstalled);
   const drift = needsRepatch(upstream, patched, state.policy);
 
   if (!drift) maintainWrapper(ctx, messages);
@@ -149,13 +153,26 @@ export function runHook(ctx: Context, stdin: string, deps: HookDeps): { stdout: 
       return done();
     }
     release();
+
+    const attempt = state.last_attempt;
+    const isUnavailable = attempt && !attempt.ok && attempt.version === upstream.raw && attempt.reason === RELEASE_UNAVAILABLE;
+    if (isUnavailable && deps.probeRemote) {
+      try {
+        const probe = await deps.probeRemote(upstream.raw);
+        if (probe?.available) {
+          state = { ...state, last_attempt: null };
+        }
+      } catch {
+        // Fail closed & silent to existing state
+      }
+    }
   }
 
   if (suppressed(ctx, state, upstream, messages)) return done();
 
   if (drift) {
     deps.spawnDetached(ctx.cxBin, ["hook", "acquire"], ctx.paths.patchLog);
-    messages.push(`cxstatusline: Codex updated to ${upstream.raw} (installed pair is from ${state.patched_from}). Installing the new pair in the background - reopen Codex in a few minutes. Log: ${ctx.paths.patchLog}`);
+    messages.push(`cxstatusline: Codex updated to ${upstream.raw} (installed pair is from ${effectiveInstalled}). Installing the new pair in the background - reopen Codex in a few minutes. Log: ${ctx.paths.patchLog}`);
   }
   return done();
 }
@@ -199,5 +216,6 @@ export function realHookDeps(): HookDeps {
         }
       }
     },
+    probeRemote: (targetVersion) => probeRemoteCandidate(targetVersion),
   };
 }
