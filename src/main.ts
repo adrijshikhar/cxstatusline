@@ -71,9 +71,9 @@ function contextFor(io: MainIo, deps: MainDeps = {}): Context {
  * `realpathSync(process.argv[1])` throws when the renderer link dangles. Both used to happen
  * before the try and took the whole hook down with a non-zero exit.
  */
-function runHookCommand(io: MainIo, deps: MainDeps): number {
+async function runHookCommand(io: MainIo, deps: MainDeps): Promise<number> {
   try {
-    const r = runHook(contextFor(io, deps), io.stdin(), realHookDeps());
+    const r = await runHook(contextFor(io, deps), io.stdin(), realHookDeps());
     if (r.stdout) io.stdout(`${r.stdout}\n`);
   } catch (e) {
     io.stdout(`${JSON.stringify({ systemMessage: `cxstatusline hook error: ${String(e)}` })}\n`);

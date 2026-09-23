@@ -213,6 +213,38 @@ export async function probePrebuiltExists(
   }
 }
 
+export interface RemoteCandidate {
+  readonly version: string;
+  readonly available: boolean;
+}
+
+export async function probeRemoteCandidate(
+  targetCodexVersion?: string,
+  fetchFnOrBaseUrl?: FetchLike | string,
+  baseUrl?: string,
+): Promise<RemoteCandidate | null> {
+  const fetchFn: FetchLike =
+    typeof fetchFnOrBaseUrl === "function"
+      ? fetchFnOrBaseUrl
+      : (globalThis.fetch as unknown as FetchLike);
+  const resolvedBaseUrl: string | undefined =
+    typeof fetchFnOrBaseUrl === "string" ? fetchFnOrBaseUrl : baseUrl;
+
+  try {
+    const target = targetCodexVersion ?? (await probeUpstreamLatest(fetchFn));
+    if (!target) return null;
+    const tag = releaseTag(target);
+    const url = resolvedBaseUrl
+      ? `${resolvedBaseUrl}/${tag}/manifest.json`
+      : `https://github.com/adrijshikhar/cxstatusline/releases/download/${tag}/manifest.json`;
+    const res = await fetchFn(url, { method: "HEAD", signal: AbortSignal.timeout(5000) });
+    const available = res.ok || res.status === 302 || res.status === 301;
+    return { version: target, available };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * `codex update` -> upstream's own updater, then the prebuilt pair for whatever it landed on.
  * Performs a pre-flight probe: if upstream is moving to a version without a published prebuilt,

@@ -5,6 +5,7 @@ import type { Context } from "../context";
 import { acquireLock } from "../lock";
 import { describeLookup, preserveLauncherRestore, readUpstreamVersion, resolveUpstream } from "../codex/upstream";
 import { ensureWrapper, isOurWrapper, readInstallation } from "../patch/wrapper";
+import { probeRemoteCandidate, type RemoteCandidate } from "../patch/run";
 import { readState, writeState, RELEASE_RETRY_AFTER_MS, RELEASE_UNAVAILABLE, type State } from "../state";
 import { needsRepatch, parseSemver, type SemVer } from "../version";
 
@@ -26,6 +27,7 @@ export function parseHookInput(stdin: string): HookInput {
 
 export interface HookDeps {
   spawnDetached(cxBin: string, args: string[], logFile: string): void;
+  probeRemote?: (targetVersion?: string) => Promise<RemoteCandidate | null>;
 }
 
 interface Located {
@@ -112,7 +114,7 @@ function suppressed(ctx: Context, state: State, upstream: SemVer, messages: stri
 }
 
 /** SessionStart handler. Never throws, never blocks, never builds inline. */
-export function runHook(ctx: Context, stdin: string, deps: HookDeps): { stdout: string; messages: string[] } {
+export async function runHook(ctx: Context, stdin: string, deps: HookDeps): Promise<{ stdout: string; messages: string[] }> {
   const messages: string[] = [];
   const done = (): { stdout: string; messages: string[] } => ({
     stdout: messages.length ? JSON.stringify({ systemMessage: messages.join("\n") }) : "",
@@ -136,7 +138,7 @@ export function runHook(ctx: Context, stdin: string, deps: HookDeps): { stdout: 
     messages.push(`cxstatusline: ${located}`);
     return done();
   }
-  const { state, upstream } = located;
+  let { state, upstream } = located;
   const currentInstalled = readInstallation(ctx.paths)?.codexVersion ?? state.patched_from;
   if (currentInstalled === null) return done();
   const patched = parseSemver(currentInstalled);
@@ -151,6 +153,19 @@ export function runHook(ctx: Context, stdin: string, deps: HookDeps): { stdout: 
       return done();
     }
     release();
+
+    const attempt = state.last_attempt;
+    const isUnavailable = attempt && !attempt.ok && attempt.version === upstream.raw && attempt.reason === RELEASE_UNAVAILABLE;
+    if (isUnavailable && deps.probeRemote) {
+      try {
+        const probe = await deps.probeRemote(upstream.raw);
+        if (probe?.available) {
+          state = { ...state, last_attempt: null };
+        }
+      } catch {
+        // Fail closed & silent to existing state
+      }
+    }
   }
 
   if (suppressed(ctx, state, upstream, messages)) return done();
@@ -201,5 +216,6 @@ export function realHookDeps(): HookDeps {
         }
       }
     },
+    probeRemote: (targetVersion) => probeRemoteCandidate(targetVersion),
   };
 }
