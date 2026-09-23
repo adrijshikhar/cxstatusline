@@ -17,8 +17,8 @@ const {
   image = "/og-image.png",
   canonical,
   noindex = false,
-  googleSiteVerification = process.env.PUBLIC_GOOGLE_SITE_VERIFICATION,
-  bingSiteVerification = process.env.PUBLIC_BING_SITE_VERIFICATION,
+  googleSiteVerification = process.env.PUBLIC_GOOGLE_SITE_VERIFICATION ?? import.meta.env.PUBLIC_GOOGLE_SITE_VERIFICATION,
+  bingSiteVerification = process.env.PUBLIC_BING_SITE_VERIFICATION ?? import.meta.env.PUBLIC_BING_SITE_VERIFICATION,
 } = Astro.props;
 
 const siteUrl = Astro.site ? Astro.site.toString().replace(/\/$/, "") : "https://cxstatusline.adrijshikhar.dev";

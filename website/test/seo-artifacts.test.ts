@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { beforeAll, describe, expect, test } from "bun:test";
@@ -82,13 +82,39 @@ describe("SEO Artifacts and Discovery Verification", () => {
   test("SEO component conditionally renders search console verification tags", () => {
     const indexPath = join(distDir, "index.html");
     const html = readFileSync(indexPath, "utf-8");
-    expect(html).not.toContain('name="google-site-verification" content=""');
-    expect(html).not.toContain('name="msvalidate.01" content=""');
+    expect(html).not.toContain('name="google-site-verification"');
+    expect(html).not.toContain('name="msvalidate.01"');
   });
 
   test("Cloudflare beacon is omitted when token is unset", () => {
     const indexPath = join(distDir, "index.html");
     const html = readFileSync(indexPath, "utf-8");
     expect(html).not.toContain("static.cloudflareinsights.com/beacon.min.js");
+  });
+
+  test("renders verification tags and Cloudflare beacon when environment variables are set", () => {
+    const tempOutDir = join(import.meta.dir, "../dist-env-test");
+    try {
+      execSync("bunx astro build --outDir dist-env-test", {
+        cwd: join(import.meta.dir, ".."),
+        env: {
+          ...process.env,
+          PUBLIC_GOOGLE_SITE_VERIFICATION: "test-google-token-123",
+          PUBLIC_BING_SITE_VERIFICATION: "test-bing-token-456",
+          PUBLIC_CF_BEACON_TOKEN: "test-cf-token-789",
+        },
+        stdio: "ignore",
+      });
+
+      const indexPath = join(tempOutDir, "index.html");
+      expect(existsSync(indexPath)).toBe(true);
+      const html = readFileSync(indexPath, "utf-8");
+      expect(html).toContain('<meta name="google-site-verification" content="test-google-token-123"');
+      expect(html).toContain('<meta name="msvalidate.01" content="test-bing-token-456"');
+      expect(html).toContain('src="https://static.cloudflareinsights.com/beacon.min.js"');
+      expect(html).toContain("test-cf-token-789");
+    } finally {
+      rmSync(tempOutDir, { recursive: true, force: true });
+    }
   });
 });

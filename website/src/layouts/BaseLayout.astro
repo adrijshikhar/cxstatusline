@@ -20,8 +20,8 @@ const {
   image,
   canonical,
   noindex,
-  googleSiteVerification,
-  bingSiteVerification,
+  googleSiteVerification = process.env.PUBLIC_GOOGLE_SITE_VERIFICATION ?? import.meta.env.PUBLIC_GOOGLE_SITE_VERIFICATION,
+  bingSiteVerification = process.env.PUBLIC_BING_SITE_VERIFICATION ?? import.meta.env.PUBLIC_BING_SITE_VERIFICATION,
   cfBeaconToken = process.env.PUBLIC_CF_BEACON_TOKEN ?? import.meta.env.PUBLIC_CF_BEACON_TOKEN,
 } = Astro.props;
 ---
