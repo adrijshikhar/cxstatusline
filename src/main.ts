@@ -21,7 +21,7 @@ import { getTerminalWidth } from "./utils/terminal";
 import { runTUI as runTUIFromApp } from "./tui/App";
 import { readMemoryUsage } from "./utils/memory";
 
-import type { TransportOptions } from "./distribution/transport";
+import type { FetchLike, TransportOptions } from "./distribution/transport";
 
 export interface MainIo {
   readonly env: Env;
