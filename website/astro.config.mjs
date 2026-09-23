@@ -24,7 +24,7 @@ export default defineConfig({
     },
     define: {
       "process.env.CXSTATUSLINE_WEB": '"1"',
-      "process.env": "{}",
+      "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV || "production"),
       "process.argv": "[]",
       "process.platform": '"browser"',
       "process.pid": "0",
