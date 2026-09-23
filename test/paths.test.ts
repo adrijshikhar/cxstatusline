@@ -49,6 +49,13 @@ describe("resolvePaths", () => {
       .toBe("/h/.cache/cxstatusline/commands");
   });
 
+  test("downloadCacheDir follows XDG_CACHE_HOME, else ~/.cache", () => {
+    expect(resolvePaths({ HOME: "/h", XDG_CACHE_HOME: "/xc" }).downloadCacheDir)
+      .toBe("/xc/cxstatusline/downloads");
+    expect(resolvePaths({ HOME: "/h" }).downloadCacheDir)
+      .toBe("/h/.cache/cxstatusline/downloads");
+  });
+
   test("throws without HOME", () => {
     expect(() => resolvePaths({})).toThrow(/HOME/);
   });
