@@ -232,7 +232,28 @@ export async function publishRelease(o: PublishOptions): Promise<PublishOutcome>
   }
   await reverifyUploaded(o, set);
   
-  if (verdict.state !== "published-partial") {
+  if (verdict.state === "published-partial") {
+    const allPlatforms = set.manifest.artifacts.map((a) => a.platform);
+    const updatedTitle = releaseTitle({ cxVersion: o.cxVersion, codexVersion: o.codexVersion, platforms: allPlatforms });
+    const updatedNotes = releaseNotes({
+      cxVersion: o.cxVersion,
+      codexVersion: o.codexVersion,
+      platforms: allPlatforms,
+      sourceCommit: set.manifest.sourceCommit,
+      upstreamTag: set.manifest.upstreamTag,
+      upstreamCommit: set.manifest.upstreamCommit,
+      patchFile: set.manifest.patchFile,
+      patchSha256: set.manifest.patchSha256,
+      runId: o.runId,
+      runUrl: o.runUrl,
+      manifestSha256: set.manifestSha256,
+      identity: buildIdentity(o),
+    });
+    mkdirSync(o.tmpRoot, { recursive: true });
+    const notesFile = join(o.tmpRoot, "release-notes-updated.md");
+    writeFileSync(notesFile, updatedNotes);
+    ghText(o.run, ["release", "edit", o.tag, "--title", updatedTitle, "--notes-file", notesFile]);
+  } else {
     ghText(o.run, ["release", "edit", o.tag, "--draft=false", "--latest=false", "--prerelease"]);
   }
   
