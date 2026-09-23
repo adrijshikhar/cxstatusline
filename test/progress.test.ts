@@ -97,7 +97,7 @@ describe("createInstallProgressTracker", () => {
     expect(output).toContain("100%");
   });
 
-  test("writes carriage-return progress in TTY mode", () => {
+  test("writes carriage-return progress and manages cursor in TTY mode", () => {
     const writes: string[] = [];
     const tracker = createInstallProgressTracker({
       isTTY: true,
@@ -107,10 +107,15 @@ describe("createInstallProgressTracker", () => {
 
     const total = 100 * 1024 * 1024;
     tracker.transport.onProgress?.(50 * 1024 * 1024, total);
-    expect(writes.some((w) => w.startsWith("\r") && w.includes("50%"))).toBe(true);
+    // Cursor hidden
+    expect(writes.some((w) => w.includes("\x1b[?25l"))).toBe(true);
+    // Line cleared with \r\x1b[2K
+    expect(writes.some((w) => w.includes("\r\x1b[2K") && w.includes("50%"))).toBe(true);
 
     tracker.finish();
+    // Line cleared and cursor restored on finish
     expect(writes.some((w) => w.includes("\x1b[2K"))).toBe(true);
+    expect(writes.some((w) => w.includes("\x1b[?25h"))).toBe(true);
   });
 
   test("reports compile phases accurately", () => {

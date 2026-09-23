@@ -27,13 +27,16 @@ export interface Paths {
   readonly codexHome: string;
   readonly hooksFile: string;
   readonly commandCacheDir: string;
+  readonly downloadCacheDir: string;
 }
 
 export function resolvePaths(env: Env): Paths {
   const home = env.HOME;
   if (!home) throw new Error("HOME is not set; cannot resolve cxstatusline paths");
+  const cacheBase = env.XDG_CACHE_HOME ?? join(home, ".cache");
   const configDir = join(env.XDG_CONFIG_HOME ?? join(home, ".config"), "cxstatusline");
-  const commandCacheDir = join(env.XDG_CACHE_HOME ?? join(home, ".cache"), "cxstatusline", "commands");
+  const commandCacheDir = join(cacheBase, "cxstatusline", "commands");
+  const downloadCacheDir = join(cacheBase, "cxstatusline", "downloads");
   const stateDir = join(env.XDG_STATE_HOME ?? join(home, ".local", "state"), "cxstatusline");
   const shareDir = join(env.XDG_DATA_HOME ?? join(home, ".local", "share"), "cxstatusline");
   const libexecDir = join(home, ".local", "libexec", "cxstatusline");
@@ -43,6 +46,7 @@ export function resolvePaths(env: Env): Paths {
     home,
     configDir,
     commandCacheDir,
+    downloadCacheDir,
     settingsFile: join(configDir, "settings.json"),
     stateDir,
     stateFile: join(stateDir, "state.json"),

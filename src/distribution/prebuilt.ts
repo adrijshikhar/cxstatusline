@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { Context } from "../context";
 import {
@@ -142,6 +142,19 @@ function stagedPair(
   };
 }
 
+function moveFile(src: string, dst: string): void {
+  try {
+    renameSync(src, dst);
+  } catch (e: unknown) {
+    if (typeof e === "object" && e !== null && (e as { code?: string }).code === "EXDEV") {
+      copyFileSync(src, dst);
+      rmSync(src, { force: true });
+    } else {
+      throw e;
+    }
+  }
+}
+
 async function stageArchive(
   ctx: Context,
   download: string,
@@ -150,12 +163,18 @@ async function stageArchive(
   tag: string,
   opts: TransportOptions,
 ): Promise<PreparedPair> {
+  const cacheDir = ctx.paths.downloadCacheDir;
+  mkdirSync(cacheDir, { recursive: true });
+  const partFile = join(cacheDir, `${tag}-${artifact.filename}.part`);
   const archive = join(download, artifact.filename);
+
   opts.onStatus?.("download", `Downloading prebuilt archive (${artifact.filename})...`);
-  const got = await downloadAsset(ctx, tag, artifact.filename, archive, ARCHIVE_MAX_BYTES, opts);
+  const got = await downloadAsset(ctx, tag, artifact.filename, partFile, ARCHIVE_MAX_BYTES, opts);
   if (got.sha256 !== artifact.sha256 || got.size !== artifact.size) {
+    rmSync(partFile, { force: true });
     throw new Error(`${artifact.filename} does not match the release manifest sha256`);
   }
+  moveFile(partFile, archive);
   opts.onStatus?.("download-done", `Downloaded ${artifact.filename}`);
   const staging = privateTemp(ctx, "staging-");
   try {

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { createReadStream, existsSync } from "node:fs";
+import { createReadStream, existsSync, renameSync } from "node:fs";
 import { open } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import type { Context } from "../context";
 
 /** Where the public assets live. Only the prefix is configurable, and only for tests. */
@@ -9,7 +9,10 @@ const PUBLIC_BASE = "https://github.com/adrijshikhar/cxstatusline/releases/downl
 const REPO = "adrijshikhar/cxstatusline";
 
 const MAX_REDIRECTS = 5;
-const REQUEST_TIMEOUT_MS = 60_000;
+export const CONNECT_TIMEOUT_MS = 30_000;
+export const STREAM_IDLE_TIMEOUT_MS = 30_000;
+export const MAX_TRANSFER_TIMEOUT_MS = 600_000;
+export const MAX_RETRIES = 3;
 /**
  * `gh release download` has to move a whole archive, so it gets far longer than an HTTP request -
  * but it still gets a bound. Without one, a stalled transfer hangs the install (and, through the
@@ -93,43 +96,218 @@ function nextUrl(current: string, location: string, allowHttp: boolean, asset: s
   return resolved.toString();
 }
 
+async function hashExistingFile(
+  file: string,
+  maxBytes: number,
+  asset: string,
+): Promise<{ hash: ReturnType<typeof createHash>; size: number }> {
+  const hash = createHash("sha256");
+  let size = 0;
+  for await (const chunk of createReadStream(file)) {
+    const buf = chunk as Buffer;
+    size += buf.length;
+    if (size > maxBytes) throw new Error(`${asset} is larger than the ${maxBytes}-byte limit`);
+    hash.update(buf);
+  }
+  return { hash, size };
+}
+
 /** Stream a response body to `dest`, hashing as it goes and refusing to exceed `maxBytes`. */
 async function streamToFile(
   response: Response,
   dest: string,
   maxBytes: number,
   asset: string,
+  isPartial: boolean,
+  existingSize: number,
+  existingHash: ReturnType<typeof createHash> | null,
   onProgress?: (loaded: number, total: number | null) => void,
+  resetIdleTimer?: () => void,
 ): Promise<Downloaded> {
-  const declared = response.headers.get("content-length");
-  const expected = declared === null ? null : Number(declared);
-  if (expected !== null && (!Number.isSafeInteger(expected) || expected < 0 || expected > maxBytes)) {
-    throw new Error(`${asset} is larger than the ${maxBytes}-byte limit`);
-  }
   const body = response.body;
   if (body === null) throw new Error(`download of ${asset} produced no body`);
 
-  const hash = createHash("sha256");
-  let size = 0;
-  const handle = await open(dest, "wx", 0o600);
+  let expectedTotal: number | null = null;
+  if (isPartial) {
+    const rangeHeader = response.headers.get("content-range");
+    const match = rangeHeader?.match(/\/(\d+)$/);
+    if (match && match[1]) {
+      expectedTotal = Number(match[1]);
+    } else {
+      const declaredPart = response.headers.get("content-length");
+      if (declaredPart !== null && Number.isSafeInteger(Number(declaredPart))) {
+        expectedTotal = existingSize + Number(declaredPart);
+      }
+    }
+  } else {
+    const declared = response.headers.get("content-length");
+    expectedTotal = declared === null ? null : Number(declared);
+  }
+
+  if (expectedTotal !== null && (!Number.isSafeInteger(expectedTotal) || expectedTotal < 0 || expectedTotal > maxBytes)) {
+    throw new Error(`${asset} is larger than the ${maxBytes}-byte limit`);
+  }
+
+  const hash = isPartial && existingHash ? existingHash : createHash("sha256");
+  let size = isPartial ? existingSize : 0;
+  const mode = isPartial ? "a" : "w";
+  const handle = await open(dest, mode, 0o600);
   try {
     const reader = body.getReader();
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
+      resetIdleTimer?.();
       size += value.length;
       if (size > maxBytes) throw new Error(`${asset} is larger than the ${maxBytes}-byte limit`);
       hash.update(value);
       await handle.write(value);
-      onProgress?.(size, expected);
+      onProgress?.(size, expectedTotal);
     }
   } finally {
     await handle.close();
   }
-  if (expected !== null && size !== expected) {
-    throw new Error(`download of ${asset} was truncated at ${size} of ${expected} bytes`);
+  if (expectedTotal !== null && size !== expectedTotal) {
+    throw new Error(`download of ${asset} was truncated at ${size} of ${expectedTotal} bytes`);
   }
   return { sha256: hash.digest("hex"), size };
+}
+
+function isRetryableError(e: unknown): boolean {
+  if (!(e instanceof Error)) return false;
+  if (e.name === "AssertionError" || e.constructor?.name === "AssertionError") return false;
+  const msg = e.message;
+  if (
+    msg.includes("limit") ||
+    msg.includes("redirected to a") ||
+    msg.includes("exceeded") ||
+    msg.includes("truncated") ||
+    msg.includes("HTTP ")
+  ) {
+    return false;
+  }
+  return true;
+}
+
+async function singleHttpDownload(
+  start: string,
+  asset: string,
+  dest: string,
+  maxBytes: number,
+  opts: TransportOptions,
+): Promise<Downloaded | "not-found" | "retry-from-zero"> {
+  const request = opts.fetch ?? globalThis.fetch;
+  const allowHttp = opts.baseUrl !== undefined;
+  let url = start;
+
+  let existingBytes = 0;
+  let existingHash: ReturnType<typeof createHash> | null = null;
+  if (existsSync(dest)) {
+    try {
+      const stat = await open(dest, "r").then(async (h) => {
+        const s = await h.stat();
+        await h.close();
+        return s;
+      });
+      if (stat.size > 0 && stat.size < maxBytes) {
+        const hashed = await hashExistingFile(dest, maxBytes, asset);
+        existingBytes = hashed.size;
+        existingHash = hashed.hash;
+      }
+    } catch {
+      existingBytes = 0;
+      existingHash = null;
+    }
+  }
+
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    const controller = new AbortController();
+    let idleTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const resetIdleTimer = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        controller.abort(new Error(`download of ${asset} stalled: no data received for 30s`));
+      }, STREAM_IDLE_TIMEOUT_MS);
+    };
+
+    const maxTransferTimer = setTimeout(() => {
+      controller.abort(new Error(`download of ${asset} exceeded the maximum transfer timeout of 10m`));
+    }, MAX_TRANSFER_TIMEOUT_MS);
+
+    const clearTimers = () => {
+      if (idleTimer) {
+        clearTimeout(idleTimer);
+        idleTimer = undefined;
+      }
+      clearTimeout(maxTransferTimer);
+    };
+
+    idleTimer = setTimeout(() => {
+      controller.abort(new Error(`download of ${asset} timed out connecting`));
+    }, CONNECT_TIMEOUT_MS);
+
+    const headers: Record<string, string> = { accept: "application/octet-stream" };
+    if (existingBytes > 0) {
+      headers["range"] = `bytes=${existingBytes}-`;
+    }
+
+    let response: Response;
+    try {
+      response = await request(url, {
+        redirect: "manual",
+        signal: controller.signal,
+        headers,
+      });
+    } catch (e) {
+      clearTimers();
+      throw e;
+    }
+
+    if (REDIRECT_STATUS.has(response.status)) {
+      clearTimers();
+      const location = response.headers.get("location");
+      if (location === null) throw new Error(`download of ${asset} was redirected without a location`);
+      url = nextUrl(url, location, allowHttp, asset);
+      continue;
+    }
+    if (response.status === 404) {
+      clearTimers();
+      return "not-found";
+    }
+    if (response.status === 416) {
+      clearTimers();
+      try {
+        const h = await open(dest, "w", 0o600);
+        await h.close();
+      } catch {}
+      return "retry-from-zero";
+    }
+    if (!response.ok && response.status !== 206) {
+      clearTimers();
+      throw new Error(`download of ${asset} failed with HTTP ${response.status}`);
+    }
+
+    const isPartial = response.status === 206;
+    try {
+      resetIdleTimer();
+      const result = await streamToFile(
+        response,
+        dest,
+        maxBytes,
+        asset,
+        isPartial,
+        existingBytes,
+        existingHash,
+        opts.onProgress,
+        resetIdleTimer,
+      );
+      return result;
+    } finally {
+      clearTimers();
+    }
+  }
+  throw new Error(`download of ${asset} exceeded ${MAX_REDIRECTS} redirects`);
 }
 
 /** Public HTTPS download. Returns "not-found" for a 404 so the caller can try `gh`. */
@@ -140,37 +318,32 @@ async function httpDownload(
   maxBytes: number,
   opts: TransportOptions,
 ): Promise<Downloaded | "not-found"> {
-  const request = opts.fetch ?? globalThis.fetch;
-  const allowHttp = opts.baseUrl !== undefined;
-  let url = start;
-  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    const response = await request(url, {
-      redirect: "manual",
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-      headers: { accept: "application/octet-stream" },
-    });
-    if (REDIRECT_STATUS.has(response.status)) {
-      const location = response.headers.get("location");
-      if (location === null) throw new Error(`download of ${asset} was redirected without a location`);
-      url = nextUrl(url, location, allowHttp, asset);
-      continue;
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    if (attempt > 0) {
+      const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+      await new Promise((r) => setTimeout(r, delayMs));
     }
-    if (response.status === 404) return "not-found";
-    if (!response.ok) throw new Error(`download of ${asset} failed with HTTP ${response.status}`);
-    return await streamToFile(response, dest, maxBytes, asset, opts.onProgress);
+    try {
+      const res = await singleHttpDownload(start, asset, dest, maxBytes, opts);
+      if (res === "retry-from-zero") {
+        const retryRes = await singleHttpDownload(start, asset, dest, maxBytes, opts);
+        if (retryRes !== "retry-from-zero") return retryRes;
+        continue;
+      }
+      return res;
+    } catch (e) {
+      lastError = e;
+      if (!isRetryableError(e)) {
+        throw e;
+      }
+    }
   }
-  throw new Error(`download of ${asset} exceeded ${MAX_REDIRECTS} redirects`);
+  throw lastError;
 }
 
 async function hashFile(file: string, maxBytes: number, asset: string): Promise<Downloaded> {
-  const hash = createHash("sha256");
-  let size = 0;
-  for await (const chunk of createReadStream(file)) {
-    const buf = chunk as Buffer;
-    size += buf.length;
-    if (size > maxBytes) throw new Error(`${asset} is larger than the ${maxBytes}-byte limit`);
-    hash.update(buf);
-  }
+  const { hash, size } = await hashExistingFile(file, maxBytes, asset);
   return { sha256: hash.digest("hex"), size };
 }
 
@@ -189,9 +362,10 @@ async function ghDownload(
   if (ctx.which("gh") === null) {
     throw new GhMissingError(`${asset} is not public for release ${tag} and GitHub CLI (gh) is not installed`);
   }
+  const targetDir = dirname(dest);
   const result = ctx.run(
     "gh",
-    ["release", "download", tag, "--repo", REPO, "--pattern", asset, "--dir", dirname(dest)],
+    ["release", "download", tag, "--repo", REPO, "--pattern", asset, "--dir", targetDir],
     { timeoutMs: GH_TIMEOUT_MS },
   );
   if (result.status !== 0) {
@@ -201,7 +375,13 @@ async function ghDownload(
     }
     throw new ReleaseUnavailableError(`release ${tag} not found or access denied: ${detail}`);
   }
-  if (!existsSync(dest)) throw new ReleaseUnavailableError(`release ${tag} not found or access denied: gh downloaded no ${asset}`);
+  const downloadedFile = join(targetDir, asset);
+  if (!existsSync(downloadedFile) && !existsSync(dest)) {
+    throw new ReleaseUnavailableError(`release ${tag} not found or access denied: gh downloaded no ${asset}`);
+  }
+  if (existsSync(downloadedFile) && downloadedFile !== dest) {
+    renameSync(downloadedFile, dest);
+  }
   return await hashFile(dest, maxBytes, asset);
 }
 
