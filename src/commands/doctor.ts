@@ -7,14 +7,23 @@ import { isOurGroup, type HooksFile } from "../hook/install";
 import { lockHolder, pidAlive } from "../lock";
 import { isOurWrapper } from "../patch/wrapper";
 import { RELEASE_UNAVAILABLE, readState, type State } from "../state";
-import { behindWithinMinor, needsRepatch, parseSemver } from "../version";
+import { behindWithinMinor, compareSemver, needsRepatch, parseSemver } from "../version";
 import { formatDuration } from "../utils/format";
 import { bookkeepingLine, classifyGeneration, generationDetailLines, legacyLine, toolchainLine } from "./doctor-generation";
+import { loadManifest, supportedCodexVersions } from "../patch/manifest";
+import { probeRemoteCandidate, type RemoteCandidate } from "../patch/run";
+import type { FetchLike } from "../distribution/transport";
 
 export interface DoctorLine {
   readonly key: string;
   readonly value: string;
   readonly ok: boolean | null; // null = informational
+}
+
+export interface DoctorOptions {
+  readonly probe?: boolean;
+  readonly probeFn?: (targetVersion: string) => Promise<RemoteCandidate | null>;
+  readonly targetVersion?: string;
 }
 
 export const line = (key: string, value: string, ok: boolean | null = null): DoctorLine => ({ key, value, ok });
@@ -73,7 +82,9 @@ function lastAttemptLine(state: State): DoctorLine {
   if (!a) return line("last_attempt", "none", null);
   if (a.ok) return line("last_attempt", `ok ${a.version} at ${a.at}`, true);
   const reasonPart = a.reason ? `: ${a.reason}` : "";
-  const backoff = a.reason === RELEASE_UNAVAILABLE ? " (hook retries after 24h; run cxstatusline install to retry now)" : "";
+  const backoff = a.reason === RELEASE_UNAVAILABLE
+    ? " (hook retries when release publishes or after 24h; run cxstatusline install to retry now)"
+    : "";
   return line("last_attempt", `failed ${a.version} at ${a.at}${reasonPart}${backoff}`, false);
 }
 
@@ -102,7 +113,80 @@ function commandCacheLine(ctx: Context): DoctorLine {
   }
 }
 
-export function doctorReport(ctx: Context): DoctorLine[] {
+async function codexTargetLine(
+  ctx: Context,
+  effectivePatchedFrom: string | null | undefined,
+  opts?: DoctorOptions,
+): Promise<DoctorLine> {
+  let target: string | null = opts?.targetVersion ?? null;
+  if (!target) {
+    try {
+      const m = loadManifest(ctx.patchesDir);
+      target = m.candidate ?? supportedCodexVersions(m)[0] ?? null;
+    } catch {
+      target = null;
+    }
+  }
+
+  if (!target) {
+    return line("codex_target", "unknown (patches manifest unavailable)", null);
+  }
+
+  if (!effectivePatchedFrom || effectivePatchedFrom === "never") {
+    return line("codex_target", `${target} supported (run cxstatusline install)`, null);
+  }
+
+  const parsedActive = parseSemver(effectivePatchedFrom);
+  const parsedTarget = parseSemver(target);
+  const isUpToDate = parsedActive && parsedTarget
+    ? compareSemver(parsedActive, parsedTarget) >= 0
+    : effectivePatchedFrom === target;
+
+  let remote: RemoteCandidate | null = null;
+  if (opts?.probe !== false) {
+    try {
+      if (opts?.probeFn) {
+        remote = await opts.probeFn(target);
+      } else {
+        const probeFetch: FetchLike = (url, init) =>
+          fetch(url, { ...init, signal: AbortSignal.timeout(2000) });
+        remote = await probeRemoteCandidate(target, probeFetch);
+      }
+    } catch {
+      remote = null;
+    }
+  }
+
+  if (isUpToDate) {
+    if (remote?.available) {
+      return line("codex_target", `${target} (up to date; verified on GitHub)`, true);
+    }
+    return line("codex_target", `${target} (up to date)`, true);
+  }
+
+  // Active generation is behind target
+  if (remote?.available === true) {
+    return line(
+      "codex_target",
+      `${target} available (active: ${effectivePatchedFrom}; prebuilt live on GitHub; run cxstatusline install to update)`,
+      null,
+    );
+  }
+  if (remote?.available === false) {
+    return line(
+      "codex_target",
+      `${target} supported (active: ${effectivePatchedFrom}; prebuilt pending; run cxstatusline install --compile)`,
+      null,
+    );
+  }
+  return line(
+    "codex_target",
+    `${target} supported (active: ${effectivePatchedFrom}; run cxstatusline install to update)`,
+    null,
+  );
+}
+
+export async function doctorReport(ctx: Context, opts?: DoctorOptions): Promise<DoctorLine[]> {
   const { state, corrupt } = readState(ctx.paths.stateFile);
   const lookup = resolveUpstream(ctx.paths, ctx.env, isOurWrapper, state.upstream_bin);
   const upstreamBin = lookup.kind === "found" ? lookup.bin : null;
@@ -124,6 +208,8 @@ export function doctorReport(ctx: Context): DoctorLine[] {
     return line("drift", "none", true);
   };
 
+  const codexTarget = await codexTargetLine(ctx, effectivePatchedFrom, opts);
+
   const lines: (DoctorLine | null)[] = [
     line("renderer", `${ctx.cxBin} (${VERSION})`),
     line("settings", `${ctx.paths.settingsFile} ${existsSync(ctx.paths.settingsFile) ? "present" : "absent (written on first render)"}`),
@@ -131,6 +217,7 @@ export function doctorReport(ctx: Context): DoctorLine[] {
     line("state", corrupt ? `${ctx.paths.stateFile} CORRUPT (recovered from ${ctx.paths.stateBackupFile} where possible)` : ctx.paths.stateFile, corrupt ? false : null),
     line("patched_from", state.patched_from ?? "never"),
     line("policy", state.policy),
+    codexTarget,
     drift(),
     bookkeepingLine(state, status.record),
     wrapperLine(ctx),

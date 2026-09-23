@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Context } from "../src/context";
-import { doctorReport, formatDoctor } from "../src/commands/doctor";
+import { doctorReport, formatDoctor, type DoctorLine } from "../src/commands/doctor";
 import type { ArtifactFile, FileDigest, Platform, PreparedPair, ReleaseManifest } from "../src/distribution";
 import { installHook } from "../src/hook/install";
 import { resolvePaths } from "../src/paths";
@@ -28,7 +28,7 @@ function ctx(upstreamVersion: string, which: (c: string) => string | null = () =
   const c: Context = { env, paths, run, which, freeBytes: () => 1e12, cxBin: "/cx", patchesDir: "/p", now: () => new Date(), log: () => {}, say: () => {} };
   return { c, paths, upstream, root };
 }
-const get = (lines: ReturnType<typeof doctorReport>, key: string) => lines.find((l) => l.key === key);
+const get = (lines: readonly DoctorLine[], key: string) => lines.find((l) => l.key === key);
 
 // ---------------------------------------------------------------------------
 // Generation fixtures: real files, built through `activatePair` (task 3/4), then tampered where a
@@ -115,7 +115,7 @@ function bareCtx(env: ReturnType<typeof tmpEnv>["env"], paths: ReturnType<typeof
 }
 
 describe("doctorReport", () => {
-  test("reports the current launcher version rather than a saved old release", () => {
+  test("reports the current launcher version rather than a saved old release", async () => {
     const { c, paths, upstream, root } = ctx("0.152.1");
     const current = join(root, "new-codex");
     writeFileSync(current, "NEW");
@@ -125,15 +125,15 @@ describe("doctorReport", () => {
     writeState(paths.stateFile, { ...DEFAULT_STATE, upstream_bin: upstream, patched_from: "0.152.1" });
     const run: Context["run"] = (cmd, args, opts) => cmd === current
       ? { status: 0, stdout: "codex-cli 0.153.0", stderr: "" } : c.run(cmd, args, opts);
-    const lines = doctorReport({ ...c, run });
+    const lines = await doctorReport({ ...c, run });
     expect(get(lines, "upstream")?.value).toContain(`${current} 0.153.0`);
     expect(get(lines, "drift")).toMatchObject({ ok: false, value: expect.stringContaining("0.153.0") });
   });
-  test("fresh machine: upstream via PATH, nothing installed, toolchain missing", () => {
+  test("fresh machine: upstream via PATH, nothing installed, toolchain missing", async () => {
     const { c, upstream } = ctx("0.152.1", (cmd) => (cmd === "rustup" ? null : "/x"));
     mkdirSync(c.env.PATH!, { recursive: true });
     symlinkSync(upstream, join(c.env.PATH!, "codex"));
-    const lines = doctorReport(c);
+    const lines = await doctorReport(c);
     expect(get(lines, "upstream")).toMatchObject({ ok: true, value: expect.stringContaining("0.152.1") });
     expect(get(lines, "patched_from")).toMatchObject({ value: "never" });
     expect(get(lines, "wrapper")).toMatchObject({ value: "absent", ok: null });
@@ -144,16 +144,16 @@ describe("doctorReport", () => {
     expect(get(lines, "lock")).toMatchObject({ value: "free" });
     expect(formatDoctor(lines)).toContain("toolchain");
   });
-  test("the documented key order is exactly what is emitted", () => {
+  test("the documented key order is exactly what is emitted", async () => {
     const { c } = ctx("0.152.1");
-    expect(doctorReport(c).map((l) => l.key)).toEqual([
-      "renderer", "settings", "upstream", "state", "patched_from", "policy", "drift", "wrapper",
+    expect((await doctorReport(c)).map((l) => l.key)).toEqual([
+      "renderer", "settings", "upstream", "state", "patched_from", "policy", "codex_target", "drift", "wrapper",
       "active", "generation", "platform", "cx_version", "release", "patch", "source_commit",
       "upstream_commit", "codex_digest", "host_digest", "codex_version", "legal",
       "hook", "last_attempt", "toolchain", "lock", "command_cache",
     ]);
   });
-  test("legacy flat-layout files without an active generation are flagged, not silently accepted", () => {
+  test("legacy flat-layout files without an active generation are flagged, not silently accepted", async () => {
     const { c, paths, upstream } = ctx("0.152.1");
     writeState(paths.stateFile, { ...DEFAULT_STATE, patched_from: "0.152.1", upstream_bin: upstream });
     mkdirSync(paths.libexecDir, { recursive: true });
@@ -161,7 +161,7 @@ describe("doctorReport", () => {
     writeFileSync(paths.patchedCodeModeHost, "HOST");
     installWrapper(paths, "/cx");
     installHook(paths.hooksFile, "/cx");
-    const lines = doctorReport(c);
+    const lines = await doctorReport(c);
     expect(get(lines, "drift")).toMatchObject({ ok: true, value: "none" });
     expect(get(lines, "wrapper")).toMatchObject({ ok: true, value: "ours" });
     expect(get(lines, "active")).toMatchObject({ ok: null, value: "none" });
@@ -169,62 +169,62 @@ describe("doctorReport", () => {
     expect(get(lines, "hook")).toMatchObject({ ok: true, value: expect.stringContaining("installed") });
     expect(get(lines, "toolchain")).toMatchObject({ ok: null, value: expect.stringContaining("optional for prebuilt") });
   });
-  test("hook trust is reported as decided by Codex, per spec L328", () => {
+  test("hook trust is reported as decided by Codex, per spec L328", async () => {
     const { c, paths } = ctx("0.152.1");
     installHook(paths.hooksFile, "/cx");
-    expect(get(doctorReport(c), "hook")?.value).toMatch(/trust is decided in Codex's startup hooks review/);
+    expect(get(await doctorReport(c), "hook")?.value).toMatch(/trust is decided in Codex's startup hooks review/);
   });
-  test("a foreign file at the launcher path is distinguished from 'not found'", () => {
+  test("a foreign file at the launcher path is distinguished from 'not found'", async () => {
     const { c, paths } = ctx("0.152.1");
     mkdirSync(paths.binDir, { recursive: true });
     writeFileSync(paths.wrapperPath, "#!/bin/sh\nexec /opt/homebrew/bin/codex-real\n");
-    const lines = doctorReport(c);
+    const lines = await doctorReport(c);
     expect(get(lines, "wrapper")).toMatchObject({ ok: false, value: expect.stringContaining("foreign file") });
     expect(get(lines, "upstream")).toMatchObject({ ok: false, value: expect.stringContaining("refusing to overwrite it") });
   });
-  test("nothing anywhere says 'no upstream Codex found'", () => {
+  test("nothing anywhere says 'no upstream Codex found'", async () => {
     const { c } = ctx("0.152.1");
-    expect(get(doctorReport(c), "upstream")).toMatchObject({ ok: false, value: expect.stringContaining("no upstream Codex found") });
+    expect(get(await doctorReport(c), "upstream")).toMatchObject({ ok: false, value: expect.stringContaining("no upstream Codex found") });
   });
-  test("a corrupt state.json is reported and names the backup", () => {
+  test("a corrupt state.json is reported and names the backup", async () => {
     const { c, paths } = ctx("0.152.1");
     mkdirSync(paths.stateDir, { recursive: true });
     writeFileSync(paths.stateFile, "{{");
-    expect(get(doctorReport(c), "state")).toMatchObject({ ok: false, value: expect.stringContaining("CORRUPT") });
+    expect(get(await doctorReport(c), "state")).toMatchObject({ ok: false, value: expect.stringContaining("CORRUPT") });
   });
-  test("a held lock names the pid", () => {
+  test("a held lock names the pid", async () => {
     const { c, paths } = ctx("0.152.1");
     mkdirSync(paths.stateDir, { recursive: true });
     writeFileSync(paths.lockFile, `${process.pid}\n`);
-    expect(get(doctorReport(c), "lock")?.value).toBe(`held by pid ${process.pid} (a patch is running)`);
+    expect(get(await doctorReport(c), "lock")?.value).toBe(`held by pid ${process.pid} (a patch is running)`);
   });
-  test("a stale lock is named as stale", () => {
+  test("a stale lock is named as stale", async () => {
     const { c, paths } = ctx("0.152.1");
     mkdirSync(paths.stateDir, { recursive: true });
     writeFileSync(paths.lockFile, "134217727\n");
-    expect(get(doctorReport(c), "lock")?.value).toMatch(/stale pidfile for dead pid/);
+    expect(get(await doctorReport(c), "lock")?.value).toMatch(/stale pidfile for dead pid/);
   });
-  test("behind within minor is reported but not ok=false under stable-minors", () => {
+  test("behind within minor is reported but not ok=false under stable-minors", async () => {
     const { c, paths, upstream } = ctx("0.152.3");
     writeState(paths.stateFile, { ...DEFAULT_STATE, policy: "stable-minors", patched_from: "0.152.1", upstream_bin: upstream });
-    expect(get(doctorReport(c), "drift")).toMatchObject({ ok: null, value: expect.stringMatching(/behind within minor.*0\.152\.1.*0\.152\.3/) });
+    expect(get(await doctorReport(c), "drift")).toMatchObject({ ok: null, value: expect.stringMatching(/behind within minor.*0\.152\.1.*0\.152\.3/) });
   });
-  test("install due on patch bump under default policy 'every'", () => {
+  test("install due on patch bump under default policy 'every'", async () => {
     const { c, paths, upstream } = ctx("0.152.3");
     writeState(paths.stateFile, { ...DEFAULT_STATE, patched_from: "0.152.1", upstream_bin: upstream });
-    expect(get(doctorReport(c), "drift")).toMatchObject({ ok: false, value: expect.stringMatching(/install due.*0\.152\.1.*0\.152\.3/) });
+    expect(get(await doctorReport(c), "drift")).toMatchObject({ ok: false, value: expect.stringMatching(/install due.*0\.152\.1.*0\.152\.3/) });
   });
-  test("install due", () => {
+  test("install due", async () => {
     const { c, paths, upstream } = ctx("0.153.0");
     writeState(paths.stateFile, { ...DEFAULT_STATE, patched_from: "0.152.1", upstream_bin: upstream });
-    expect(get(doctorReport(c), "drift")).toMatchObject({ ok: false, value: expect.stringMatching(/install due.*0\.152\.1.*0\.153\.0/) });
+    expect(get(await doctorReport(c), "drift")).toMatchObject({ ok: false, value: expect.stringMatching(/install due.*0\.152\.1.*0\.153\.0/) });
   });
 
   // -------------------------------------------------------------------------
   // Task 5: actual installation health, read from the active generation.
   // -------------------------------------------------------------------------
 
-  test("healthy prebuilt install reports healthy even with no Rust toolchain installed", () => {
+  test("healthy prebuilt install reports healthy even with no Rust toolchain installed", async () => {
     const { env, root } = tmpEnv();
     const paths = resolvePaths(env);
     const codexVersion = "0.152.1";
@@ -242,7 +242,7 @@ describe("doctorReport", () => {
     const c: Context = { env, paths, run, which, freeBytes: () => 1e12, cxBin: "/cx", patchesDir: "/p", now: () => new Date(), log: () => {}, say: () => {} };
     activatePair(stagePair(root, { version: codexVersion }), c);
 
-    const lines = doctorReport(c);
+    const lines = await doctorReport(c);
     expect(get(lines, "upstream")).toMatchObject({ ok: true });
     expect(get(lines, "active")).toMatchObject({ ok: true, value: `prebuilt ${codexVersion}` });
     expect(get(lines, "generation")?.ok).toBe(true);
@@ -261,14 +261,14 @@ describe("doctorReport", () => {
     expect(get(lines, "bookkeeping")).toBeUndefined();
   });
 
-  test("compiled install requires the toolchain and never claims release verification", () => {
+  test("compiled install requires the toolchain and never claims release verification", async () => {
     const { env, root } = tmpEnv();
     const paths = resolvePaths(env);
     const codexVersion = "0.152.1";
     const c = bareCtx(env, paths, codexVersion);
     activatePair(stagePair(root, { version: codexVersion, source: "compiled", sourceCommit: "d".repeat(40) }), c);
 
-    const lines = doctorReport(c);
+    const lines = await doctorReport(c);
     expect(get(lines, "active")).toMatchObject({ ok: true, value: `compiled ${codexVersion}` });
     expect(get(lines, "release")).toMatchObject({ ok: null, value: "not a verified release (compiled locally)" });
     expect(get(lines, "legal")).toMatchObject({ ok: null, value: "n/a (compiled build)" });
@@ -276,15 +276,15 @@ describe("doctorReport", () => {
     expect(get(lines, "toolchain")).toMatchObject({ ok: false, value: expect.stringMatching(/git is not on PATH/) });
   });
 
-  test("a locally dirty compiled source checkout is flagged", () => {
+  test("a locally dirty compiled source checkout is flagged", async () => {
     const { env, root } = tmpEnv();
     const paths = resolvePaths(env);
     const c = bareCtx(env, paths);
     activatePair(stagePair(root, { source: "compiled", sourceCommit: "d".repeat(40), sourceDirty: true }), c);
-    expect(get(doctorReport(c), "source_commit")).toMatchObject({ ok: false, value: `${"d".repeat(12)} (dirty)` });
+    expect(get(await doctorReport(c), "source_commit")).toMatchObject({ ok: false, value: `${"d".repeat(12)} (dirty)` });
   });
 
-  test("a tampered executable is reported as a digest mismatch", () => {
+  test("a tampered executable is reported as a digest mismatch", async () => {
     const { env, root } = tmpEnv();
     const paths = resolvePaths(env);
     const c = bareCtx(env, paths);
@@ -292,13 +292,13 @@ describe("doctorReport", () => {
     const dir = activeGeneration(paths)!;
     writeFileSync(join(dir, "codex"), "TAMPERED-BYTES");
 
-    const lines = doctorReport(c);
+    const lines = await doctorReport(c);
     expect(get(lines, "codex_digest")).toMatchObject({ ok: false, value: "MISMATCH" });
     expect(get(lines, "host_digest")).toMatchObject({ ok: true, value: "verified" });
     expect(get(lines, "active")).toMatchObject({ ok: true }); // metadata itself is still valid
   });
 
-  test("a missing companion executable is reported as missing, not mismatched", () => {
+  test("a missing companion executable is reported as missing, not mismatched", async () => {
     const { env, root } = tmpEnv();
     const paths = resolvePaths(env);
     const c = bareCtx(env, paths);
@@ -306,22 +306,22 @@ describe("doctorReport", () => {
     const dir = activeGeneration(paths)!;
     rmSync(join(dir, "codex-code-mode-host"));
 
-    expect(get(doctorReport(c), "host_digest")).toMatchObject({ ok: false, value: "missing" });
+    expect(get(await doctorReport(c), "host_digest")).toMatchObject({ ok: false, value: "missing" });
   });
 
-  test("a dangling current pointer is reported as broken, not crashed", () => {
+  test("a dangling current pointer is reported as broken, not crashed", async () => {
     const { env, root } = tmpEnv();
     const paths = resolvePaths(env);
     const c = bareCtx(env, paths);
     mkdirSync(paths.generationsDir, { recursive: true });
     symlinkSync(join(paths.generationsDir, "nowhere"), paths.currentGeneration);
 
-    const lines = doctorReport(c);
+    const lines = await doctorReport(c);
     expect(get(lines, "generation")).toMatchObject({ ok: false, value: "dangling" });
     expect(get(lines, "active")).toMatchObject({ ok: false, value: "broken link" });
   });
 
-  test("a current pointer outside the generations root is reported, not trusted", () => {
+  test("a current pointer outside the generations root is reported, not trusted", async () => {
     const { env, root } = tmpEnv();
     const paths = resolvePaths(env);
     const c = bareCtx(env, paths);
@@ -330,12 +330,12 @@ describe("doctorReport", () => {
     mkdirSync(paths.libexecDir, { recursive: true });
     symlinkSync(outside, paths.currentGeneration);
 
-    const lines = doctorReport(c);
+    const lines = await doctorReport(c);
     expect(get(lines, "generation")).toMatchObject({ ok: false, value: "outside generations dir" });
     expect(get(lines, "active")).toMatchObject({ ok: false, value: "broken link" });
   });
 
-  test("a current pointer at a foreign directory (not one of ours) is reported, not trusted", () => {
+  test("a current pointer at a foreign directory (not one of ours) is reported, not trusted", async () => {
     const { env, root } = tmpEnv();
     const paths = resolvePaths(env);
     const c = bareCtx(env, paths);
@@ -345,12 +345,12 @@ describe("doctorReport", () => {
     mkdirSync(paths.libexecDir, { recursive: true });
     symlinkSync(foreign, paths.currentGeneration);
 
-    const lines = doctorReport(c);
+    const lines = await doctorReport(c);
     expect(get(lines, "generation")).toMatchObject({ ok: false, value: "foreign" });
     expect(get(lines, "active")).toMatchObject({ ok: false, value: "broken link" });
   });
 
-  test("malformed installation.json is reported as invalid metadata, not crashed", () => {
+  test("malformed installation.json is reported as invalid metadata, not crashed", async () => {
     const { env, root } = tmpEnv();
     const paths = resolvePaths(env);
     const c = bareCtx(env, paths);
@@ -358,13 +358,13 @@ describe("doctorReport", () => {
     const dir = activeGeneration(paths)!;
     writeFileSync(join(dir, "installation.json"), "{ not json");
 
-    const lines = doctorReport(c);
+    const lines = await doctorReport(c);
     expect(get(lines, "generation")).toMatchObject({ ok: true, value: dir });
     expect(get(lines, "active")).toMatchObject({ ok: false, value: "invalid metadata" });
     expect(get(lines, "codex_digest")).toMatchObject({ ok: null, value: expect.stringContaining("n/a") });
   });
 
-  test("stale bookkeeping after activation is reported, not silently overridden", () => {
+  test("stale bookkeeping after activation is reported, not silently overridden", async () => {
     const { env, root } = tmpEnv();
     const paths = resolvePaths(env);
     const c = bareCtx(env, paths);
@@ -372,12 +372,12 @@ describe("doctorReport", () => {
     // Simulates a bookkeeping write that failed (or never ran) after a successful activation.
     writeState(paths.stateFile, { ...DEFAULT_STATE, patched_from: "0.152.1" });
 
-    const lines = doctorReport(c);
+    const lines = await doctorReport(c);
     expect(get(lines, "bookkeeping")).toMatchObject({ ok: false, value: "state.json says 0.152.1, active generation is 0.153.0" });
     expect(get(lines, "patched_from")).toMatchObject({ value: "0.152.1" }); // raw state value, unchanged
   });
 
-  test("upstream advancement is reported as drift, based on the active generation's version", () => {
+  test("upstream advancement is reported as drift, based on the active generation's version", async () => {
     const { env, root } = tmpEnv();
     const paths = resolvePaths(env);
     const upstream = join(root, "real-codex");
@@ -390,36 +390,36 @@ describe("doctorReport", () => {
     activatePair(stagePair(root, { version: "0.152.1" }), c);
     // state.json's patched_from was never written; drift is still detected from the generation's own metadata.
 
-    const lines = doctorReport(c);
+    const lines = await doctorReport(c);
     expect(get(lines, "drift")).toMatchObject({ ok: false, value: expect.stringMatching(/install due.*0\.152\.1.*0\.153\.0/) });
     expect(get(lines, "bookkeeping")).toBeUndefined();
   });
 
-  test("a failed attempt shows the reason, and the release-unavailable backoff hint", () => {
+  test("a failed attempt shows the reason, and the release-unavailable backoff hint", async () => {
     const { c, paths } = ctx("0.152.1");
     writeState(paths.stateFile, { ...DEFAULT_STATE, last_attempt: { at: "2026-09-01T00:00:00.000Z", ok: false, version: "0.153.0", reason: RELEASE_UNAVAILABLE } });
-    expect(get(doctorReport(c), "last_attempt")).toMatchObject({
+    expect(get(await doctorReport(c), "last_attempt")).toMatchObject({
       ok: false,
-      value: `failed 0.153.0 at 2026-09-01T00:00:00.000Z: ${RELEASE_UNAVAILABLE} (hook retries after 24h; run cxstatusline install to retry now)`,
+      value: `failed 0.153.0 at 2026-09-01T00:00:00.000Z: ${RELEASE_UNAVAILABLE} (hook retries when release publishes or after 24h; run cxstatusline install to retry now)`,
     });
   });
 
-  test("a failed attempt with an ordinary reason has no backoff hint", () => {
+  test("a failed attempt with an ordinary reason has no backoff hint", async () => {
     const { c, paths } = ctx("0.152.1");
     writeState(paths.stateFile, { ...DEFAULT_STATE, last_attempt: { at: "2026-09-01T00:00:00.000Z", ok: false, version: "0.153.0", reason: "boom" } });
-    expect(get(doctorReport(c), "last_attempt")).toMatchObject({ ok: false, value: "failed 0.153.0 at 2026-09-01T00:00:00.000Z: boom" });
+    expect(get(await doctorReport(c), "last_attempt")).toMatchObject({ ok: false, value: "failed 0.153.0 at 2026-09-01T00:00:00.000Z: boom" });
   });
 
-  test("command_cache: missing directory reports 0 entries, not an error", () => {
+  test("command_cache: missing directory reports 0 entries, not an error", async () => {
     const { c } = ctx("0.152.1");
-    expect(get(doctorReport(c), "command_cache")).toMatchObject({
+    expect(get(await doctorReport(c), "command_cache")).toMatchObject({
       key: "command_cache",
       value: "0 entries",
       ok: null,
     });
   });
 
-  test("command_cache: reports entry count and oldest entry age", () => {
+  test("command_cache: reports entry count and oldest entry age", async () => {
     const { c, paths } = ctx("0.152.1");
     mkdirSync(paths.commandCacheDir, { recursive: true });
     writeFileSync(join(paths.commandCacheDir, "entry1.json"), "{}");
@@ -431,10 +431,114 @@ describe("doctorReport", () => {
     utimesSync(join(paths.commandCacheDir, "entry1.json"), oldestSec, oldestSec);
     utimesSync(join(paths.commandCacheDir, "entry2.json"), newerSec, newerSec);
 
-    expect(get(doctorReport(c), "command_cache")).toMatchObject({
+    expect(get(await doctorReport(c), "command_cache")).toMatchObject({
       key: "command_cache",
       value: "2 entries (oldest: 2m)",
       ok: null,
+    });
+  });
+
+  test("cx_version: differing from CLI version is informational ok=null, not an issue", async () => {
+    const { env, root } = tmpEnv();
+    const paths = resolvePaths(env);
+    const c = bareCtx(env, paths);
+    activatePair(stagePair(root, { cxVersion: "0.2.0" }), c);
+
+    const lines = await doctorReport(c);
+    expect(get(lines, "cx_version")).toMatchObject({
+      ok: null,
+      value: `0.2.0 (cli: ${VERSION})`,
+    });
+    const failures = lines.filter((l) => l.ok === false);
+    expect(failures.some((l) => l.key === "cx_version")).toBe(false);
+  });
+
+  test("codex_target: reports supported version with install prompt when no active generation", async () => {
+    const { c } = ctx("0.152.1");
+    const lines = await doctorReport(c, { targetVersion: "0.155.1" });
+    expect(get(lines, "codex_target")).toMatchObject({
+      ok: null,
+      value: "0.155.1 supported (run cxstatusline install)",
+    });
+  });
+
+  test("codex_target: reports up to date and verified on GitHub when prebuilt is published", async () => {
+    const { env, root } = tmpEnv();
+    const paths = resolvePaths(env);
+    const c = bareCtx(env, paths, "0.155.1");
+    activatePair(stagePair(root, { version: "0.155.1" }), c);
+
+    const lines = await doctorReport(c, {
+      targetVersion: "0.155.1",
+      probeFn: async () => ({ version: "0.155.1", available: true }),
+    });
+    expect(get(lines, "codex_target")).toMatchObject({
+      ok: true,
+      value: "0.155.1 (up to date; verified on GitHub)",
+    });
+  });
+
+  test("codex_target: reports up to date when probe is skipped or offline", async () => {
+    const { env, root } = tmpEnv();
+    const paths = resolvePaths(env);
+    const c = bareCtx(env, paths, "0.155.1");
+    activatePair(stagePair(root, { version: "0.155.1" }), c);
+
+    const lines = await doctorReport(c, {
+      targetVersion: "0.155.1",
+      probe: false,
+    });
+    expect(get(lines, "codex_target")).toMatchObject({
+      ok: true,
+      value: "0.155.1 (up to date)",
+    });
+  });
+
+  test("codex_target: reports available on GitHub when active generation is behind", async () => {
+    const { env, root } = tmpEnv();
+    const paths = resolvePaths(env);
+    const c = bareCtx(env, paths, "0.154.0");
+    activatePair(stagePair(root, { version: "0.154.0" }), c);
+
+    const lines = await doctorReport(c, {
+      targetVersion: "0.155.1",
+      probeFn: async () => ({ version: "0.155.1", available: true }),
+    });
+    expect(get(lines, "codex_target")).toMatchObject({
+      ok: null,
+      value: "0.155.1 available (active: 0.154.0; prebuilt live on GitHub; run cxstatusline install to update)",
+    });
+  });
+
+  test("codex_target: reports prebuilt pending with compile guidance when prebuilt returns 404", async () => {
+    const { env, root } = tmpEnv();
+    const paths = resolvePaths(env);
+    const c = bareCtx(env, paths, "0.154.0");
+    activatePair(stagePair(root, { version: "0.154.0" }), c);
+
+    const lines = await doctorReport(c, {
+      targetVersion: "0.155.1",
+      probeFn: async () => ({ version: "0.155.1", available: false }),
+    });
+    expect(get(lines, "codex_target")).toMatchObject({
+      ok: null,
+      value: "0.155.1 supported (active: 0.154.0; prebuilt pending; run cxstatusline install --compile)",
+    });
+  });
+
+  test("codex_target: reports supported with install update guidance when probe errors or times out", async () => {
+    const { env, root } = tmpEnv();
+    const paths = resolvePaths(env);
+    const c = bareCtx(env, paths, "0.154.0");
+    activatePair(stagePair(root, { version: "0.154.0" }), c);
+
+    const lines = await doctorReport(c, {
+      targetVersion: "0.155.1",
+      probeFn: async () => null,
+    });
+    expect(get(lines, "codex_target")).toMatchObject({
+      ok: null,
+      value: "0.155.1 supported (active: 0.154.0; run cxstatusline install to update)",
     });
   });
 });
