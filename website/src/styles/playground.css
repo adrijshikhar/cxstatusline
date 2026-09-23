@@ -1,16 +1,58 @@
 #playground { display: grid; min-height: 0; align-self: end; border-top: 1px solid var(--line); }
-#desktop-playground { display: grid; min-height: 0; background: var(--terminal); }
-.terminal-shell { min-height: 0; max-height: 32rem; overflow: hidden; background: var(--terminal); }
-.terminal-output { display: grid; min-width: 0; font-size: .875rem; line-height: 1rem; }
+#desktop-playground {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--terminal);
+}
+.terminal-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--terminal);
+}
+.terminal-output {
+  display: grid;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  font-size: .875rem;
+  line-height: 1rem;
+}
 .terminal-output > * { grid-area: 1 / 1; min-width: 0; }
-.preview .terminal-output { height: calc(3lh + 1.25rem); overflow: hidden; }
+.preview .terminal-output {
+  flex: 0 0 auto;
+  height: calc(3lh + 1.25rem);
+  overflow: hidden;
+}
 #playground-skeleton { z-index: 1; padding-inline: var(--terminal-inset); background: var(--terminal); }
 .skeleton-status { display: grid; grid-auto-rows: 1lh; align-items: center; }
 .skeleton-status [data-slot="skeleton"] { height: .625rem; background: #4b4b4b; }
-#terminal { min-height: 24rem; max-width: calc(100% - 2 * var(--terminal-inset)); margin-inline: var(--terminal-inset); }
-.terminal-shell:not(.preview) #terminal { padding-top: clamp(0.75rem, 1.5vw, 1.25rem); }
-.terminal-shell.preview { max-height: 15rem; overflow: visible; }
-.preview #terminal { min-height: 0; height: 100%; overflow: hidden; }
+#terminal {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  max-width: calc(100% - 2 * var(--terminal-inset));
+  margin-inline: var(--terminal-inset);
+  overflow: hidden;
+}
+.terminal-shell:not(.preview) #terminal {
+  padding-top: clamp(0.5rem, 1vw, 0.875rem);
+}
+.terminal-shell.preview {
+  flex: 0 0 auto;
+  max-height: 15rem;
+  overflow: visible;
+}
+.preview #terminal {
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
 #chat-preview { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; padding: 0 var(--terminal-inset); background: #343434; font-family: var(--font-mono); }
 .composer-prompt { color: var(--text); font-size: 1.0625rem; font-weight: 700; }
 .composer-input { position: relative; min-width: 0; overflow: hidden; font: .9375rem/1.5 var(--font-mono); }
@@ -40,3 +82,29 @@
 .config-btn:disabled { opacity: .45; cursor: not-allowed; }
 .config-icon { font-size: .8em; opacity: .85; }
 #desktop-playground[hidden], [hidden] { display: none !important; }
+
+/* Compact marketing hero in edit mode */
+.terminal-window.editing .ascii-wordmark,
+.terminal-window.editing .lede,
+.terminal-window.editing .intro-actions {
+  display: none !important;
+}
+.terminal-window.editing .intro {
+  flex: 0 0 auto;
+  padding: 0.75rem var(--terminal-inset) 0.5rem;
+  gap: 0.25rem;
+}
+.terminal-window.editing .intro h1 {
+  font-size: 1rem;
+  line-height: 1.3;
+}
+.terminal-window.editing .terminal-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  height: 100%;
+}
+.terminal-window.editing #terminal {
+  min-height: 0;
+  height: 100%;
+}
