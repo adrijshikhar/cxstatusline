@@ -246,6 +246,25 @@ describe("runHook", () => {
     const { ctx, deps } = setup({ patched_from: null });
     expect(runHook(ctx, startup, deps).stdout).toBe("");
   });
+  test("state.patched_from null but generation active on disk: detects drift and acquires", () => {
+    const { ctx, deps, paths, spawned } = setup({ patched_from: null }, "0.153.0");
+    rmSync(paths.patchedBin);
+    rmSync(paths.patchedCodeModeHost);
+    installGeneration(paths); // active generation is 0.152.1
+    const r = runHook(ctx, startup, deps);
+    expect(msg(r.stdout)).toMatch(/Codex updated to 0\.153\.0 \(installed pair is from 0\.152\.1\)/);
+    expect(spawned).toEqual([["/cx", "hook", "acquire"]]);
+  });
+  test("generation active on disk takes precedence over state.patched_from for drift detection", () => {
+    const { ctx, deps, paths, spawned } = setup({ patched_from: "0.153.0" }, "0.153.0");
+    rmSync(paths.patchedBin);
+    rmSync(paths.patchedCodeModeHost);
+    installGeneration(paths); // active generation is 0.152.1, but state claimed 0.153.0
+    const r = runHook(ctx, startup, deps);
+    // Active generation is 0.152.1, upstream is 0.153.0 -> drift detected!
+    expect(msg(r.stdout)).toMatch(/Codex updated to 0\.153\.0 \(installed pair is from 0\.152\.1\)/);
+    expect(spawned).toEqual([["/cx", "hook", "acquire"]]);
+  });
   test("garbage stdin is treated as startup", () => {
     const { ctx, deps, spawned } = setup({}, "0.153.0");
     runHook(ctx, "not json", deps);
