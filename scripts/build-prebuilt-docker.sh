@@ -5,6 +5,25 @@ set -euo pipefail
 
 export PATH="/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
+# Avoid macOS Keychain authorization errors in headless or non-interactive environments
+if [[ -z "${DOCKER_CONFIG:-}" && -f "$HOME/.docker/config.json" ]]; then
+  if grep -q '"credsStore"' "$HOME/.docker/config.json" 2>/dev/null; then
+    _CLEAN_DOCKER_DIR="$(mktemp -d -t docker-cfg-XXXXXX)"
+    cp -R "$HOME/.docker"/* "$_CLEAN_DOCKER_DIR/" 2>/dev/null || true
+    bun -e '
+      const fs = require("fs");
+      try {
+        const p = process.argv[1] + "/config.json";
+        const cfg = JSON.parse(fs.readFileSync(p, "utf8"));
+        delete cfg.credsStore;
+        fs.writeFileSync(p, JSON.stringify(cfg, null, 2));
+      } catch {}
+    ' "$_CLEAN_DOCKER_DIR"
+    export DOCKER_CONFIG="$_CLEAN_DOCKER_DIR"
+    trap 'rm -rf "$_CLEAN_DOCKER_DIR"' EXIT
+  fi
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
