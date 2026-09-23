@@ -292,6 +292,32 @@ describe("command dispatch", () => {
     expect(await main(["install"], { ...t.io, isTTY: true, env: d.env }, { ...d.deps, promptVersion })).toBe(1);
     expect(t.out.join("")).toMatch(/Compiling patched Codex from source/);
   });
+  test("interactive update passes isTTY and user cancellation exits 0", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    const mockReleases = async () => ["0.155.1", "0.152.1"];
+    const mockFetch = async (url: string | URL | Request) => {
+      const u = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+      if (u.includes("releases/latest")) {
+        return new Response(JSON.stringify({ tag_name: "rust-v0.156.1" }), { status: 200 });
+      }
+      return new Response("not found", { status: 404 });
+    };
+    let askCalled = false;
+    const ask = async () => {
+      askCalled = true;
+      return "4"; // Cancel
+    };
+    const res = await main(["update"], { ...t.io, isTTY: true, env: d.env }, {
+      ...d.deps,
+      transport: { fetch: mockFetch as any },
+      fetchPrebuilts: mockReleases,
+      ask,
+    });
+    expect(res).toBe(0);
+    expect(askCalled).toBe(true);
+    expect(t.out.join("")).toMatch(/Update cancelled/);
+  });
   test("--internal-refresh-command is dispatched without reading stdin, produces no stdout, and is absent from USAGE", async () => {
     const t = io("");
     const throwingIo = {

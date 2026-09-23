@@ -7,7 +7,9 @@ import { releaseTag } from "../distribution";
 import { readUpstreamVersion } from "../codex/upstream";
 import { installHook } from "../hook/install";
 import { writeState } from "../state";
-import { parseSemver } from "../version";
+import { compareSemver, parseSemver } from "../version";
+import { fetchPublishedPrebuiltVersions } from "../distribution/prebuilt";
+import { defaultAsk } from "../ui/prompt-version";
 import { describeOutcome, loadState, runAcquisition, upstreamFor, type PatchOutcome } from "./acquire";
 import { ManifestError, loadManifest, resolvePatch } from "./manifest";
 import {
@@ -167,6 +169,9 @@ export async function runInstall(ctx: Context, opts: InstallOptions, transport: 
 export interface UpdateOptions {
   readonly force?: boolean;
   readonly compile?: boolean;
+  readonly isTTY?: boolean;
+  readonly ask?: (question: string) => Promise<string>;
+  readonly fetchPrebuilts?: (fetchFn?: FetchLike, repo?: string) => Promise<string[]>;
 }
 
 export async function probeUpstreamLatest(fetchFn: FetchLike): Promise<string | null> {
@@ -255,11 +260,19 @@ export async function runUpdate(
   optsOrTransport: UpdateOptions | TransportOptions = {},
   maybeTransport?: TransportOptions,
 ): Promise<number> {
-  const opts: UpdateOptions =
-    "compile" in optsOrTransport || "force" in optsOrTransport ? optsOrTransport : {};
+  const isOpts =
+    typeof optsOrTransport === "object" &&
+    optsOrTransport !== null &&
+    ("compile" in optsOrTransport ||
+      "force" in optsOrTransport ||
+      "isTTY" in optsOrTransport ||
+      "ask" in optsOrTransport ||
+      "fetchPrebuilts" in optsOrTransport);
+
+  let activeOpts: UpdateOptions = isOpts ? (optsOrTransport as UpdateOptions) : {};
   const transport: TransportOptions =
-    "baseUrl" in optsOrTransport || "fetch" in optsOrTransport
-      ? optsOrTransport
+    !isOpts && ("baseUrl" in optsOrTransport || "fetch" in optsOrTransport)
+      ? (optsOrTransport as TransportOptions)
       : (maybeTransport ?? {});
 
   const state = loadState(ctx);
@@ -272,20 +285,117 @@ export async function runUpdate(
   const current = readUpstreamVersion(located.bin, ctx.run);
   const fetchFn: FetchLike = transport.fetch ?? fetch;
 
-  if (current && !opts.force && !opts.compile) {
+  if (current && !activeOpts.force && !activeOpts.compile) {
     const latest = await probeUpstreamLatest(fetchFn);
     if (latest && latest !== current.raw) {
       const available = await probePrebuiltExists(latest, fetchFn, transport.baseUrl);
       if (!available) {
-        ctx.say(`Warning: Upstream Codex update available: ${current.raw} -> ${latest}.`);
-        ctx.say(`However, cxstatusline has not yet published prebuilt binaries for Codex ${latest}.`);
-        ctx.say("Updating now will replace your patched launcher with stock Codex.");
-        ctx.say("");
-        ctx.say("Options:");
-        ctx.say("  - Wait until cxstatusline publishes prebuilt binaries for this version.");
-        ctx.say("  - Update and compile from source: cxstatusline update --compile");
-        ctx.say("  - Update to stock Codex anyway:   cxstatusline update --force");
-        return 1;
+        const prebuiltsFetcher = activeOpts.fetchPrebuilts ?? fetchPublishedPrebuiltVersions;
+        const publishedPrebuilts = await prebuiltsFetcher(fetchFn);
+        const currentSem = parseSemver(current.raw);
+        const newerPrebuilts = currentSem
+          ? publishedPrebuilts.filter((v) => {
+              const s = parseSemver(v);
+              return s !== null && compareSemver(s, currentSem) > 0;
+            })
+          : [];
+        const highestAvailable = newerPrebuilts[0];
+
+        if (highestAvailable) {
+          ctx.say(`Warning: Upstream Codex update available: ${current.raw} -> ${latest}.`);
+          ctx.say(`However, cxstatusline has not yet published prebuilt binaries for Codex ${latest}.`);
+          ctx.say(`Newer prebuilt available: Codex ${highestAvailable} is published and ready to install.`);
+          ctx.say("");
+
+          if (!activeOpts.isTTY) {
+            ctx.say("Options:");
+            ctx.say(`  - Install latest available prebuilt: cxstatusline install --codex-version ${highestAvailable}`);
+            ctx.say(`  - Wait until cxstatusline publishes prebuilt binaries for ${latest}.`);
+            ctx.say("  - Update and compile from source:    cxstatusline update --compile");
+            ctx.say("  - Update to stock Codex anyway:      cxstatusline update --force");
+            return 1;
+          }
+
+          ctx.say("How would you like to proceed?");
+          ctx.say(`  1) Install latest available prebuilt (Codex ${highestAvailable}) [recommended]`);
+          ctx.say(`  2) Compile Codex ${latest} from source`);
+          ctx.say(`  3) Update to stock Codex ${latest} anyway`);
+          ctx.say("  4) Cancel");
+
+          const askFn = activeOpts.ask ?? defaultAsk;
+          let selectedAction: "prebuilt" | "compile" | "stock" | "cancel" | null = null;
+          while (!selectedAction) {
+            const choice = (await askFn("Enter choice [1-4] (default 1): ")).trim();
+            if (choice === "1" || choice === "") {
+              selectedAction = "prebuilt";
+            } else if (choice === "2") {
+              selectedAction = "compile";
+            } else if (choice === "3") {
+              selectedAction = "stock";
+            } else if (choice === "4") {
+              selectedAction = "cancel";
+            } else {
+              ctx.say(`Invalid choice "${choice}". Please select 1, 2, 3, or 4.`);
+            }
+          }
+
+          if (selectedAction === "prebuilt") {
+            ctx.say(`Installing prebuilt binaries for Codex ${highestAvailable}...`);
+            return runInstall(ctx, { compile: false, codexVersion: highestAvailable }, transport);
+          }
+          if (selectedAction === "cancel") {
+            ctx.say("Update cancelled.");
+            return 0;
+          }
+          if (selectedAction === "compile") {
+            activeOpts = { ...activeOpts, compile: true };
+          } else if (selectedAction === "stock") {
+            activeOpts = { ...activeOpts, force: true };
+          }
+        } else {
+          ctx.say(`Warning: Upstream Codex update available: ${current.raw} -> ${latest}.`);
+          ctx.say(`However, cxstatusline has not yet published prebuilt binaries for Codex ${latest}.`);
+          ctx.say("Updating now will replace your patched launcher with stock Codex.");
+          ctx.say("");
+
+          if (!activeOpts.isTTY) {
+            ctx.say("Options:");
+            ctx.say("  - Wait until cxstatusline publishes prebuilt binaries for this version.");
+            ctx.say("  - Update and compile from source: cxstatusline update --compile");
+            ctx.say("  - Update to stock Codex anyway:   cxstatusline update --force");
+            return 1;
+          }
+
+          ctx.say("How would you like to proceed?");
+          ctx.say(`  1) Compile Codex ${latest} from source`);
+          ctx.say(`  2) Update to stock Codex ${latest} anyway`);
+          ctx.say("  3) Cancel");
+
+          const askFn = activeOpts.ask ?? defaultAsk;
+          let selectedAction: "compile" | "stock" | "cancel" | null = null;
+          while (!selectedAction) {
+            const choice = (await askFn("Enter choice [1-3] (default 3): ")).trim();
+            if (choice === "1") {
+              selectedAction = "compile";
+            } else if (choice === "2") {
+              selectedAction = "stock";
+            } else if (choice === "3" || choice === "") {
+              selectedAction = "cancel";
+            } else {
+              ctx.say(`Invalid choice "${choice}". Please select 1, 2, or 3.`);
+            }
+          }
+
+          if (selectedAction === "cancel") {
+            ctx.say("Update cancelled.");
+            return 0;
+          }
+          if (selectedAction === "compile") {
+            activeOpts = { ...activeOpts, compile: true };
+          } else if (selectedAction === "stock") {
+            activeOpts = { ...activeOpts, force: true };
+          }
+        }
       }
     } else if (latest && latest === current.raw) {
       ctx.say(`Codex is already at the latest version (${current.raw}).`);
@@ -300,7 +410,7 @@ export async function runUpdate(
     return 1;
   }
 
-  const source = opts.compile ? "compiled" : "prebuilt";
+  const source = activeOpts.compile ? "compiled" : "prebuilt";
   const progress = createInstallProgressTracker({
     isTTY: process.stdout?.isTTY,
     write: (s) => process.stdout.write(s),

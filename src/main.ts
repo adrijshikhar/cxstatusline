@@ -44,6 +44,8 @@ export interface MainDeps {
   readonly promptVersion?: (
     options: PromptVersionOptions,
   ) => Promise<PromptVersionSelection | string>;
+  readonly ask?: (question: string) => Promise<string>;
+  readonly fetchPrebuilts?: (fetchFn?: FetchLike, repo?: string) => Promise<string[]>;
 }
 
 export const USAGE = `usage: cxstatusline [command]
@@ -218,6 +220,9 @@ async function updateCommand(argv: readonly string[], io: MainIo, deps: MainDeps
     {
       compile: flags.includes("--compile"),
       force: flags.includes("--force") || flags.includes("-y") || flags.includes("--yes"),
+      isTTY: io.isTTY,
+      ask: deps.ask,
+      fetchPrebuilts: deps.fetchPrebuilts,
     },
     deps.transport,
   );

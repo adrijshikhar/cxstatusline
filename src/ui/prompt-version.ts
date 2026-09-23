@@ -95,7 +95,7 @@ export async function promptCodexVersion(options: PromptVersionOptions): Promise
   }
 }
 
-function defaultAsk(question: string): Promise<string> {
+export function defaultAsk(question: string): Promise<string> {
   const rl = createInterface({
     input: process.stdin,
     output: process.stdout,
