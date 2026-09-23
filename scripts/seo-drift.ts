@@ -54,9 +54,11 @@ export function executeDrift(
   }
 
   const script = action === "compare" ? "drift_compare.py" : "drift_baseline.py";
-  const rawUrl = args[1] || DEFAULT_URL;
+  const remaining = args.slice(1);
+  const urlIndex = remaining.findIndex((arg) => !arg.startsWith("-"));
+  const rawUrl = urlIndex !== -1 ? remaining[urlIndex] : DEFAULT_URL;
   const url = rawUrl.startsWith("http://") || rawUrl.startsWith("https://") ? rawUrl : `http://${rawUrl}`;
-  const extraArgs = args.slice(2);
+  const extraArgs = urlIndex !== -1 ? remaining.filter((_, idx) => idx !== urlIndex) : remaining;
 
   const claudeSeoPath = options.claudeSeoPath ?? resolveClaudeSeoPath(options.env);
   if (!existsSync(claudeSeoPath)) {

@@ -183,6 +183,30 @@ describe("seo-drift CLI helper", () => {
       }
     });
 
+    test("handles flags placed before the target URL", () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "seo-drift-test-"));
+      const mockRunner = join(tempDir, "mock-claude-seo");
+      const logFile = join(tempDir, "args.log");
+      try {
+        writeFileSync(
+          mockRunner,
+          `#!/bin/sh\necho "$@" > "${logFile}"\nexit 0\n`
+        );
+        chmodSync(mockRunner, 0o755);
+
+        const code = executeDrift(["compare", "--verbose", "localhost:4321"], {
+          claudeSeoPath: mockRunner,
+          stdio: "pipe",
+        });
+        expect(code).toBe(0);
+
+        const loggedArgs = readFileSync(logFile, "utf8").trim();
+        expect(loggedArgs).toBe("run drift_compare.py --skip-cwv http://localhost:4321 --verbose");
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
     test("exits non-zero when runner is missing", () => {
       const code = executeDrift(["baseline"], {
         claudeSeoPath: "/nonexistent/path/to/claude-seo",
