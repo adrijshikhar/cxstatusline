@@ -378,7 +378,7 @@ index 9b14b39..884c78d 100644
              return None;
          }
 diff --git a/codex-rs/tui/src/bottom_pane/footer.rs b/codex-rs/tui/src/bottom_pane/footer.rs
-index 76a13b7..66f3ed0 100644
+index 76a13b7..8479e1e 100644
 --- a/codex-rs/tui/src/bottom_pane/footer.rs
 +++ b/codex-rs/tui/src/bottom_pane/footer.rs
 @@ -83,6 +83,9 @@ pub(crate) struct FooterProps {
@@ -432,7 +432,7 @@ index 76a13b7..66f3ed0 100644
  /// Render footer content directly from `FooterProps`.
  ///
  /// This is intentionally not part of the width-based collapse/fallback logic.
-@@ -1013,12 +1027,50 @@ mod tests {
+@@ -1013,12 +1027,49 @@ mod tests {
          );
      }
  
@@ -440,7 +440,6 @@ index 76a13b7..66f3ed0 100644
 +        FooterProps {
 +            mode,
 +            esc_backtrack_hint: false,
-+            use_shift_enter_hint: false,
 +            is_task_running: false,
 +            queue_submissions: false,
 +            collaboration_modes_enabled: false,
@@ -465,7 +464,7 @@ index 76a13b7..66f3ed0 100644
 +    #[test]
 +    fn cxstatusline_block_adds_rows_without_hiding_instruction_footer() {
 +        let props = props_with_status_block(3, FooterMode::EscHint);
-+        assert_eq!(footer_height(&props), 4);
++        assert_eq!(footer_height(&props, 80), 4);
 +
 +        let screen = render_footer_with_mode_indicator_and_context(
 +            /*width*/ 80,
@@ -483,7 +482,7 @@ index 76a13b7..66f3ed0 100644
      fn snapshot_footer_with_context(
          name: &str,
          props: FooterProps,
-@@ -1045,6 +1097,26 @@ mod tests {
+@@ -1045,6 +1096,26 @@ mod tests {
          terminal
              .draw(|f| {
                  let area = Rect::new(0, 0, f.area().width, height);
@@ -510,7 +509,7 @@ index 76a13b7..66f3ed0 100644
                  let show_cycle_hint = !props.is_task_running;
                  let show_shortcuts_hint = match props.mode {
                      FooterMode::ComposerEmpty => true,
-@@ -1293,6 +1365,7 @@ mod tests {
+@@ -1293,6 +1364,7 @@ mod tests {
                  quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
                  status_line_value: None,
                  status_line_enabled: false,
@@ -518,7 +517,7 @@ index 76a13b7..66f3ed0 100644
                  key_hints: FooterKeyHints::default_bindings(),
                  active_agent_label: None,
              },
-@@ -1310,6 +1383,7 @@ mod tests {
+@@ -1310,6 +1382,7 @@ mod tests {
                  quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
                  status_line_value: None,
                  status_line_enabled: false,
@@ -526,7 +525,7 @@ index 76a13b7..66f3ed0 100644
                  key_hints: FooterKeyHints {
                      insert_newline: Some(key_hint::shift(KeyCode::Enter).into()),
                      ..FooterKeyHints::default_bindings()
-@@ -1330,6 +1404,7 @@ mod tests {
+@@ -1330,6 +1403,7 @@ mod tests {
                  quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
                  status_line_value: None,
                  status_line_enabled: false,
@@ -534,7 +533,7 @@ index 76a13b7..66f3ed0 100644
                  key_hints: FooterKeyHints::default_bindings(),
                  active_agent_label: None,
              },
-@@ -1347,6 +1422,7 @@ mod tests {
+@@ -1347,6 +1421,7 @@ mod tests {
                  quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
                  status_line_value: None,
                  status_line_enabled: false,
@@ -542,7 +541,7 @@ index 76a13b7..66f3ed0 100644
                  key_hints: FooterKeyHints::default_bindings(),
                  active_agent_label: None,
              },
-@@ -1364,6 +1440,7 @@ mod tests {
+@@ -1364,6 +1439,7 @@ mod tests {
                  quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
                  status_line_value: None,
                  status_line_enabled: false,
@@ -550,7 +549,7 @@ index 76a13b7..66f3ed0 100644
                  key_hints: FooterKeyHints::default_bindings(),
                  active_agent_label: None,
              },
-@@ -1381,6 +1458,7 @@ mod tests {
+@@ -1381,6 +1457,7 @@ mod tests {
                  quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
                  status_line_value: None,
                  status_line_enabled: false,
@@ -558,7 +557,7 @@ index 76a13b7..66f3ed0 100644
                  key_hints: FooterKeyHints::default_bindings(),
                  active_agent_label: None,
              },
-@@ -1398,6 +1476,7 @@ mod tests {
+@@ -1398,6 +1475,7 @@ mod tests {
                  quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
                  status_line_value: None,
                  status_line_enabled: false,
@@ -566,7 +565,7 @@ index 76a13b7..66f3ed0 100644
                  key_hints: FooterKeyHints::default_bindings(),
                  active_agent_label: None,
              },
-@@ -1415,6 +1494,7 @@ mod tests {
+@@ -1415,6 +1493,7 @@ mod tests {
                  quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
                  status_line_value: None,
                  status_line_enabled: false,
@@ -574,7 +573,7 @@ index 76a13b7..66f3ed0 100644
                  key_hints: FooterKeyHints::default_bindings(),
                  active_agent_label: None,
              },
-@@ -1432,6 +1512,7 @@ mod tests {
+@@ -1432,6 +1511,7 @@ mod tests {
                  quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
                  status_line_value: None,
                  status_line_enabled: false,
@@ -582,7 +581,7 @@ index 76a13b7..66f3ed0 100644
                  key_hints: FooterKeyHints::default_bindings(),
                  active_agent_label: None,
              },
-@@ -1451,6 +1532,7 @@ mod tests {
+@@ -1451,6 +1531,7 @@ mod tests {
                  quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
                  status_line_value: None,
                  status_line_enabled: false,
@@ -590,7 +589,7 @@ index 76a13b7..66f3ed0 100644
                  key_hints: FooterKeyHints::default_bindings(),
                  active_agent_label: None,
              },
-@@ -1470,6 +1552,7 @@ mod tests {
+@@ -1470,6 +1551,7 @@ mod tests {
                  quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
                  status_line_value: None,
                  status_line_enabled: false,
@@ -598,7 +597,7 @@ index 76a13b7..66f3ed0 100644
                  key_hints: FooterKeyHints::default_bindings(),
                  active_agent_label: None,
              },
-@@ -1485,6 +1568,7 @@ mod tests {
+@@ -1485,6 +1567,7 @@ mod tests {
              quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
              status_line_value: None,
              status_line_enabled: false,
@@ -606,7 +605,7 @@ index 76a13b7..66f3ed0 100644
              key_hints: FooterKeyHints::default_bindings(),
              active_agent_label: None,
          };
-@@ -1513,6 +1597,7 @@ mod tests {
+@@ -1513,6 +1596,7 @@ mod tests {
              quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
              status_line_value: None,
              status_line_enabled: false,
@@ -614,7 +613,7 @@ index 76a13b7..66f3ed0 100644
              key_hints: FooterKeyHints::default_bindings(),
              active_agent_label: None,
          };
-@@ -1534,6 +1619,7 @@ mod tests {
+@@ -1534,6 +1618,7 @@ mod tests {
              quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
              status_line_value: Some(Line::from("Status line content".to_string())),
              status_line_enabled: true,
@@ -622,7 +621,7 @@ index 76a13b7..66f3ed0 100644
              key_hints: FooterKeyHints::default_bindings(),
              active_agent_label: None,
          };
-@@ -1550,6 +1636,7 @@ mod tests {
+@@ -1550,6 +1635,7 @@ mod tests {
              quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
              status_line_value: Some(Line::from("Status line content".to_string())),
              status_line_enabled: true,
@@ -630,7 +629,7 @@ index 76a13b7..66f3ed0 100644
              key_hints: FooterKeyHints::default_bindings(),
              active_agent_label: None,
          };
-@@ -1566,6 +1653,7 @@ mod tests {
+@@ -1566,6 +1652,7 @@ mod tests {
              quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
              status_line_value: Some(Line::from("Status line content".to_string())),
              status_line_enabled: true,
@@ -638,7 +637,7 @@ index 76a13b7..66f3ed0 100644
              key_hints: FooterKeyHints::default_bindings(),
              active_agent_label: None,
          };
-@@ -1582,6 +1670,7 @@ mod tests {
+@@ -1582,6 +1669,7 @@ mod tests {
              quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
              status_line_value: None, // command timed out / empty
              status_line_enabled: true,
@@ -646,7 +645,7 @@ index 76a13b7..66f3ed0 100644
              key_hints: FooterKeyHints::default_bindings(),
              active_agent_label: None,
          };
-@@ -1612,6 +1701,7 @@ mod tests {
+@@ -1612,6 +1700,7 @@ mod tests {
              quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
              status_line_value: None,
              status_line_enabled: false,
@@ -654,7 +653,7 @@ index 76a13b7..66f3ed0 100644
              key_hints: FooterKeyHints::default_bindings(),
              active_agent_label: None,
          };
-@@ -1634,6 +1724,7 @@ mod tests {
+@@ -1634,6 +1723,7 @@ mod tests {
              quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
              status_line_value: None,
              status_line_enabled: true,
@@ -662,7 +661,7 @@ index 76a13b7..66f3ed0 100644
              key_hints: FooterKeyHints::default_bindings(),
              active_agent_label: None,
          };
-@@ -1659,6 +1750,7 @@ mod tests {
+@@ -1659,6 +1749,7 @@ mod tests {
                  "Status line content that should truncate before the mode indicator".to_string(),
              )),
              status_line_enabled: true,
@@ -670,7 +669,7 @@ index 76a13b7..66f3ed0 100644
              key_hints: FooterKeyHints::default_bindings(),
              active_agent_label: None,
          };
-@@ -1681,6 +1773,7 @@ mod tests {
+@@ -1681,6 +1772,7 @@ mod tests {
              quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
              status_line_value: None,
              status_line_enabled: false,
@@ -678,7 +677,7 @@ index 76a13b7..66f3ed0 100644
              key_hints: FooterKeyHints::default_bindings(),
              active_agent_label: Some("Robie [explorer]".to_string()),
          };
-@@ -1697,6 +1790,7 @@ mod tests {
+@@ -1697,6 +1789,7 @@ mod tests {
              quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
              status_line_value: Some(Line::from("Status line content".to_string())),
              status_line_enabled: true,
@@ -686,7 +685,7 @@ index 76a13b7..66f3ed0 100644
              key_hints: FooterKeyHints::default_bindings(),
              active_agent_label: Some("Robie [explorer]".to_string()),
          };
-@@ -1719,6 +1813,7 @@ mod tests {
+@@ -1719,6 +1812,7 @@ mod tests {
                      .to_string(),
              )),
              status_line_enabled: true,
@@ -711,6 +710,18 @@ index 8e9680a..b070b8c 100644
      /// Updates the contextual footer label and requests a redraw only when it changed.
      ///
      /// This keeps the footer plumbing cheap during thread transitions where `App` may recompute
+diff --git a/codex-rs/tui/src/bottom_pane/shortcut_overlay_tests.rs b/codex-rs/tui/src/bottom_pane/shortcut_overlay_tests.rs
+index fe6ebef..b6f3451 100644
+--- a/codex-rs/tui/src/bottom_pane/shortcut_overlay_tests.rs
++++ b/codex-rs/tui/src/bottom_pane/shortcut_overlay_tests.rs
+@@ -23,6 +23,7 @@ fn props() -> FooterProps {
+         quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
+         status_line_value: None,
+         status_line_enabled: false,
++        cxstatusline_block: Vec::new(),
+         key_hints: FooterKeyHints {
+             agents: Some(key_hint::plain(KeyCode::Left).into()),
+             ..FooterKeyHints::default_bindings()
 diff --git a/codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__footer__tests__cxstatusline_block_preserves_instruction_footer.snap b/codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__footer__tests__cxstatusline_block_preserves_instruction_footer.snap
 new file mode 100644
 index 0000000..abf66c5
