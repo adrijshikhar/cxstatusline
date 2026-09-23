@@ -26,7 +26,8 @@ export function hookEntry(cxBin: string): MatcherGroup {
   return { hooks: [{ type: "command", command: hookCommand(cxBin), timeout: HOOK_TIMEOUT_SEC, statusMessage: HOOK_STATUS_MESSAGE }] };
 }
 
-export const isOurGroup = (g: MatcherGroup): boolean => g.hooks.some((h) => h.statusMessage === HOOK_STATUS_MESSAGE);
+export const isOurGroup = (g: MatcherGroup): boolean =>
+  g.hooks.some((h) => h.statusMessage === HOOK_STATUS_MESSAGE || h.command.includes("cxstatusline"));
 
 const sameJson = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
