@@ -3,7 +3,7 @@ cxstatusline
 Portions of src/utils/{ansi,colors,gradient,powerline-settings,powerline-theme-index,renderer,separator-index,terminal}.ts
 are derived from ccstatusline at commit 05554cd087249167d570aed3c869915b6a18d4d2 (v2.2.30).
 
-Portions of src/{types/RenderContext.ts,utils/widget-manifest.ts,utils/widgets.ts,widgets/}
+Portions of src/{types/{RenderContext.ts,SpeedMetrics.ts},utils/{widget-manifest.ts,widgets.ts,speed-metrics.ts,speed-window.ts},widgets/}
 are derived from ccstatusline at commit 05554cd087249167d570aed3c869915b6a18d4d2 (v2.2.30).
 
 Portions of src/tui/components/{PowerlineSetup,PowerlineSeparatorEditor,PowerlineThemeSelector,GlobalOverridesMenu}.tsx

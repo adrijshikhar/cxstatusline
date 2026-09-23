@@ -1,13 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { writeFileAtomic } from "../atomic";
-import type { NumberFormat } from "../types/NumberFormat";
 import type { RenderContext } from "../types/RenderContext";
-import type { WidgetItem } from "../types/Widget";
-import { renderMagnitude } from "./number-format";
-import { getWidgetSpeedWindowSeconds, isWidgetSpeedWindowEnabled } from "./speed-window";
-
-export type SpeedKind = "input" | "output" | "total";
+import type { SpeedMetrics } from "../types/SpeedMetrics";
+export { formatSpeed } from "./speed-metrics";
 
 export interface SpeedSample {
   readonly timeMs: number;
@@ -25,12 +21,8 @@ export interface SpeedCacheData {
   };
   readonly lastSample: SpeedSample;
   readonly samples: SpeedSample[];
-  readonly lastActiveSpeed: {
-    readonly input: number | null;
-    readonly output: number | null;
-    readonly total: number | null;
-    readonly timeMs: number;
-  };
+  readonly lastActiveMetrics: SpeedMetrics;
+  readonly lastActiveTimeMs: number;
 }
 
 const memoryCache = new Map<string, SpeedCacheData>();
@@ -74,43 +66,17 @@ function writeCache(cacheDir: string | undefined, data: SpeedCacheData): void {
   }
 }
 
-/**
- * Formats tokens per second into human-readable string (e.g. "42.5 t/s", "1.2k t/s", or "—").
- */
-export function formatSpeed(tokensPerSec: number | null, format: NumberFormat = {}): string {
-  if (tokensPerSec === null || !Number.isFinite(tokensPerSec) || tokensPerSec <= 0) {
-    return "—";
-  }
-
-  if (tokensPerSec >= 1000) {
-    return `${renderMagnitude(tokensPerSec / 1000, format, 1)}k t/s`;
-  }
-
-  return `${renderMagnitude(tokensPerSec, format, 1)} t/s`;
-}
-
-const PREVIEW_VALUES: Record<SpeedKind, { session: number; windowed: number }> = {
-  input: { session: 85.2, windowed: 31.5 },
-  output: { session: 42.5, windowed: 26.8 },
-  total: { session: 127.7, windowed: 58.3 },
-};
-
 const MAX_PLAUSIBLE_OUTPUT_SPEED = 10_000;
 const MAX_PLAUSIBLE_INPUT_SPEED = 100_000;
 
 /**
- * Retrieves or calculates the token processing speed for the specified kind.
+ * Resolves live SpeedMetrics from session usage and timestamps for live Codex runs.
  */
-export function calculateSpeed(kind: SpeedKind, item: WidgetItem, context: RenderContext): number | null {
-  if (context.isPreview) {
-    const isWindowed = isWidgetSpeedWindowEnabled(item);
-    return isWindowed ? PREVIEW_VALUES[kind].windowed : PREVIEW_VALUES[kind].session;
-  }
-
-  const session = context.data.session;
+export function resolveLiveSpeedMetrics(context: RenderContext, windowSeconds?: number): SpeedMetrics | null {
+  const session = context.data?.session;
   const startedAt = session?.started_at;
-  const usage = context.data.usage;
-  if (!session || !startedAt || !usage) {
+  const usage = context.data?.usage;
+  if (!usage) {
     return null;
   }
 
@@ -121,12 +87,8 @@ export function calculateSpeed(kind: SpeedKind, item: WidgetItem, context: Rende
   }
 
   const nowMs = context.now.getTime();
-  const startedAtMs = Date.parse(startedAt);
-  if (Number.isNaN(startedAtMs)) {
-    return null;
-  }
-
-  const sessionId = session.id ?? "default";
+  const startedAtMs = startedAt ? Date.parse(startedAt) : NaN;
+  const sessionId = session?.id ?? "default";
   const rawInput = currentInput ?? 0;
   const rawOutput = currentOutput ?? 0;
 
@@ -135,11 +97,11 @@ export function calculateSpeed(kind: SpeedKind, item: WidgetItem, context: Rende
     const cached = readCache(context.commandCacheDir, sessionId);
 
     // If no cache or if this is a fresh process boot for the session, initialize baseline
-    if (!cached || cached.sessionId !== sessionId || cached.startedAt !== startedAt) {
+    if (!cached || cached.sessionId !== sessionId || (startedAt && cached.startedAt !== startedAt)) {
       const initialCache: SpeedCacheData = {
         version: 1,
         sessionId,
-        startedAt,
+        startedAt: startedAt ?? new Date(nowMs).toISOString(),
         baselineTokens: {
           input: rawInput,
           output: rawOutput,
@@ -156,15 +118,23 @@ export function calculateSpeed(kind: SpeedKind, item: WidgetItem, context: Rende
             outputTokens: rawOutput,
           },
         ],
-        lastActiveSpeed: {
-          input: null,
-          output: null,
-          total: null,
-          timeMs: nowMs,
+        lastActiveMetrics: {
+          totalDurationMs: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          requestCount: 0,
         },
+        lastActiveTimeMs: nowMs,
       };
       writeCache(context.commandCacheDir, initialCache);
-      return null;
+      return {
+        totalDurationMs: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        requestCount: 0,
+      };
     }
 
     // Token delta since last sample
@@ -180,22 +150,24 @@ export function calculateSpeed(kind: SpeedKind, item: WidgetItem, context: Rende
       outputTokens: rawOutput,
     });
 
-    let nextLastActiveSpeed = { ...cached.lastActiveSpeed };
+    let nextLastActiveMetrics = { ...cached.lastActiveMetrics };
+    let nextLastActiveTimeMs = cached.lastActiveTimeMs;
     let nextLastSample = cached.lastSample;
 
     if ((deltaInput > 0 || deltaOutput > 0) && elapsedSinceLastSec >= 0.2) {
-      const instInput = deltaInput > 0 ? deltaInput / elapsedSinceLastSec : null;
-      const instOutput = deltaOutput > 0 ? deltaOutput / elapsedSinceLastSec : null;
-      const instTotal = (Math.max(0, deltaInput) + Math.max(0, deltaOutput)) / elapsedSinceLastSec;
+      const instInput = deltaInput > 0 ? deltaInput / elapsedSinceLastSec : 0;
+      const instOutput = deltaOutput > 0 ? deltaOutput / elapsedSinceLastSec : 0;
 
       // Sanity filter to discard anomalies
-      if ((instOutput ?? 0) <= MAX_PLAUSIBLE_OUTPUT_SPEED && (instInput ?? 0) <= MAX_PLAUSIBLE_INPUT_SPEED) {
-        nextLastActiveSpeed = {
-          input: instInput ?? cached.lastActiveSpeed.input,
-          output: instOutput ?? cached.lastActiveSpeed.output,
-          total: instTotal,
-          timeMs: nowMs,
+      if (instOutput <= MAX_PLAUSIBLE_OUTPUT_SPEED && instInput <= MAX_PLAUSIBLE_INPUT_SPEED) {
+        nextLastActiveMetrics = {
+          totalDurationMs: Math.round(elapsedSinceLastSec * 1000),
+          inputTokens: Math.max(0, deltaInput),
+          outputTokens: Math.max(0, deltaOutput),
+          totalTokens: Math.max(0, deltaInput) + Math.max(0, deltaOutput),
+          requestCount: cached.lastActiveMetrics.requestCount + 1,
         };
+        nextLastActiveTimeMs = nowMs;
         nextLastSample = {
           timeMs: nowMs,
           inputTokens: rawInput,
@@ -208,59 +180,75 @@ export function calculateSpeed(kind: SpeedKind, item: WidgetItem, context: Rende
       ...cached,
       lastSample: nextLastSample,
       samples,
-      lastActiveSpeed: nextLastActiveSpeed,
+      lastActiveMetrics: nextLastActiveMetrics,
+      lastActiveTimeMs: nextLastActiveTimeMs,
     };
     writeCache(context.commandCacheDir, updatedCache);
 
     // 1. If windowed speed is configured:
-    const windowSeconds = getWidgetSpeedWindowSeconds(item);
-    if (windowSeconds > 0) {
+    if (windowSeconds && windowSeconds > 0) {
       const targetTime = nowMs - windowSeconds * 1000;
       const olderSample = samples.find((s) => s.timeMs >= targetTime) ?? samples[0];
       if (olderSample) {
         const windowElapsedSec = (nowMs - olderSample.timeMs) / 1000;
         if (windowElapsedSec >= 1) {
-          const wInput = rawInput - olderSample.inputTokens;
-          const wOutput = rawOutput - olderSample.outputTokens;
-          if (kind === "input") return wInput > 0 ? wInput / windowElapsedSec : null;
-          if (kind === "output") return wOutput > 0 ? wOutput / windowElapsedSec : null;
-          const wTotal = Math.max(0, wInput) + Math.max(0, wOutput);
-          return wTotal > 0 ? wTotal / windowElapsedSec : null;
+          const wInput = Math.max(0, rawInput - olderSample.inputTokens);
+          const wOutput = Math.max(0, rawOutput - olderSample.outputTokens);
+          return {
+            totalDurationMs: Math.round(windowElapsedSec * 1000),
+            inputTokens: wInput,
+            outputTokens: wOutput,
+            totalTokens: wInput + wOutput,
+            requestCount: samples.length,
+          };
         }
       }
-      return null;
+      return {
+        totalDurationMs: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        requestCount: 0,
+      };
     }
 
     // 2. If recent active speed is available within 60s, return it
-    if (nextLastActiveSpeed.timeMs && nowMs - nextLastActiveSpeed.timeMs <= 60_000) {
-      if (kind === "input") return nextLastActiveSpeed.input;
-      if (kind === "output") return nextLastActiveSpeed.output;
-      return nextLastActiveSpeed.total;
+    if (nextLastActiveTimeMs && nowMs - nextLastActiveTimeMs <= 60_000 && nextLastActiveMetrics.totalDurationMs > 0) {
+      return nextLastActiveMetrics;
     }
 
-    return null;
+    return {
+      totalDurationMs: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      requestCount: 0,
+    };
   }
 
-  // Fallback for stateless or cached-less contexts (e.g. test fixtures, owner preset):
-  const elapsedSeconds = Math.max(1, (nowMs - startedAtMs) / 1000);
-  const rawTokens =
-    kind === "input"
-      ? currentInput
-      : kind === "output"
-        ? currentOutput
-        : currentInput === undefined && currentOutput === undefined
-          ? undefined
-          : rawInput + rawOutput;
-
-  if (rawTokens === undefined) {
-    return null;
+  // Fallback for stateless test fixtures (e.g. test/widgets.test.ts, test/owner-layout.test.ts)
+  if (!Number.isNaN(startedAtMs)) {
+    const elapsedSeconds = Math.max(1, (nowMs - startedAtMs) / 1000);
+    const speedIn = rawInput / elapsedSeconds;
+    const speedOut = rawOutput / elapsedSeconds;
+    if (speedIn > MAX_PLAUSIBLE_INPUT_SPEED || speedOut > MAX_PLAUSIBLE_OUTPUT_SPEED) {
+      return {
+        totalDurationMs: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        requestCount: 0,
+      };
+    }
+    const totalDurationMs = elapsedSeconds * 1000;
+    return {
+      totalDurationMs,
+      inputTokens: rawInput,
+      outputTokens: rawOutput,
+      totalTokens: rawInput + rawOutput,
+      requestCount: 1,
+    };
   }
 
-  const rawSpeed = rawTokens / elapsedSeconds;
-  const maxAllowed = kind === "output" ? MAX_PLAUSIBLE_OUTPUT_SPEED : MAX_PLAUSIBLE_INPUT_SPEED;
-  if (rawSpeed > maxAllowed) {
-    return null;
-  }
-
-  return rawSpeed;
+  return null;
 }
