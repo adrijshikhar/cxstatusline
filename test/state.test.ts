@@ -68,10 +68,10 @@ describe("state", () => {
     writeFileSync(f, JSON.stringify({ version: 7 }));
     expect(readState(f).corrupt).toBe(true);
     rmSync(`${f}${BACKUP_SUFFIX}`, { force: true });
-    writeFileSync(f, JSON.stringify({ ...DEFAULT_STATE, patched_from: "0.1.0", extra: 1, policy: "every" }));
+    writeFileSync(f, JSON.stringify({ ...DEFAULT_STATE, patched_from: "0.1.0", extra: 1, policy: "stable-minors" }));
     const r = readState(f);
     expect(r.corrupt).toBe(false);
-    expect(r.state.policy).toBe("every");
+    expect(r.state.policy).toBe("stable-minors");
     expect((r.state as unknown as Record<string, unknown>).extra).toBeUndefined();
   });
 });

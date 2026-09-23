@@ -151,8 +151,14 @@ describe("runHook", () => {
     expect(readlinkSync(paths.wrapperPath)).toBe(upstream); // left alone during the install window
     expect(msg(r.stdout)).not.toMatch(/restored the cxstatusline wrapper/);
   });
-  test("patch release within the minor: silent hold", () => {
+  test("patch release within the minor: acquires under default policy 'every'", () => {
     const { ctx, deps, spawned } = setup({}, "0.152.2");
+    const r = runHook(ctx, startup, deps);
+    expect(msg(r.stdout)).toMatch(/0\.152\.2.*0\.152\.1.*background.*reopen/i);
+    expect(spawned).toEqual([["/cx", "hook", "acquire"]]);
+  });
+  test("patch release within the minor: silent hold under stable-minors", () => {
+    const { ctx, deps, spawned } = setup({ policy: "stable-minors" }, "0.152.2");
     expect(runHook(ctx, startup, deps).stdout).toBe("");
     expect(spawned).toEqual([]);
   });
