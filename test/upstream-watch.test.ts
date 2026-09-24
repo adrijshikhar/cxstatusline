@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import {
   bumpMinor,
   extractRelevantChanges,
@@ -37,6 +38,24 @@ describe("upstream-watch file mutators", () => {
 
     // Idempotent when already present
     expect(updateManifestContent(updated, "0.154.0", "codex-0.154.0.patch")).toBe(updated);
+  });
+
+  test("format 2 preserves patch ownership and never moves candidate backward", () => {
+    const original = JSON.stringify({
+      version: 2,
+      tag_prefix: "rust-v",
+      candidate: "0.156.1",
+      patches: [
+        { min: "0.153.4", max: "0.153.4", file: "codex-0.153.4.patch", patchVersion: 1 },
+        { min: "0.156.1", max: "0.156.1", file: "codex-0.156.1.patch", patchVersion: 2 },
+      ],
+    });
+    const updated = updateManifestContent(original, "0.153.3", "codex-0.153.3.patch", 1);
+    const parsed = JSON.parse(updated);
+    expect(parsed.candidate).toBe("0.156.1");
+    expect(parsed.patches.map((p: { patchVersion: number }) => p.patchVersion)).toEqual([1, 2, 1]);
+    expect(() => updateManifestContent(original, "0.157.0", "codex-0.157.0.patch")).toThrow(/patchVersion/);
+    expect(() => updateManifestContent(original, "0.153.4", "codex-0.153.4.patch", 2)).toThrow(/ownership/);
   });
 
   test("updatePrebuiltWorkflowContent adds version choice", () => {
@@ -186,7 +205,16 @@ describe("runUpstreamWatch orchestration", () => {
     expect(res.action).toBe("issue_created");
     expect(res.detail).toContain("issues/99");
     expect(createdArgs).toContain("--title");
-    expect(createdArgs[3]).toContain("Support Codex 0.199.0 - patch conflicts detected");
+    expect(createdArgs[createdArgs.indexOf("--title") + 1]).toContain("Support Codex 0.199.0 - patch conflicts detected");
+  });
+
+  test("throws when GitHub PR lookup fails instead of treating it as absent", async () => {
+    await expect(runUpstreamWatch({
+      version: "0.199.0",
+      dryRun: true,
+      fetchReleases: async () => "0.199.0",
+      gh: () => ({ status: 1, stdout: "", stderr: "lookup unavailable" }),
+    })).rejects.toThrow(/gh pr list -R failed/);
   });
 
   test("creates issue including changelog and highlighted relevant changes", async () => {
@@ -195,8 +223,8 @@ describe("runUpstreamWatch orchestration", () => {
       if (args[0] === "pr" && args[1] === "list") return { status: 0, stdout: "[]", stderr: "" };
       if (args[0] === "issue" && args[1] === "list") return { status: 0, stdout: "[]", stderr: "" };
       if (args[0] === "issue" && args[1] === "create") {
-        const bodyIdx = args.indexOf("--body");
-        if (bodyIdx !== -1 && args[bodyIdx + 1]) createdBody = args[bodyIdx + 1]!;
+        const bodyIdx = args.indexOf("--body-file");
+        if (bodyIdx !== -1 && args[bodyIdx + 1]) createdBody = readFileSync(args[bodyIdx + 1]!, "utf8");
         return { status: 0, stdout: "https://github.com/adrijshikhar/cxstatusline/issues/100", stderr: "" };
       }
       return { status: 0, stdout: "", stderr: "" };
@@ -279,7 +307,7 @@ describe("changelog analysis and issue formatting", () => {
       if (args[0] === "issue" && args[1] === "list") return { status: 0, stdout: "[]", stderr: "" };
       if (args[0] === "issue" && args[1] === "create") {
         sentTitle = args[args.indexOf("--title") + 1]!;
-        sentBody = args[args.indexOf("--body") + 1]!;
+        sentBody = readFileSync(args[args.indexOf("--body-file") + 1]!, "utf8");
         return { status: 0, stdout: "https://github.com/adrijshikhar/cxstatusline/issues/101", stderr: "" };
       }
       return { status: 0, stdout: "", stderr: "" };

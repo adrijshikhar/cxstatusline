@@ -10,9 +10,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { loadManifest, resolvePatch } from "../src/patch/manifest";
-import { parseSemver } from "../src/version";
+import { compareSemver, parseSemver } from "../src/version";
 import { selectStableVersion } from "./prebuilt/detect";
-import { execGh, type GhRunner } from "./prebuilt/gh";
+import { execGh, ghJson, ghText, type GhRunner } from "./prebuilt/gh";
 import { redact } from "./prebuilt/redact";
 
 export interface GitResult {
@@ -22,6 +22,14 @@ export interface GitResult {
 }
 
 export type GitRunner = (args: readonly string[], cwd?: string) => GitResult;
+
+function checkedGit(git: GitRunner, args: readonly string[], cwd: string): string {
+  const result = git(args, cwd);
+  if (result.status !== 0) throw new Error(`git ${args.slice(0, 2).join(" ")} failed (exit ${result.status}): ${redact(result.stderr.trim())}`);
+  return result.stdout;
+}
+
+const REPOSITORY = "adrijshikhar/cxstatusline";
 
 export const defaultGitRunner: GitRunner = (args, cwd) => {
   const r = spawnSync("git", [...args], { cwd, encoding: "utf8", timeout: 180_000, maxBuffer: 64 * 1024 * 1024 });
@@ -38,17 +46,25 @@ export function bumpMinor(version: string): string {
   return `${version}.next`;
 }
 
-export function updateManifestContent(content: string, newVersion: string, patchFile: string): string {
-  const m = JSON.parse(content) as { version: number; tag_prefix: string; candidate?: string; patches: Array<{ min: string; max: string; file: string }> };
-  if (m.patches.some((p) => p.min === newVersion && p.max === newVersion)) {
+export function updateManifestContent(content: string, newVersion: string, patchFile: string, patchVersion?: number): string {
+  const m = JSON.parse(content) as { version: number; candidate?: string; patches: Array<{ min: string; max: string; file: string; patchVersion?: number; [key: string]: unknown }>; [key: string]: unknown };
+  const existing = m.patches.find((p) => p.min === newVersion && p.max === newVersion);
+  if (existing) {
+    if (m.version === 2 && existing.patchVersion !== patchVersion) throw new Error(`conflicting patch ownership for Codex ${newVersion}`);
     return content;
   }
-  m.candidate = newVersion;
-  m.patches.push({ min: newVersion, max: newVersion, file: patchFile });
-  const patchesFormatted = m.patches
-    .map((p) => `    { "min": "${p.min}", "max": "${p.max}", "file": "${p.file}" }`)
-    .join(",\n");
-  return `{\n  "version": ${m.version},\n  "tag_prefix": "${m.tag_prefix}",\n  "candidate": "${m.candidate}",\n  "patches": [\n${patchesFormatted}\n  ]\n}\n`;
+  if (m.version === 2 && (!Number.isSafeInteger(patchVersion) || patchVersion! < 1)) throw new Error("patchVersion is required for format 2 manifests");
+  const version = parseSemver(newVersion);
+  if (!version || version.pre !== null) throw new Error(`invalid stable Codex version ${newVersion}`);
+  if (m.patches.some((p) => {
+    const min = parseSemver(p.min);
+    const max = parseSemver(p.max);
+    return min && max && compareSemver(version, min) >= 0 && compareSemver(version, max) <= 0;
+  })) throw new Error(`conflicting patch ownership for Codex ${newVersion}`);
+  const candidate = m.candidate ? parseSemver(m.candidate) : null;
+  m.candidate = candidate && compareSemver(candidate, version) > 0 ? candidate.raw : version.raw;
+  m.patches.push({ min: newVersion, max: newVersion, file: patchFile, ...(m.version === 2 ? { patchVersion } : {}) });
+  return `${JSON.stringify(m, null, 2)}\n`;
 }
 
 export function updatePrebuiltWorkflowContent(content: string, newVersion: string): string {
@@ -262,14 +278,20 @@ export async function runUpstreamWatch(options: WatchOptions = {}): Promise<Watc
   }
 
   const branchName = `codex/support-${targetVersion}`;
-  const prCheck = gh(["pr", "list", "--head", branchName, "--json", "number,url"]);
-  if (prCheck.status === 0 && prCheck.stdout.trim() !== "[]" && prCheck.stdout.trim().length > 2) {
-    return { action: "pr_exists", version: targetVersion, detail: `PR already open: ${prCheck.stdout.trim()}` };
+  const prList = ghJson<unknown[]>(gh, ["pr", "list", "-R", REPOSITORY, "--head", branchName, "--json", "number,url"]);
+  if (prList.length > 0) {
+    return { action: "pr_exists", version: targetVersion, detail: `PR already open: ${JSON.stringify(prList)}` };
   }
 
   const latestPatchRange = manifest.patches[manifest.patches.length - 1];
   if (!latestPatchRange) {
     throw new Error("patches/manifest.json does not contain any patch ranges");
+  }
+  if (manifest.candidate) {
+    const candidate = parseSemver(manifest.candidate);
+    if (candidate && compareSemver(parsed, candidate) < 0) {
+      return { action: "dry_run", version: targetVersion, detail: "Historical gap requires maintainer review; patch ownership was not inferred." };
+    }
   }
   const latestPatchPath = join(repoDir, "patches", latestPatchRange.file);
   const upstreamTag = `${manifest.tag_prefix}${targetVersion}`;
@@ -286,7 +308,7 @@ export async function runUpstreamWatch(options: WatchOptions = {}): Promise<Watc
         return { action: "dry_run", version: targetVersion, detail: "Patch applies cleanly; dry run completed." };
       }
       const changelog = await fetchNotes(upstreamTag, token);
-      return applyCleanSupport(repoDir, git, gh, targetVersion, newPatchName, newPatchPath, latestPatchPath, branchName, upstreamTag, changelog);
+      return applyCleanSupport(repoDir, git, gh, targetVersion, newPatchName, newPatchPath, latestPatchPath, branchName, upstreamTag, changelog, latestPatchRange.patchVersion);
     } else {
       if (options.dryRun) {
         return { action: "dry_run", version: targetVersion, detail: `Conflicts detected: ${patchTest.error}` };
@@ -310,12 +332,14 @@ function applyCleanSupport(
   branchName: string,
   upstreamTag: string,
   changelog?: string | null,
+  patchVersion?: number,
 ): WatchResult {
+  checkedGit(git, ["checkout", "-b", branchName], repoDir);
   const patchContent = readFileSync(latestPatchPath, "utf8");
   writeFileSync(patchPath, patchContent, "utf8");
 
   const manifestFile = join(repoDir, "patches", "manifest.json");
-  writeFileSync(manifestFile, updateManifestContent(readFileSync(manifestFile, "utf8"), targetVersion, patchName));
+  writeFileSync(manifestFile, updateManifestContent(readFileSync(manifestFile, "utf8"), targetVersion, patchName, patchVersion));
 
   const prebuiltFile = join(repoDir, ".github", "workflows", "prebuilt.yml");
   if (existsSync(prebuiltFile)) {
@@ -331,19 +355,18 @@ function applyCleanSupport(
   const packageTest = join(repoDir, "test", "package.test.ts");
   if (existsSync(packageTest)) writeFileSync(packageTest, updatePackageTestContent(readFileSync(packageTest, "utf8"), patchName));
 
-  git(["checkout", "-b", branchName], repoDir);
-  git(["config", "user.name", "Adrij Shikhar"], repoDir);
-  git(["config", "user.email", "adrijshikhar26@gmail.com"], repoDir);
-  git(["add", "patches/", ".github/workflows/prebuilt.yml", "test/"], repoDir);
-  git(["commit", "-m", `feat: support Codex ${targetVersion}`], repoDir);
-  git(["push", "-u", "origin", branchName], repoDir);
+  checkedGit(git, ["config", "user.name", "Adrij Shikhar"], repoDir);
+  checkedGit(git, ["config", "user.email", "adrijshikhar26@gmail.com"], repoDir);
+  checkedGit(git, ["add", "patches/", ".github/workflows/prebuilt.yml", "test/"], repoDir);
+  checkedGit(git, ["commit", "-m", `feat: support Codex ${targetVersion}`], repoDir);
+  checkedGit(git, ["push", "-u", "origin", branchName], repoDir);
 
   const releaseUrl = `https://github.com/openai/codex/releases/tag/${upstreamTag}`;
   const prBodyLines = [
     `## Automated Upstream Watcher: Support Codex ${targetVersion}`,
     "",
     `Upstream Codex release \`${targetVersion}\` was detected and tested.`,
-    "The statusline patch applied cleanly with zero conflicts.",
+    "The statusline patch applies cleanly; compilation and runtime validation are required before merge.",
     "",
     "### Changes",
     `- Added \`patches/${patchName}\``,
@@ -378,8 +401,13 @@ function applyCleanSupport(
     );
   }
 
-  const prRes = gh(["pr", "create", "--title", `feat: support Codex ${targetVersion}`, "--body", prBodyLines.join("\n")]);
-  return { action: "pr_created", version: targetVersion, detail: prRes.stdout.trim() };
+  const bodyFile = join(tmpdir(), `codex-watch-pr-${targetVersion}-${Date.now()}.md`);
+  writeFileSync(bodyFile, prBodyLines.join("\n"));
+  try {
+    const url = ghText(gh, ["pr", "create", "-R", REPOSITORY, "--title", `feat: support Codex ${targetVersion}`, "--body-file", bodyFile]).trim();
+    if (!url) throw new Error("gh pr create succeeded without returning a PR URL");
+    return { action: "pr_created", version: targetVersion, detail: url };
+  } finally { rmSync(bodyFile, { force: true }); }
 }
 
 export function reportConflictIssue(
@@ -390,13 +418,20 @@ export function reportConflictIssue(
   err: string,
   changelog?: string | null,
 ): WatchResult {
-  const issueSearch = gh(["issue", "list", "--search", `Codex ${version} patch conflicts`, "--json", "number,url"]);
-  if (issueSearch.status === 0 && issueSearch.stdout.trim() !== "[]" && issueSearch.stdout.trim().length > 2) {
-    return { action: "issue_exists", version, detail: `Issue already open: ${issueSearch.stdout.trim()}` };
+  const issueSearch = ghJson<unknown[]>(gh, ["issue", "list", "-R", REPOSITORY, "--search", `in:title Codex ${version} patch conflicts`, "--json", "number,url,title,body"]);
+  const matching = issueSearch.find((issue) => typeof issue === "object" && issue !== null
+    && (issue as { title?: unknown }).title === `[Action Needed] Support Codex ${version} - patch conflicts detected`);
+  if (matching) {
+    return { action: "issue_exists", version, detail: `Issue already open: ${JSON.stringify(matching)}` };
   }
   const body = formatConflictIssueBody(version, tag, lastPatch, err, changelog);
-  const issueRes = gh(["issue", "create", "--title", `[Action Needed] Support Codex ${version} - patch conflicts detected`, "--body", body]);
-  return { action: "issue_created", version, detail: issueRes.stdout.trim() };
+  const bodyFile = join(tmpdir(), `codex-watch-issue-${version}-${Date.now()}.md`);
+  writeFileSync(bodyFile, body);
+  try {
+    const url = ghText(gh, ["issue", "create", "-R", REPOSITORY, "--title", `[Action Needed] Support Codex ${version} - patch conflicts detected`, "--body-file", bodyFile]).trim();
+    if (!url) throw new Error("gh issue create succeeded without returning an issue URL");
+    return { action: "issue_created", version, detail: url };
+  } finally { rmSync(bodyFile, { force: true }); }
 }
 
 if (import.meta.main) {
