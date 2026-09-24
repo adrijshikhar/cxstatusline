@@ -185,15 +185,14 @@ describe("command dispatch", () => {
       expect(d.calls.some((k) => k.cmd === "cargo" || k.cmd === "rustup")).toBe(false);
     });
   }
-  test("`update --force` runs the upstream updater first, then the prebuilt path", async () => {
+  test("`update --force` uses the verified prebuilt path", async () => {
     const t = io("");
     const d = dispatchDeps();
-    expect(await main(["update", "--force"], { ...t.io, env: d.env }, d.deps)).toBe(1);
-    expect(d.calls.filter((k) => k.args[0] === "update")).toHaveLength(1);
-    expect(d.calls.find((k) => k.args[0] === "update")?.opts?.interactive).toBe(true);
+    expect(await main(["update", "--force"], { ...t.io, env: d.env }, { ...d.deps, fetchPrebuilts: async () => ["0.152.1"] })).toBe(1);
+    expect(d.calls.filter((k) => k.args[0] === "update")).toHaveLength(0);
     expect(t.out.join("")).toMatch(/staging a prebuilt Codex pair needs 2 GiB/);
   });
-  test("`update` without flags warns and stops before running updater when prebuilts missing", async () => {
+  test("`update` fails closed when release discovery fails", async () => {
     const t = io("");
     const d = dispatchDeps();
     const mockFetch = async (url: string | URL | Request) => {
@@ -205,7 +204,7 @@ describe("command dispatch", () => {
     };
     expect(await main(["update"], { ...t.io, env: d.env }, { ...d.deps, transport: { fetch: mockFetch } })).toBe(1);
     expect(d.calls.filter((k) => k.args[0] === "update")).toHaveLength(0);
-    expect(t.out.join("")).toMatch(/Warning: Upstream Codex update available/);
+    expect(t.out.join("")).toMatch(/No supported prebuilt release/);
   });
   test("`hook acquire` acquires the prebuilt pair and never touches hooks.json", async () => {
     const t = io("");
@@ -333,31 +332,14 @@ describe("command dispatch", () => {
     expect(await main(["install"], { ...t.io, isTTY: true, env: d.env }, { ...d.deps, promptVersion })).toBe(1);
     expect(t.out.join("")).toMatch(/Compiling patched Codex from source/);
   });
-  test("interactive update passes isTTY and user cancellation exits 0", async () => {
+  test("update installs the available supported prebuilt when forced", async () => {
     const t = io("");
     const d = dispatchDeps();
-    const mockReleases = async () => ["0.155.1", "0.152.1"];
-    const mockFetch = async (url: string | URL | Request) => {
-      const u = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
-      if (u.includes("releases/latest")) {
-        return new Response(JSON.stringify({ tag_name: "rust-v0.156.1" }), { status: 200 });
-      }
-      return new Response("not found", { status: 404 });
-    };
-    let askCalled = false;
-    const promptUpdate = async () => {
-      askCalled = true;
-      return "cancel" as const; // Cancel
-    };
-    const res = await main(["update"], { ...t.io, isTTY: true, env: d.env }, {
+    expect(await main(["update", "--force"], { ...t.io, isTTY: true, env: d.env }, {
       ...d.deps,
-      transport: { fetch: mockFetch as any },
-      fetchPrebuilts: mockReleases,
-      promptUpdate,
-    });
-    expect(res).toBe(0);
-    expect(askCalled).toBe(true);
-    expect(t.out.join("")).toMatch(/Update cancelled/);
+      fetchPrebuilts: async () => ["0.152.1"],
+    })).toBe(1);
+    expect(t.out.join("")).toMatch(/staging a prebuilt Codex pair needs 2 GiB/);
   });
   for (const stdinTTY of [false, true]) {
     for (const stdoutTTY of [false, true]) {

@@ -544,165 +544,107 @@ describe("runInstall", () => {
 });
 
 describe("runUpdate", () => {
-  const mockFetchLatest = (targetVersion: string) => {
-    return async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
-      const urlStr = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
-      if (urlStr.includes("api.github.com/repos/openai/codex/releases/latest")) {
-        return new Response(JSON.stringify({ tag_name: `rust-v${targetVersion}` }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
-      }
-      if (urlStr.includes(`codex-v${targetVersion}/manifest.json`) && !urlStr.includes("127.0.0.1")) {
-        return new Response(null, { status: 404 });
-      }
-      return fetch(url, init);
-    };
-  };
-
-  test("runs upstream's updater, then installs the prebuilt pair for the new version", async () => {
-    const f = releaseFixture({ cxVersion: VERSION, codexVersion: "0.154.0" });
-    const { c, paths, calls, said, state } = ctx({ upstreamVersion: "0.153.0", noRust: true });
-    const baseRun = c.run;
+  test("installs the latest supported prebuilt without updating the app-bundled upstream", async () => {
+    const f = releaseFixture({ cxVersion: VERSION, codexVersion: "0.153.0" });
+    const { c, paths, real, calls } = ctx({ upstreamVersion: "0.152.1", stagedVersion: "0.153.0", noRust: true });
     const run: typeof c.run = (cmd, args, opts) => {
-      if (args[0] === "update") {
-        state.upstreamVersion = "0.154.0"; // the updater really did move upstream on
-        return { status: 0, stdout: "", stderr: "" };
-      }
-      return baseRun(cmd, args, opts);
+      if (args[0] === "update") throw new Error("app-bundled Codex cannot self-update");
+      return c.run(cmd, args, opts);
     };
     await withServer(routesFor(f), async (baseUrl) => {
-      expect(await runUpdate({ ...c, run }, { baseUrl, fetch: mockFetchLatest("0.154.0") })).toBe(0);
+      expect(await runUpdate({ ...c, run }, {
+        fetchPrebuilts: async () => ["0.152.1", "0.156.1", "0.153.0"],
+      }, { baseUrl })).toBe(0);
     });
-    expect(readState(paths.stateFile).state.patched_from).toBe("0.154.0");
+    expect(readInstallation(paths)?.codexVersion).toBe("0.153.0");
     expect(activePair(paths).codex).toBe("CODEX-BINARY");
-    expect(calls.some((k) => k.args[0] === "update")).toBe(false); // the updater went through `run`
-    expect(said.join("\n")).toMatch(/open a new session/i);
+    expect(readFileSync(real, "utf8")).toBe("UPSTREAM-ELF");
+    expect(calls.some((call) => call.args[0] === "update")).toBe(false);
   });
-  test("a failed updater is not followed by any acquisition", async () => {
-    const { c, said } = ctx({ noRust: true });
-    const baseRun = c.run;
-    const run: typeof c.run = (cmd, args, opts) =>
-      args[0] === "update" ? { status: 3, stdout: "", stderr: "" } : baseRun(cmd, args, opts);
-    const fetchSpy = (): Promise<Response> => { throw new Error("the network must not be touched"); };
-    expect(await runUpdate({ ...c, run }, { fetch: fetchSpy })).toBe(1);
-    expect(said.join("\n")).toMatch(/exited 3/);
-  });
-  test("a missing release after the updater keeps the older pair healthy and never compiles", async () => {
+
+  test("updates a prebuilt even when no upstream installation exists", async () => {
     const f = fixture();
-    const { c, paths, calls, said, state } = ctx({ upstreamVersion: CODEX, noRust: true });
+    const { c, paths, real } = ctx({ upstreamVersion: CODEX, noRust: true });
+    rmSync(paths.wrapperPath);
+    rmSync(real);
     await withServer(routesFor(f), async (baseUrl) => {
-      expect(await runAcquisition(c, { source: "prebuilt", force: true }, { baseUrl })).toMatchObject({ kind: "installed" });
+      expect(await runUpdate(c, { fetchPrebuilts: async () => [CODEX] }, { baseUrl })).toBe(0);
+    });
+    expect(activePair(paths).codex).toBe("CODEX-BINARY");
+  });
+
+  test("rechecks the same version so rebuilt release assets can be installed", async () => {
+    const f = fixture();
+    const { c, paths } = ctx({ upstreamVersion: CODEX, noRust: true });
+    await withServer(routesFor(f), async (baseUrl) => {
+      const opts = { fetchPrebuilts: async () => [CODEX] };
+      expect(await runUpdate(c, opts, { baseUrl })).toBe(0);
+      const before = activeGeneration(paths);
+      expect(await runUpdate(c, opts, { baseUrl })).toBe(0);
+      expect(activeGeneration(paths)).toBe(before);
+    });
+  });
+
+  test("does not downgrade an installed pair to an older published prebuilt", async () => {
+    const { c, paths, said } = ctx();
+    writeState(paths.stateFile, { ...DEFAULT_STATE, patched_from: "0.154.0" });
+    expect(await runUpdate(c, { fetchPrebuilts: async () => [CODEX] })).toBe(0);
+    expect(readState(paths.stateFile).state.patched_from).toBe("0.154.0");
+    expect(said.join("\n")).toMatch(/newer/);
+  });
+
+  test("a missing release leaves the active pair healthy", async () => {
+    const f = fixture();
+    const { c, paths } = ctx({ upstreamVersion: CODEX, noRust: true });
+    await withServer(routesFor(f), async (baseUrl) => {
+      expect(await runInstall(c, { compile: false }, { baseUrl })).toBe(0);
     });
     const before = activeGeneration(paths);
-    const baseRun = c.run;
-    const run: typeof c.run = (cmd, args, opts) => {
-      if (args[0] === "update") {
-        state.upstreamVersion = "0.154.0";
-        return { status: 0, stdout: "", stderr: "" };
-      }
-      return baseRun(cmd, args, opts);
-    };
-    said.length = 0;
     await withServer({}, async (baseUrl) => {
-      expect(await runUpdate({ ...c, run }, { baseUrl, fetch: mockFetchLatest("0.154.0") })).toBe(1);
+      expect(await runUpdate(c, { fetchPrebuilts: async () => ["0.153.0"] }, { baseUrl })).toBe(1);
     });
     expect(activeGeneration(paths)).toBe(before);
-    expect(activePair(paths)).toEqual({ codex: "CODEX-BINARY", host: "HOST-BINARY" });
     expect(isOurWrapper(paths.wrapperPath)).toBe(true);
-    expect(calls.some((k) => k.cmd === "cargo" || k.cmd === "rustup")).toBe(false);
-    expect(said.join("\n")).toMatch(/0\.154\.0/);
   });
-  test("a foreign launcher installed by the updater is refused, never overwritten", async () => {
-    const { c, paths, said } = ctx({ upstreamVersion: CODEX, noRust: true });
-    const baseRun = c.run;
-    const run: typeof c.run = (cmd, args, opts) => {
-      if (args[0] === "update") {
-        rmSync(paths.wrapperPath);
-        writeFileSync(paths.wrapperPath, "#!/bin/sh\nexec /opt/homebrew/bin/codex-real\n");
-        chmodSync(paths.wrapperPath, 0o755);
-        return { status: 0, stdout: "", stderr: "" };
-      }
-      return baseRun(cmd, args, opts);
-    };
-    const fetchSpy = (): Promise<Response> => { throw new Error("the network must not be touched"); };
-    expect(await runUpdate({ ...c, run }, { fetch: fetchSpy })).toBe(1);
-    expect(readFileSync(paths.wrapperPath, "utf8")).toContain("codex-real");
-    expect(said.join("\n")).toMatch(/refusing to overwrite it/);
-  });
-  test("non-interactive update when prebuilt missing but newer prebuilt exists prints guidance and exits 1", async () => {
-    const { c, said } = ctx({ upstreamVersion: "0.153.0", noRust: true });
-    const fetchPrebuilts = async () => ["0.155.1", "0.155.0", "0.153.0"];
-    const mockFetch = mockFetchLatest("0.156.1");
-    const res = await runUpdate(c, {
-      isTTY: false,
-      fetchPrebuilts,
-    }, { fetch: mockFetch });
-    expect(res).toBe(1);
-    const output = said.join("\n");
-    expect(output).toMatch(/Upstream Codex update available: 0\.153\.0 -> 0\.156\.1/);
-    expect(output).toMatch(/Newer prebuilt available: Codex 0\.155\.1 is published and ready to install/);
-    expect(output).toMatch(/cxstatusline install --codex-version 0\.155\.1/);
-  });
-  test("interactive update when newer prebuilt exists and user selects the prebuilt action installs available prebuilt", async () => {
-    const f = releaseFixture({ cxVersion: VERSION, codexVersion: "0.155.1" });
-    const { c, paths, said } = ctx({
-      upstreamVersion: "0.153.0",
-      stagedVersion: "0.155.1",
-      noRust: true,
-      manifest: JSON.stringify({
-        version: 1,
-        tag_prefix: "rust-v",
-        patches: [{ min: "0.152.1", max: "0.155.1", file: "p.patch" }],
-      }),
-    });
-    const fetchPrebuilts = async () => ["0.155.1", "0.153.0"];
-    const mockFetch = mockFetchLatest("0.156.1");
-    let asked = false;
-    const promptUpdate = async () => {
-      asked = true;
-      return "prebuilt" as const;
-    };
 
-    await withServer(routesFor(f), async (baseUrl) => {
-      const res = await runUpdate(c, {
-        isTTY: true,
-        promptUpdate,
-        fetchPrebuilts,
-      }, { baseUrl, fetch: mockFetch });
-      expect(res).toBe(0);
-    });
-
-    expect(asked).toBe(true);
-    expect(readState(paths.stateFile).state.patched_from).toBe("0.155.1");
-    expect(said.join("\n")).toMatch(/Installing prebuilt binaries for Codex 0\.155\.1/);
+  test("discovery failure fails closed even with --force", async () => {
+    const { c, calls, said } = ctx();
+    expect(await runUpdate(c, { force: true, fetchPrebuilts: async () => [] })).toBe(1);
+    expect(calls).toEqual([]);
+    expect(said.join("\n")).toMatch(/No supported prebuilt/);
   });
-  for (const published of [["0.155.1"], []]) {
-    test(`update prompt failure stops before mutation (${published.length} prebuilts)`, async () => {
-      const { c, calls, paths } = ctx({ upstreamVersion: "0.153.0", noRust: true });
-      await expect(runUpdate(c, {
-        isTTY: true,
-        fetchPrebuilts: async () => published,
-        promptUpdate: async () => { throw new Error("terminal disconnected"); },
-      }, { fetch: mockFetchLatest("0.156.1") })).rejects.toThrow("terminal disconnected");
-      expect(calls.some((call) => call.args[0] === "update" || call.cmd === "cargo")).toBe(false);
-      expect(readState(paths.stateFile).state.patched_from).toBeNull();
+
+  test("a foreign launcher is never overwritten", async () => {
+    const { c, paths } = ctx();
+    rmSync(paths.wrapperPath);
+    writeFileSync(paths.wrapperPath, "FOREIGN");
+    expect(await runUpdate(c, { fetchPrebuilts: async () => [CODEX] })).toBe(1);
+    expect(readFileSync(paths.wrapperPath, "utf8")).toBe("FOREIGN");
+  });
+
+  for (const action of ["prebuilt", "compile", "cancel"] as const) {
+    test(`interactive update honors ${action} without invoking upstream`, async () => {
+      const f = fixture();
+      const { c, paths, calls } = ctx({ stagedVersion: CODEX });
+      await withServer(routesFor(f), async (baseUrl) => {
+        expect(await runUpdate(c, {
+          isTTY: true,
+          fetchPrebuilts: async () => [CODEX],
+          promptUpdate: async (options) => {
+            expect(options).toEqual({ latest: CODEX, highestAvailable: CODEX });
+            return action;
+          },
+        }, { baseUrl })).toBe(0);
+      });
+      expect(readState(paths.stateFile).state.patched_from).toBe(action === "cancel" ? null : CODEX);
+      expect(calls.some((call) => call.args[0] === "update")).toBe(false);
     });
   }
-  test("interactive update when user selects cancel exits 0 without modifying system", async () => {
-    const { c, paths, said } = ctx({ upstreamVersion: "0.153.0", noRust: true });
-    const fetchPrebuilts = async () => ["0.155.1", "0.153.0"];
-    const mockFetch = mockFetchLatest("0.156.1");
-    const promptUpdate = async () => "cancel" as const;
 
-    const res = await runUpdate(c, {
-      isTTY: true,
-      promptUpdate,
-      fetchPrebuilts,
-    }, { fetch: mockFetch });
-
-    expect(res).toBe(0);
-    expect(said.join("\n")).toMatch(/Update cancelled/);
-    expect(readState(paths.stateFile).state.patched_from).toBeNull();
+  test("--compile builds the latest supported patch without updating upstream", async () => {
+    const { c, paths, calls } = ctx({ stagedVersion: "0.153.0" });
+    expect(await runUpdate(c, { compile: true })).toBe(0);
+    expect(readInstallation(paths)?.codexVersion).toBe("0.153.0");
+    expect(calls.some((call) => call.args[0] === "update")).toBe(false);
   });
 });

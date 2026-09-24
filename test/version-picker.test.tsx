@@ -115,7 +115,7 @@ for (const key of ["\x1b", "\x03"]) {
     } finally { ui.cleanup(); }
   });
 }
-test("update picker navigates to source and stock choices", async () => {
+test("update picker navigates to source and cancel choices", async () => {
   const ui = picker(false, { latest: "0.156.1", highestAvailable: "0.155.1" });
   try {
     await ui.key("\x1b[B");
@@ -124,7 +124,7 @@ test("update picker navigates to source and stock choices", async () => {
     expect(ui.result()).toBe("compile");
     await ui.key("\x1b[B");
     await ui.key("\r");
-    expect(ui.result()).toBe("stock");
+    expect(ui.result()).toBe("cancel");
   } finally { ui.cleanup(); }
 });
 

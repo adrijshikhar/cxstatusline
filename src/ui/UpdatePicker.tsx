@@ -4,7 +4,7 @@ import { List, type ListEntry } from "../tui/components/List";
 import { prompt } from "./prompt";
 import { useTerminalSize } from "./terminal-size";
 
-export type UpdateAction = "prebuilt" | "compile" | "stock" | "cancel";
+export type UpdateAction = "prebuilt" | "compile" | "cancel";
 export interface UpdatePickerOptions {
   readonly latest: string;
   readonly highestAvailable?: string;
@@ -14,7 +14,7 @@ export function UpdatePicker({ latest, highestAvailable, onSelect }: UpdatePicke
   onSelect: (action: UpdateAction) => void;
 }): React.JSX.Element {
   const { usable, maxVisibleItems } = useTerminalSize();
-  const [selectedIndex, setSelectedIndex] = useState(highestAvailable ? 0 : 2);
+  const [selectedIndex, setSelectedIndex] = useState(highestAvailable ? 0 : 1);
   useInput((input, key) => {
     if (key.escape || (key.ctrl && input === "c")) onSelect("cancel");
   });
@@ -32,8 +32,6 @@ export function UpdatePicker({ latest, highestAvailable, onSelect }: UpdatePicke
   items.push(
     { label: `Compile Codex ${latest} from source`, value: "compile",
       description: "Requires Rust, at least 20 GiB free, and may take tens of minutes." },
-    { label: `Update to stock Codex ${latest} anyway`, value: "stock",
-      description: "Updates upstream without a matching published statusline prebuilt." },
     { label: "Cancel", value: "cancel" },
   );
   return <Box flexDirection="column" marginY={1}>
