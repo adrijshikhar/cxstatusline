@@ -1,3 +1,107 @@
+diff --git a/build/ink.d.ts b/build/ink.d.ts
+index 9dce0fe328a8eeb18d459b974ab0c3cf5fb38dda..f90bb0fe8c71beae7bf7db4e4d9d5f62812d33a3 100644
+--- a/build/ink.d.ts
++++ b/build/ink.d.ts
+@@ -4,6 +4,8 @@ export type Options = {
+     stdin: NodeJS.ReadStream;
+     stderr: NodeJS.WriteStream;
+     debug: boolean;
++    preserveScrollback?: boolean;
++    isCI?: boolean;
+     exitOnCtrlC: boolean;
+     patchConsole: boolean;
+     isScreenReaderEnabled?: boolean;
+@@ -14,6 +16,7 @@ export default class Ink {
+     private readonly log;
+     private readonly throttledLog;
+     private readonly isScreenReaderEnabled;
++    private readonly isInCi;
+     private isUnmounted;
+     private lastOutput;
+     private lastOutputHeight;
+diff --git a/build/ink.js b/build/ink.js
+index 5cad56e135f1074474d7d498ffd87c5699b9df78..46acd25d0df2d4382f2bb5c2586f4d802bbb4af2 100644
+--- a/build/ink.js
++++ b/build/ink.js
+@@ -21,6 +21,7 @@ export default class Ink {
+     log;
+     throttledLog;
+     isScreenReaderEnabled;
++    isInCi;
+     // Ignore last render after unmounting a tree to prevent empty output before exit
+     isUnmounted;
+     lastOutput;
+@@ -36,6 +37,7 @@ export default class Ink {
+     constructor(options) {
+         autoBind(this);
+         this.options = options;
++        this.isInCi = options.isCI ?? isInCi;
+         this.rootNode = dom.createNode('ink-root');
+         this.rootNode.onComputeLayout = this.calculateLayout;
+         this.isScreenReaderEnabled =
+@@ -83,7 +85,7 @@ export default class Ink {
+         if (options.patchConsole) {
+             this.patchConsole();
+         }
+-        if (!isInCi) {
++        if (!this.isInCi) {
+             options.stdout.on('resize', this.resized);
+             this.unsubscribeResize = () => {
+                 options.stdout.off('resize', this.resized);
+@@ -118,7 +120,7 @@ export default class Ink {
+             this.options.stdout.write(this.fullStaticOutput + output);
+             return;
+         }
+-        if (isInCi) {
++        if (this.isInCi) {
+             if (hasStaticOutput) {
+                 this.options.stdout.write(staticOutput);
+             }
+@@ -129,7 +131,7 @@ export default class Ink {
+         if (hasStaticOutput) {
+             this.fullStaticOutput += staticOutput;
+         }
+-        if (this.lastOutputHeight >= this.options.stdout.rows) {
++        if (!this.options.preserveScrollback && this.lastOutputHeight >= this.options.stdout.rows) {
+             this.options.stdout.write(ansiEscapes.clearTerminal + this.fullStaticOutput + output + '\n');
+             this.lastOutput = output;
+             this.lastOutputHeight = outputHeight;
+@@ -166,7 +168,7 @@ export default class Ink {
+             this.options.stdout.write(data + this.fullStaticOutput + this.lastOutput);
+             return;
+         }
+-        if (isInCi) {
++        if (this.isInCi) {
+             this.options.stdout.write(data);
+             return;
+         }
+@@ -183,7 +185,7 @@ export default class Ink {
+             this.options.stdout.write(this.fullStaticOutput + this.lastOutput);
+             return;
+         }
+-        if (isInCi) {
++        if (this.isInCi) {
+             this.options.stderr.write(data);
+             return;
+         }
+@@ -207,7 +209,7 @@ export default class Ink {
+         }
+         // CIs don't handle erasing ansi escapes well, so it's better to
+         // only render last frame of non-static output
+-        if (isInCi) {
++        if (this.isInCi) {
+             this.options.stdout.write(this.lastOutput + '\n');
+         }
+         else if (!this.options.debug) {
+@@ -236,7 +238,7 @@ export default class Ink {
+         return this.exitPromise;
+     }
+     clear() {
+-        if (!isInCi && !this.options.debug) {
++        if (!this.isInCi && !this.options.debug) {
+             this.log.clear();
+         }
+     }
 diff --git a/build/parse-keypress.js b/build/parse-keypress.js
 index 1e13e819f59d259a3476510db822695576a9d93c..e100611d8661187c4ca191e89621cd5e480fcacc 100644
 --- a/build/parse-keypress.js
@@ -15,3 +119,18 @@ index 1e13e819f59d259a3476510db822695576a9d93c..e100611d8661187c4ca191e89621cd5e
          key.meta = s.charAt(0) === '\x1b';
      }
      else if (s === '\x1b' || s === '\x1b\x1b') {
+diff --git a/build/render.d.ts b/build/render.d.ts
+index ffcfbaca277cbd95b2e6a2c857230dd69e41b7e0..5fd94d71aa136f48447c162dd7453617f1824cc5 100644
+--- a/build/render.d.ts
++++ b/build/render.d.ts
+@@ -24,6 +24,10 @@ export type RenderOptions = {
+      * @default false
+      */
+     debug?: boolean;
++    /** Preserve prior terminal output when an Ink view exceeds terminal height. */
++    preserveScrollback?: boolean;
++    /** Override CI detection when the caller has verified an interactive terminal. */
++    isCI?: boolean;
+     /**
+      * Configure whether Ink should listen to Ctrl+C keyboard input and exit the app. This is needed in case `process.stdin` is in raw mode, because then Ctrl+C is ignored by default and process is expected to handle it manually.
+      *

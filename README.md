@@ -80,7 +80,9 @@ cxstatusline doctor
 ```
 
 `cxstatusline install` downloads the verified prebuilt binary matching your Codex version, verifies checksums against `manifest.json`, and activates it.
-- **Interactive selection**: Running `cxstatusline install` in a terminal prompts you to choose from available supported versions (defaulting to your detected or latest version).
+- **Interactive selection**: Running `cxstatusline install` opens a keyboard-driven version picker. Use ↑/↓ and Enter to select, or Escape/Ctrl+C to cancel. Prebuilt availability is shown per version; source-only choices require confirmation (unless you already passed `--compile`).
+- **Update choices**: `cxstatusline update` uses the same keyboard controls to choose the latest supported prebuilt, a supported source build, or cancellation. It does not update upstream Codex first.
+- **Live progress**: Ink renders download progress in terminals while completed stages remain in the transcript. Source builds report their phases; redirected output retains plain milestone logs.
 - **Target a specific version**: `cxstatusline install --codex-version <version>` (e.g. `cxstatusline install --codex-version 0.154.0`).
 - **Non-interactive / CI**: Pass `-y` or `--yes` to accept the default without prompting.
 

@@ -445,6 +445,24 @@ describe("runPatch", () => {
 });
 
 describe("runInstall", () => {
+  test.each(["0.155.0-alpha.16", "0.155.0-beta.1", "0.155.0-rc.1"])("explains unsupported prerelease %s before downloading", async (version) => {
+    const { c, paths, said, calls } = ctx({ upstreamVersion: version, noRust: true });
+    let downloads = 0;
+    const fetch = async (): Promise<Response> => { downloads++; throw new Error("unexpected download"); };
+    expect(await runInstall(c, { compile: false }, { fetch })).toBe(1);
+    const output = said.join("\n");
+    expect(output).toContain(`Cannot install a prebuilt for Codex ${version}`);
+    expect(output).toContain("stable releases only");
+    expect(output).toContain("cxstatusline install");
+    expect(output).not.toContain("releaseTag");
+    expect(readState(paths.stateFile).state.last_attempt).toMatchObject({
+      ok: false, version, reason: expect.stringContaining("stable releases only"),
+    });
+    expect(downloads).toBe(0);
+    expect(calls.some((k) => k.cmd === "gh" || k.cmd === "cargo")).toBe(false);
+    expect(activeGeneration(paths)).toBeNull();
+    expect(existsSync(paths.hooksFile)).toBe(false);
+  });
   test("prebuilt by default, then merges the SessionStart hook and prints the trust sentence", async () => {
     const f = fixture();
     const { c, paths, said, calls } = ctx({ upstreamVersion: CODEX, noRust: true });
@@ -604,6 +622,25 @@ describe("runUpdate", () => {
     expect(await runUpdate(c, { fetchPrebuilts: async () => [CODEX] })).toBe(1);
     expect(readFileSync(paths.wrapperPath, "utf8")).toBe("FOREIGN");
   });
+
+  for (const action of ["prebuilt", "compile", "cancel"] as const) {
+    test(`interactive update honors ${action} without invoking upstream`, async () => {
+      const f = fixture();
+      const { c, paths, calls } = ctx({ stagedVersion: CODEX });
+      await withServer(routesFor(f), async (baseUrl) => {
+        expect(await runUpdate(c, {
+          isTTY: true,
+          fetchPrebuilts: async () => [CODEX],
+          promptUpdate: async (options) => {
+            expect(options).toEqual({ latest: CODEX, highestAvailable: CODEX });
+            return action;
+          },
+        }, { baseUrl })).toBe(0);
+      });
+      expect(readState(paths.stateFile).state.patched_from).toBe(action === "cancel" ? null : CODEX);
+      expect(calls.some((call) => call.args[0] === "update")).toBe(false);
+    });
+  }
 
   test("--compile builds the latest supported patch without updating upstream", async () => {
     const { c, paths, calls } = ctx({ stagedVersion: "0.153.0" });
