@@ -535,6 +535,9 @@ describe("runUpdate", () => {
           headers: { "content-type": "application/json" },
         });
       }
+      if (urlStr.includes(`codex-v${targetVersion}/manifest.json`) && !urlStr.includes("127.0.0.1")) {
+        return new Response(null, { status: 404 });
+      }
       return fetch(url, init);
     };
   };
