@@ -13,6 +13,8 @@
 
 [![CI](https://github.com/adrijshikhar/cxstatusline/actions/workflows/ci.yml/badge.svg)](https://github.com/adrijshikhar/cxstatusline/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/cxstatusline.svg)](https://www.npmjs.com/package/cxstatusline)
+[![Website](https://img.shields.io/badge/website-cxstatusline.adrijshikhar.dev-blue)](https://cxstatusline.adrijshikhar.dev)
+[![Playground](https://img.shields.io/badge/playground-online-purple)](https://cxstatusline.adrijshikhar.dev/#playground)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Node.js 22+](https://img.shields.io/badge/node-%E2%89%A522-green)](https://nodejs.org/)
 
@@ -22,12 +24,18 @@
 
 ## ✨ Features
 
-A configurable, one-to-three-row statusline for [OpenAI Codex CLI](https://github.com/openai/codex),
-with an interactive configuration TUI, colors, Powerline themes and preset import/export.
+**cxstatusline** is a configurable, one-to-three-row statusline for the [OpenAI Codex CLI](https://github.com/openai/codex) (bringing the rich statusbar experience of [ccstatusline](https://github.com/sirmalloc/ccstatusline) for Anthropic Claude Code to OpenAI Codex).
+
+It features an interactive terminal configuration TUI, live web playground, customizable colors, Powerline themes, and preset import/export.
 See model, context, Git, session duration, usage percentages and reset times without leaving Codex.
 Available data depends on your session and account.
 
 Independent project; not an official OpenAI product.
+
+## 🌐 Interactive Web Playground
+
+Try out themes, arrange widgets, and preview your custom OpenAI Codex statusline directly in your browser without installing anything:
+👉 **[cxstatusline.adrijshikhar.dev](https://cxstatusline.adrijshikhar.dev)**
 
 <details>
 <summary>See the footer inside Codex</summary>
