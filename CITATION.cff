@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use cxstatusline in your research or project, please cite it as below."
+title: "cxstatusline: Customizable Statusline for OpenAI Codex CLI"
+authors:
+  - family-names: "Shikhar"
+    given-names: "Adrij"
+url: "https://cxstatusline.adrijshikhar.dev"
+repository-code: "https://github.com/adrijshikhar/cxstatusline"
+abstract: "A modular, configurable statusline and status bar for OpenAI Codex CLI with interactive terminal configurator, live telemetry, and Powerline themes."
+license: "MIT"
+version: "0.8.0"
+date-released: "2026-09-24"
+keywords:
+  - "openai-codex"
+  - "statusline"
+  - "statusbar"
+  - "tui"
+  - "terminal"
+  - "developer-tools"
+  - "powerline"
+  - "cli"
