@@ -30,6 +30,15 @@ describe("SEO Artifacts and Discovery Verification", () => {
     expect(content).toContain("User-agent: *");
     expect(content).toContain("Allow: /");
     expect(content).toContain("Sitemap: https://cxstatusline.adrijshikhar.dev/sitemap-index.xml");
+    expect(content).toContain("Sitemap: https://cxstatusline.adrijshikhar.dev/sitemap-0.xml");
+  });
+
+  test("_redirects exists and redirects sitemap.xml", () => {
+    const redirectsPath = join(distDir, "_redirects");
+    expect(existsSync(redirectsPath)).toBe(true);
+    const content = readFileSync(redirectsPath, "utf-8");
+    expect(content).toContain("/sitemap.xml");
+    expect(content).toContain("/sitemap-index.xml");
   });
 
   test("llms.txt is present and matches project summary", () => {

@@ -7,7 +7,7 @@
     "type": "git",
     "url": "git+https://github.com/adrijshikhar/cxstatusline.git"
   },
-  "homepage": "https://github.com/adrijshikhar/cxstatusline#readme",
+  "homepage": "https://cxstatusline.adrijshikhar.dev",
   "bugs": "https://github.com/adrijshikhar/cxstatusline/issues",
   "type": "module",
   "bin": {
