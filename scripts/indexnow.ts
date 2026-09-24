@@ -31,7 +31,8 @@ export function resolveClaudeSeoPath(
       return candidate;
     }
   }
-  return candidates[0];
+  const fallback = join(home, ".gemini/config/skills/seo/scripts/claude-seo");
+  return candidates[0] ?? fallback;
 }
 
 export interface ExecuteIndexNowOptions {
