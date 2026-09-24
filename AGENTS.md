@@ -21,3 +21,5 @@
 - State that the M5 is required whenever these builds are pending. Do not tell the user it can sleep until all M5 work is finished.
 - Run platform builds sequentially with at most two Rust compiler jobs. Keep existing verified outputs; do not restart expensive builds unnecessarily.
 - A different build machine requires an explicit new user instruction. General permission to continue or release does not authorize a runner change.
+
+- Preserve the existing rebuilder toolchain/setup. Do not add hosted-runner bootstrap actions, Python installers, or new environment dependencies without an explicit user request. Run the existing build/test flow on the M5; keep supplemental footer smoke checks separate from builder setup.

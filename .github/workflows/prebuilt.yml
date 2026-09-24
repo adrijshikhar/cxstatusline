@@ -168,9 +168,6 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: "1.4.0"
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-        with:
-          python-version: "3.12"
       - run: set -o pipefail; bun install --frozen-lockfile 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
       - name: Check native runner
         run: |
@@ -248,19 +245,6 @@ jobs:
           set -o pipefail
           cargo build --release -p codex-cli --bin codex \
             -p codex-code-mode-host --bin codex-code-mode-host 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
-      # A tiny isolated PTY integration gate complements the deterministic Rust layout tests.
-      # pyte is dev-only here: the hosted runners do not include a terminal screen emulator, and
-      # parsing cursor-addressed TUI output as plain text would miss row collisions and cursor loss.
-      - name: Smoke patched footer in an isolated terminal
-        if: ${{ runner.os != 'macOS' || !startsWith(matrix.platform, 'linux-') }}
-        run: |
-          set -o pipefail
-          python -m venv "$RUNNER_TEMP/footer-smoke-venv"
-          "$RUNNER_TEMP/footer-smoke-venv/bin/python" -m pip install --disable-pip-version-check --no-deps pyte==0.8.2 wcwidth==0.2.13
-          "$RUNNER_TEMP/footer-smoke-venv/bin/python" scripts/test-footer-smoke.py \
-            --codex "$GITHUB_WORKSPACE/upstream/codex-rs/target/release/codex" \
-            --patch-version "${{ steps.build.outputs.patch_version }}" \
-            --expected-version "$CODEX_VERSION" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
       - name: Audit Rust dependency licenses and generate notices
         if: ${{ runner.os != 'macOS' || !startsWith(matrix.platform, 'linux-') }}
         run: |
