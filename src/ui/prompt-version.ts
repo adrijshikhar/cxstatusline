@@ -1,6 +1,5 @@
-import { createInterface } from "node:readline";
 import { createElement } from "react";
-import { render } from "ink";
+import { prompt } from "./prompt";
 import { VersionPicker } from "./VersionPicker";
 
 export interface PromptVersionOptions {
@@ -42,35 +41,11 @@ export async function promptCodexVersion(options: PromptVersionOptions): Promise
     return { version: defaultVersion, compile: options.compile || isSourceOnly };
   }
 
-  const result: { selection: PromptVersionSelection | null } = { selection: null };
-  const instance = render(createElement(VersionPicker, {
+  const selection = await prompt<PromptVersionSelection | null>((onSelect) => createElement(VersionPicker, {
     ...options,
     defaultVersion,
-    onSelect: (value: PromptVersionSelection | null) => {
-      result.selection = value;
-      instance.unmount();
-    },
-  }), { exitOnCtrlC: false });
-  try {
-    await instance.waitUntilExit();
-  } finally {
-    instance.clear();
-    instance.cleanup();
-  }
-  const { selection } = result;
+    onSelect,
+  }), null);
   if (selection) say(`Selected Codex ${selection.version} (${selection.compile ? "build from source" : "prebuilt"}).`);
   return selection;
-}
-
-export function defaultAsk(question: string): Promise<string> {
-  const rl = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-  return new Promise((resolve) => {
-    rl.question(question, (answer) => {
-      rl.close();
-      resolve(answer);
-    });
-  });
 }

@@ -19,6 +19,7 @@ interface ListProps<V = string | number> extends BoxProps {
   showBackButton?: boolean;
   color?: ForegroundColorName;
   wrapNavigation?: boolean;
+  maxVisibleItems?: number;
 }
 
 /** Small keyboard list retained from ccstatusline's Ink shell. */
@@ -30,6 +31,7 @@ export function List<V = string | number>({
   showBackButton = false,
   color,
   wrapNavigation = true,
+  maxVisibleItems,
   ...boxProps
 }: ListProps<V>): React.JSX.Element {
   const [selectedIndex, setSelectedIndex] = useState(initialSelection);
@@ -42,7 +44,12 @@ export function List<V = string | number>({
     (item): item is ListEntry<V> => item !== "-" && !item.disabled,
   );
   const selectedItem = selectableItems[selectedIndex];
-  const actualIndex = displayedItems.findIndex((item) => item === selectedItem);
+  const firstVisible = maxVisibleItems && selectableItems.length > maxVisibleItems
+    ? Math.max(0, Math.min(selectedIndex, selectableItems.length - maxVisibleItems))
+    : 0;
+  const visibleItems = maxVisibleItems
+    ? selectableItems.slice(firstVisible, firstVisible + maxVisibleItems)
+    : displayedItems;
 
   useEffect(() => {
     latestOnSelectionChange.current = onSelectionChange;
@@ -75,21 +82,23 @@ export function List<V = string | number>({
 
   return (
     <Box flexDirection="column" {...boxProps}>
-      {displayedItems.map((item, index) => {
-        if (item === "-") return <Text key={index}> </Text>;
+      {maxVisibleItems && firstVisible > 0 && <Text dimColor>↑ more</Text>}
+      {visibleItems.map((item, index) => {
+        if (item === "-") return <Text key={`separator-${index}`}> </Text>;
         return (
           <ListItem
             key={item.value as string}
-            isSelected={index === actualIndex}
+            isSelected={item === selectedItem}
             {...(color && { color })}
             {...(item.disabled !== undefined && { disabled: item.disabled })}
             {...item.props}
           >
             <Text>{item.label}</Text>
-            {item.sublabel && <Text dimColor={index !== actualIndex}>{` ${item.sublabel}`}</Text>}
+            {item.sublabel && <Text dimColor={item !== selectedItem}>{` ${item.sublabel}`}</Text>}
           </ListItem>
         );
       })}
+      {maxVisibleItems && firstVisible + visibleItems.length < selectableItems.length && <Text dimColor>↓ more</Text>}
       {selectedItem?.description && (
         <Box marginTop={1} paddingLeft={2}>
           <Text dimColor wrap="wrap">{selectedItem.description}</Text>

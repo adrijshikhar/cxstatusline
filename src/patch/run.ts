@@ -9,7 +9,7 @@ import { installHook } from "../hook/install";
 import { writeState } from "../state";
 import { compareSemver, parseSemver } from "../version";
 import { fetchPublishedPrebuiltVersions } from "../distribution/prebuilt";
-import { defaultAsk } from "../ui/prompt-version";
+import { promptUpdate, type UpdateAction, type UpdatePickerOptions } from "../ui/UpdatePicker";
 import { describeOutcome, loadState, runAcquisition, upstreamFor, type PatchOutcome } from "./acquire";
 import { ManifestError, loadManifest, resolvePatch } from "./manifest";
 import {
@@ -101,7 +101,7 @@ export function runPatch(ctx: Context, opts: { force: boolean }, transport: Tran
   ctx.say(renderInstallHeader(true));
   const progress = createInstallProgressTracker({
     isTTY: process.stdout?.isTTY,
-    write: (s) => process.stdout.write(s),
+    stdout: process.stdout,
     say: (l) => ctx.say(l),
   }, transport);
   return runAcquisition(ctx, { source: "compiled", force: opts.force }, progress.transport).finally(() => {
@@ -123,7 +123,7 @@ export async function runInstall(ctx: Context, opts: InstallOptions, transport: 
   ctx.say(renderInstallHeader(opts.compile));
   const progress = createInstallProgressTracker({
     isTTY: process.stdout?.isTTY,
-    write: (s) => process.stdout.write(s),
+    stdout: process.stdout,
     say: (l) => ctx.say(l),
   }, transport);
 
@@ -170,7 +170,7 @@ export interface UpdateOptions {
   readonly force?: boolean;
   readonly compile?: boolean;
   readonly isTTY?: boolean;
-  readonly ask?: (question: string) => Promise<string>;
+  readonly promptUpdate?: (options: UpdatePickerOptions) => Promise<UpdateAction>;
   readonly fetchPrebuilts?: (fetchFn?: FetchLike, repo?: string) => Promise<string[]>;
 }
 
@@ -266,7 +266,7 @@ export async function runUpdate(
     ("compile" in optsOrTransport ||
       "force" in optsOrTransport ||
       "isTTY" in optsOrTransport ||
-      "ask" in optsOrTransport ||
+      "promptUpdate" in optsOrTransport ||
       "fetchPrebuilts" in optsOrTransport);
 
   let activeOpts: UpdateOptions = isOpts ? (optsOrTransport as UpdateOptions) : {};
@@ -316,30 +316,10 @@ export async function runUpdate(
             return 1;
           }
 
-          ctx.say("How would you like to proceed?");
-          ctx.say(`  1) Install latest available prebuilt (Codex ${highestAvailable}) [recommended]`);
-          ctx.say(`  2) Compile Codex ${latest} from source`);
-          ctx.say(`  3) Update to stock Codex ${latest} anyway`);
-          ctx.say("  4) Cancel");
-
-          const askFn = activeOpts.ask ?? defaultAsk;
-          let selectedAction: "prebuilt" | "compile" | "stock" | "cancel" | null = null;
-          while (!selectedAction) {
-            const choice = (await askFn("Enter choice [1-4] (default 1): ")).trim();
-            if (choice === "1" || choice === "") {
-              selectedAction = "prebuilt";
-            } else if (choice === "2") {
-              selectedAction = "compile";
-            } else if (choice === "3") {
-              selectedAction = "stock";
-            } else if (choice === "4") {
-              selectedAction = "cancel";
-            } else {
-              ctx.say(`Invalid choice "${choice}". Please select 1, 2, 3, or 4.`);
-            }
-          }
+          const selectedAction = await (activeOpts.promptUpdate ?? promptUpdate)({ latest, highestAvailable });
 
           if (selectedAction === "prebuilt") {
+            ctx.say(`Selected prebuilt Codex ${highestAvailable}.`);
             ctx.say(`Installing prebuilt binaries for Codex ${highestAvailable}...`);
             return runInstall(ctx, { compile: false, codexVersion: highestAvailable }, transport);
           }
@@ -348,8 +328,10 @@ export async function runUpdate(
             return 0;
           }
           if (selectedAction === "compile") {
+            ctx.say(`Selected source compilation for Codex ${latest}.`);
             activeOpts = { ...activeOpts, compile: true };
           } else if (selectedAction === "stock") {
+            ctx.say(`Selected stock Codex ${latest}.`);
             activeOpts = { ...activeOpts, force: true };
           }
         } else {
@@ -366,33 +348,17 @@ export async function runUpdate(
             return 1;
           }
 
-          ctx.say("How would you like to proceed?");
-          ctx.say(`  1) Compile Codex ${latest} from source`);
-          ctx.say(`  2) Update to stock Codex ${latest} anyway`);
-          ctx.say("  3) Cancel");
-
-          const askFn = activeOpts.ask ?? defaultAsk;
-          let selectedAction: "compile" | "stock" | "cancel" | null = null;
-          while (!selectedAction) {
-            const choice = (await askFn("Enter choice [1-3] (default 3): ")).trim();
-            if (choice === "1") {
-              selectedAction = "compile";
-            } else if (choice === "2") {
-              selectedAction = "stock";
-            } else if (choice === "3" || choice === "") {
-              selectedAction = "cancel";
-            } else {
-              ctx.say(`Invalid choice "${choice}". Please select 1, 2, or 3.`);
-            }
-          }
+          const selectedAction = await (activeOpts.promptUpdate ?? promptUpdate)({ latest });
 
           if (selectedAction === "cancel") {
             ctx.say("Update cancelled.");
             return 0;
           }
           if (selectedAction === "compile") {
+            ctx.say(`Selected source compilation for Codex ${latest}.`);
             activeOpts = { ...activeOpts, compile: true };
           } else if (selectedAction === "stock") {
+            ctx.say(`Selected stock Codex ${latest}.`);
             activeOpts = { ...activeOpts, force: true };
           }
         }
@@ -413,7 +379,7 @@ export async function runUpdate(
   const source = activeOpts.compile ? "compiled" : "prebuilt";
   const progress = createInstallProgressTracker({
     isTTY: process.stdout?.isTTY,
-    write: (s) => process.stdout.write(s),
+    stdout: process.stdout,
     say: (l) => ctx.say(l),
   }, transport);
   let outcome: PatchOutcome;

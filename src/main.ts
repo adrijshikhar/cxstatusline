@@ -21,6 +21,7 @@ import { getTerminalWidth } from "./utils/terminal";
 import { runTUI as runTUIFromApp } from "./tui/App";
 import { readMemoryUsage } from "./utils/memory";
 
+import type { UpdateOptions } from "./patch/run";
 import type { FetchLike, TransportOptions } from "./distribution/transport";
 
 export interface MainIo {
@@ -44,7 +45,7 @@ export interface MainDeps {
   readonly promptVersion?: (
     options: PromptVersionOptions,
   ) => Promise<PromptVersionSelection | string | null>;
-  readonly ask?: (question: string) => Promise<string>;
+  readonly promptUpdate?: UpdateOptions["promptUpdate"];
   readonly fetchPrebuilts?: (fetchFn?: FetchLike, repo?: string) => Promise<string[]>;
 }
 
@@ -229,7 +230,7 @@ async function updateCommand(argv: readonly string[], io: MainIo, deps: MainDeps
       compile: flags.includes("--compile"),
       force: flags.includes("--force") || flags.includes("-y") || flags.includes("--yes"),
       isTTY: io.isTTY,
-      ask: deps.ask,
+      promptUpdate: deps.promptUpdate,
       fetchPrebuilts: deps.fetchPrebuilts,
     },
     deps.transport,
