@@ -32,6 +32,7 @@
     "test:website:e2e": "cd website && bun run test:e2e",
     "seo:drift:baseline": "bun run scripts/seo-drift.ts baseline",
     "seo:drift:compare": "bun run scripts/seo-drift.ts compare",
+    "seo:indexnow": "bun run scripts/indexnow.ts",
     "check:package": "bun run scripts/check-package.ts",
     "upstream:watch": "bun run scripts/upstream-watch.ts",
     "probe:stdio": "bun run scripts/probe-detached-stdio.ts",

@@ -57,6 +57,14 @@ describe("SEO Artifacts and Discovery Verification", () => {
     expect(size).toBeGreaterThan(10000);
   });
 
+  test("IndexNow key file exists and matches verification key", () => {
+    const key = "1303670a09c5d783e567987aef292217";
+    const keyPath = join(distDir, `${key}.txt`);
+    expect(existsSync(keyPath)).toBe(true);
+    const content = readFileSync(keyPath, "utf-8").trim();
+    expect(content).toBe(key);
+  });
+
   test("index.html contains complete Open Graph, Twitter cards, and Schema.org JSON-LD", () => {
     const indexPath = join(distDir, "index.html");
     const html = readFileSync(indexPath, "utf-8");
