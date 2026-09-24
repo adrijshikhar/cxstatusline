@@ -444,6 +444,24 @@ describe("runPatch", () => {
 });
 
 describe("runInstall", () => {
+  test.each(["0.155.0-alpha.16", "0.155.0-beta.1", "0.155.0-rc.1"])("explains unsupported prerelease %s before downloading", async (version) => {
+    const { c, paths, said, calls } = ctx({ upstreamVersion: version, noRust: true });
+    let downloads = 0;
+    const fetch = async (): Promise<Response> => { downloads++; throw new Error("unexpected download"); };
+    expect(await runInstall(c, { compile: false }, { fetch })).toBe(1);
+    const output = said.join("\n");
+    expect(output).toContain(`Cannot install a prebuilt for Codex ${version}`);
+    expect(output).toContain("stable releases only");
+    expect(output).toContain("cxstatusline install");
+    expect(output).not.toContain("releaseTag");
+    expect(readState(paths.stateFile).state.last_attempt).toMatchObject({
+      ok: false, version, reason: expect.stringContaining("stable releases only"),
+    });
+    expect(downloads).toBe(0);
+    expect(calls.some((k) => k.cmd === "gh" || k.cmd === "cargo")).toBe(false);
+    expect(activeGeneration(paths)).toBeNull();
+    expect(existsSync(paths.hooksFile)).toBe(false);
+  });
   test("prebuilt by default, then merges the SessionStart hook and prints the trust sentence", async () => {
     const f = fixture();
     const { c, paths, said, calls } = ctx({ upstreamVersion: CODEX, noRust: true });
