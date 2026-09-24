@@ -285,6 +285,29 @@ describe("command dispatch", () => {
     })).toBe(1);
     expect(receivedPrebuilts).toEqual(["0.152.1"]);
   });
+  test("cancelling the version picker exits without starting installation", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    const result = await main(["install"], { ...t.io, isTTY: true, env: d.env }, {
+      ...d.deps,
+      transport: { fetch: async () => new Response("[]") },
+      promptVersion: async () => null,
+    });
+    expect(result).toBe(0);
+    expect(t.out.join("")).toContain("Installation cancelled.");
+    expect(t.out.join("")).not.toContain("Installing");
+  });
+
+  test("a failed picker never falls through into an installation", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    await expect(main(["install"], { ...t.io, isTTY: true, env: d.env }, {
+      ...d.deps,
+      transport: { fetch: async () => new Response("[]") },
+      promptVersion: async () => { throw new Error("terminal disconnected"); },
+    })).rejects.toThrow("terminal disconnected");
+  });
+
   test("interactive install with promptVersion selecting compile proceeds in compile mode", async () => {
     const t = io("");
     const d = dispatchDeps();

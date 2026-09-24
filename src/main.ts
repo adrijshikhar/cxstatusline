@@ -43,7 +43,7 @@ export interface MainDeps {
   readonly transport?: TransportOptions;
   readonly promptVersion?: (
     options: PromptVersionOptions,
-  ) => Promise<PromptVersionSelection | string>;
+  ) => Promise<PromptVersionSelection | string | null>;
   readonly ask?: (question: string) => Promise<string>;
   readonly fetchPrebuilts?: (fetchFn?: FetchLike, repo?: string) => Promise<string[]>;
 }
@@ -150,8 +150,13 @@ async function installCommand(argv: readonly string[], io: MainIo, deps: MainDep
   const ctx = contextFor(io, deps);
 
   if (io.isTTY === true && !yes && !codexVersion) {
+    let manifest;
     try {
-      const manifest = loadManifest(ctx.patchesDir);
+      manifest = loadManifest(ctx.patchesDir);
+    } catch {
+      // runInstall surfaces manifest failures during acquisition.
+    }
+    if (manifest) {
       const supported = supportedCodexVersions(manifest);
       if (supported.length > 0) {
         let prebuiltVersions: string[] | undefined;
@@ -190,15 +195,18 @@ async function installCommand(argv: readonly string[], io: MainIo, deps: MainDep
           supportedVersions: supported,
           prebuiltVersions,
           defaultVersion,
+          compile,
           isTTY: true,
           say: (l) => io.stdout(`${l}\n`),
         });
+        if (result === null) {
+          io.stdout("Installation cancelled.\n");
+          return 0;
+        }
         const selection = typeof result === "string" ? { version: result, compile: false } : result;
         codexVersion = selection.version;
         compile = compile || selection.compile;
       }
-    } catch {
-      // If manifest fails to load, runInstall will surface it during acquisition
     }
   }
 
