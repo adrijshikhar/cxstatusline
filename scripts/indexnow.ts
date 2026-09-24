@@ -17,28 +17,22 @@ export function resolveClaudeSeoPath(
   if (envPath && envPath.trim().length > 0) {
     return envPath;
   }
-  const aimPath = join(
-    home,
-    ".aim/profiles/bot/.agents/skills/seo/scripts/claude-seo"
-  );
-  if (existsSync(aimPath)) {
-    return aimPath;
+  const candidates = [
+    join(home, ".gemini/config/skills/seo/scripts/claude-seo"),
+    join(home, ".gemini/config/plugins/agents-skills/skills/seo/scripts/claude-seo"),
+    join(home, ".agents/skills/seo/scripts/claude-seo"),
+    join(home, ".claude/skills/seo/scripts/claude-seo"),
+    join(home, ".aim/profiles/bot/.agents/skills/seo/scripts/claude-seo"),
+    join(home, ".aim/profiles/rs/.gemini/config/skills/seo/scripts/claude-seo"),
+    join(home, ".aim/profiles/work/.gemini/config/skills/seo/scripts/claude-seo"),
+  ];
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
   }
-  const geminiProfilePath = join(
-    home,
-    ".aim/profiles/rs/.gemini/config/skills/seo/scripts/claude-seo"
-  );
-  if (existsSync(geminiProfilePath)) {
-    return geminiProfilePath;
-  }
-  const claudePath = join(
-    home,
-    ".claude/skills/seo/scripts/claude-seo"
-  );
-  if (existsSync(claudePath)) {
-    return claudePath;
-  }
-  return aimPath;
+  const fallback = join(home, ".gemini/config/skills/seo/scripts/claude-seo");
+  return candidates[0] ?? fallback;
 }
 
 export interface ExecuteIndexNowOptions {

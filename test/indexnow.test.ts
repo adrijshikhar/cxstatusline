@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -20,6 +20,22 @@ describe("indexnow CLI helper", () => {
     const customPath = "/custom/path/to/claude-seo";
     const resolved = resolveClaudeSeoPath({ CLAUDE_SEO_PATH: customPath }, "/nonexistent");
     expect(resolved).toBe(customPath);
+  });
+
+  test("resolveClaudeSeoPath checks profile candidates when CLAUDE_SEO_PATH is unset", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "seo-test-home-"));
+    try {
+      const candidateDir = join(tempDir, ".gemini", "config", "skills", "seo", "scripts");
+      mkdirSync(candidateDir, { recursive: true });
+      const runner = join(candidateDir, "claude-seo");
+      writeFileSync(runner, "#!/bin/sh\nexit 0\n");
+      chmodSync(runner, 0o755);
+
+      const resolved = resolveClaudeSeoPath({}, tempDir);
+      expect(resolved).toBe(runner);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   test("executeIndexNow invokes runner with default host, key, and URL", () => {
