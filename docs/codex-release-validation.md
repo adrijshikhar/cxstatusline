@@ -68,8 +68,20 @@ note: query depth increased by 130 when computing layout of
 {async fn body of connectors::list_connectors()}
 ```
 
-The failed builds used the exact upstream toolchain. The footer patch changes only TUI
-code; a clean upstream reproduction is being run before introducing a compiler workaround.
+The failed builds used the exact upstream toolchain. The same failure reproduces on the clean
+`rust-v0.156.1` tag with no footer patch. The nested async connector future requires query depth
+130, exceeding Rust's default 128. Adding `#![recursion_limit = "256"]` to
+`codex-rs/chatgpt/src/lib.rs` makes `cargo build --release -p codex-chatgpt` pass (78 seconds
+with cached dependencies). Removing the attribute and testing `cargo rustc --release -p
+codex-chatgpt -- -C debuginfo=0` still fails with the same diagnostic. The fix is a compiler
+query-depth setting, not a runtime stack or memory setting.
+
+The one-line attribute is included only in patch v2. The final patch passes application checks
+on both 0.156.0 and 0.156.1; full executable/test/PTY validation is running. Logs are
+`logs/recursion-baseline.log`, `logs/recursion-fixed.log`, and
+`logs/recursion-debug-zero.log` under the remote validation root. To avoid Cargo lock contention,
+the final crate experiment used an APFS-cloned target cache with one compiler job while one
+existing test compiler was temporarily paused; it was resumed afterward.
 
 AIM session check: 0.153.1 passed the revision-1 PTY assertions on the M5 Pro using
 AIM 0.8.1 copied to the validation directory (the installed AIM 0.3.0 lacks the Codex

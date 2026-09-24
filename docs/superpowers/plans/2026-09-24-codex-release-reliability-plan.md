@@ -70,9 +70,9 @@ expect(() => updateManifestContent(before, "0.157.0", "codex-0.157.0.patch")).to
 
 - [ ] Add failure-injection cases for issue/PR lookup and creation, branch creation, commit and push. Assert thrown errors and no subsequent write. Test existing issue matching by exact title/body marker, not fuzzy nonempty output.
 - [ ] Run `bun test test/upstream-watch.test.ts` and record the expected failures.
-- [ ] Preserve metadata by serializing parsed entries rather than reconstructing only min/max/file. Compare semvers before changing candidate. Validate the resulting manifest. Use checked Git mutations and `ghText`/`ghJson`, explicit repository, redacted errors and `--body-file` temporary files for external writes. Ensure branch creation succeeds before writing tracked files.
-- [ ] For auto-proposals beyond the current candidate, carry the highest supported patch's explicit revision into the proposal. For an older uncovered version, report review needed instead of guessing/backporting. Preserve the current candidate's fixture assertions when backfilling.
-- [ ] Make PR copy say “patch applies cleanly; compilation/runtime validation required”. Run focused tests and typecheck, then commit `fix: preserve patch ownership in upstream automation`.
+- [x] Preserve metadata by serializing parsed entries rather than reconstructing only min/max/file. Compare semvers before changing candidate. Validate the resulting manifest. Use checked Git mutations and `ghText`/`ghJson`, explicit repository, redacted errors and `--body-file` temporary files for external writes. Ensure branch creation succeeds before writing tracked files.
+- [x] For auto-proposals beyond the current candidate, carry the highest supported patch's explicit revision into the proposal. For an older uncovered version, report review needed instead of guessing/backporting. Preserve the current candidate's fixture assertions when backfilling.
+- [x] Make PR copy say “patch applies cleanly; compilation/runtime validation required”. Run focused tests and typecheck, then commit `fix: preserve patch ownership in upstream automation`.
 
 ## Task 2: Audit every released version and its prebuilt
 
@@ -91,9 +91,9 @@ export interface CoverageRow { version: string; status: CoverageStatus; detail: 
 - [ ] Test a second page containing a missing version and a third-page error. The former must be included; the latter must throw before any issue edit/close or “healthy” result. Test semantic sorting (0.99 versus 0.100) and duplicate pages.
 - [ ] Test supported/no release, draft-only release, stable-tag GitHub prerelease, missing companion/archive/checksums/manifest, stale patch digest, wrong revision, malformed release metadata and matching legacy digest.
 - [ ] Run `bun test test/upstream-coverage.test.ts` to prove failures.
-- [ ] Extract a stable-version list helper from `selectStableVersion` while preserving existing highest-version callers. Implement paginated reads to exhaustion using existing GitHub primitives. Hash the selected local patch and validate downloaded metadata with `validateManifest`; compare required asset names/sizes against the GitHub listing. Do not download large archives in the daily audit.
-- [ ] Implement the pure table classifier, deriving the floor from the manifest and shared platform baseline. Export a machine-readable JSON report with checked timestamp, floor, rows and gap count; serialize only after the full read succeeds.
-- [ ] Run focused audit/detection tests and commit `feat: audit all supported-horizon Codex releases`.
+- [x] Extract a stable-version list helper from `selectStableVersion` while preserving existing highest-version callers. Implement paginated reads to exhaustion using existing GitHub primitives. Hash the selected local patch and validate downloaded metadata with `validateManifest`; compare required asset names/sizes against the GitHub listing. Do not download large archives in the daily audit.
+- [x] Implement the pure table classifier, deriving the floor from the manifest and shared platform baseline. Export a machine-readable JSON report with checked timestamp, floor, rows and gap count; serialize only after the full read succeeds.
+- [x] Run focused audit/detection tests and commit `feat: audit all supported-horizon Codex releases`.
 
 ## Task 3: Wire complete reporting and watchdog
 
@@ -102,10 +102,10 @@ export interface CoverageRow { version: string; status: CoverageStatus; detail: 
 **Interfaces:** Coverage CLI supports read-only `--dry-run`, JSON output path and normal issue upsert; one stable title `Codex release coverage gaps` and marker `<!-- cxstatusline-codex-coverage -->`. Existing version-specific watcher proposals remain a separate operation.
 
 - [ ] Add tests for first issue creation, repeat update, full-audit success closing, existing unmarked same-title issue not being hijacked, failed lookup/write producing failure, and dry-run producing no writes.
-- [ ] Invoke complete audit regardless of the latest-version watcher outcome. Upload JSON and write Actions summary on completed audits; fail if reporting fails. A coverage gap may be a tracked nonzero result with a clear summary, never a false “all covered”. Use one issue to avoid daily duplicates. Do not actually file production issues during tests.
-- [ ] Replace hardcoded Codex choices in the prebuilt workflow with a string input validated by `resolveDetection`; preserve `auto` behavior. Remove obsolete watcher choice-list mutation if no callers remain, with tests updated to the new ownership.
-- [ ] Implement watchdog pure check with a fixed 36-hour threshold over successful `schedule` runs only. Test 35 hours, exactly 36 hours, 37 hours, no runs, recent manual success and API failure. Add a separate daily workflow using read-only Actions permission and `::error::` plus failed exit; do not use GitHub issues as its notification path.
-- [ ] Document how to enable Actions notifications and the GitHub-wide outage limitation. Run audit/watcher/workflow tests and commit `fix: surface skipped releases and watcher failures`.
+- [x] Invoke complete audit regardless of the latest-version watcher outcome. Upload JSON and write Actions summary on completed audits; fail if reporting fails. A coverage gap may be a tracked nonzero result with a clear summary, never a false “all covered”. Use one issue to avoid daily duplicates. Do not actually file production issues during tests.
+- [x] Replace hardcoded Codex choices in the prebuilt workflow with a string input validated by `resolveDetection`; preserve `auto` behavior. Remove obsolete watcher choice-list mutation if no callers remain, with tests updated to the new ownership.
+- [x] Implement watchdog pure check with a fixed 36-hour threshold over successful `schedule` runs only. Test 35 hours, exactly 36 hours, 37 hours, no runs, recent manual success and API failure. Add a separate daily workflow using read-only Actions permission and `::error::` plus failed exit; do not use GitHub issues as its notification path.
+- [x] Document how to enable Actions notifications and the GitHub-wide outage limitation. Run audit/watcher/workflow tests and commit `fix: surface skipped releases and watcher failures`.
 
 ## Task 4: Replace published same-tag releases safely
 
@@ -116,11 +116,11 @@ export interface CoverageRow { version: string; status: CoverageStatus; detail: 
 - [ ] Write a publish fixture for old and new build sets at the same Codex version. Include equal-size/different-hash archives, an existing x64 platform, a concurrent identity change, upload failure, verification failure and restoration failure.
 - [ ] Assertions: no mutation before replacement verification and complete verified backup; changed identity builds in detect; identical bytes no-op; no loss of existing platforms; no merge across differing source/patch identity; every restored/published asset passes checksum verification; new manifest uploads last; successful restoration reports original failure, not successful new publication.
 - [ ] Run focused tests to demonstrate current immutability failure and unsafe size-only assumptions.
-- [ ] Extend detect to build the union of requested and published platforms for a replacement, or fail before mutation if the requested runner cannot build them. Preserve original tag refs. Remove obsolete “npm bump gets a new tag” instructions.
-- [ ] Implement backup before publication; workflow uploads it with `retention-days: 90` before invoking replacement. The publisher rechecks the original identity after backup and immediately before mutation. Reuse verified archive/manifest/checksum helpers.
-- [ ] Delete/recreate only the release object if necessary, as a draft under the existing tag. Upload a complete new set, checksum file and manifest last; redownload and verify; then publish. Never mark replacement atomic. On failure after mutation, restore the complete backup and report verification/recovery outcomes. A mismatched unrelated draft must not be silently overwritten.
-- [ ] Ensure `prebuilt-publish-${tag}` concurrency remains and document temporary unavailability. Dry-run never modifies external release state.
-- [ ] Run publish/detect/report/merge tests and commit `fix: safely replace rebuilt Codex releases under existing tags`.
+- [x] Extend detect to build the union of requested and published platforms for a replacement, or fail before mutation if the requested runner cannot build them. Preserve original tag refs. Remove obsolete “npm bump gets a new tag” instructions.
+- [x] Implement backup before publication; workflow uploads it with `retention-days: 90` before invoking replacement. The publisher rechecks the original identity after backup and immediately before mutation. Reuse verified archive/manifest/checksum helpers.
+- [x] Delete/recreate only the release object if necessary, as a draft under the existing tag. Upload a complete new set, checksum file and manifest last; redownload and verify; then publish. Never mark replacement atomic. On failure after mutation, restore the complete backup and report verification/recovery outcomes. A mismatched unrelated draft must not be silently overwritten.
+- [x] Ensure `prebuilt-publish-${tag}` concurrency remains and document temporary unavailability. Dry-run never modifies external release state.
+- [x] Run publish/detect/report/merge tests and commit `fix: safely replace rebuilt Codex releases under existing tags`.
 
 ## Task 5: Prove same-version installation and failure safety
 
@@ -128,11 +128,11 @@ export interface CoverageRow { version: string; status: CoverageStatus; detail: 
 
 **Interfaces:** Existing `preparePrebuilt`, `runUpdate`, generation activation and `doctorReport` remain the public seams. Retain legacy reading.
 
-- [ ] Extend the existing loopback release fixture to switch between old and new complete release sets with the same Codex version. Activate old set, serve new patch hash/executable digests, call update, and assert the new generation/revision and executable bytes.
+- [x] Extend the existing loopback release fixture to switch between old and new complete release sets with the same Codex version. Activate old set, serve new patch hash/executable digests, call update, and assert the new generation/revision and executable bytes.
 - [ ] Inject a truncated archive, 404, old manifest/new archive, new manifest/old archive and wrong digest. Assert active generation path and its bytes remain unchanged. Test unchanged verified content as a no-op and newer installed Codex as non-downgradable.
 - [ ] Test release discovery pagination and stable-tag prerelease inclusion if the current discovery implementation omits them; preserve its existing consumer-facing failure contract unless a caller explicitly needs a diagnostic error.
-- [ ] Check doctor returns actual installed revision/hash and `unknown (legacy)` for legacy metadata, without inferring current ownership.
-- [ ] Run `bun test test/distribution-prebuilt.test.ts test/run.test.ts test/prebuilt-discovery.test.ts test/doctor.test.ts`. Make only required source fixes, then commit `test: cover rebuilt same-version installs and interrupted replacement`.
+- [x] Check doctor returns actual installed revision/hash and `unknown (legacy)` for legacy metadata, without inferring current ownership.
+- [x] Run `bun test test/distribution-prebuilt.test.ts test/run.test.ts test/prebuilt-discovery.test.ts test/doctor.test.ts`. Make only required source fixes, then commit `test: cover rebuilt same-version installs and interrupted replacement`.
 
 ## Task 6: Make footer behavior an explicit release gate
 
@@ -140,12 +140,12 @@ export interface CoverageRow { version: string; status: CoverageStatus; detail: 
 
 **Interfaces:** A deterministic renderer prints three uniquely identifiable rows. Smoke runner accepts an explicit Codex executable, uses an isolated temporary config/environment and fails if row visibility or cursor/input behavior is wrong. Reuse existing terminal tooling if installed; do not add a dependency without identifying the gap it fills.
 
-- [ ] Inspect `/tmp/cx-aim-smoke.py`, `/tmp/cx-aim-warnings-smoke.py` and corrected `/tmp/cx-footer-1561` before reusing. They are evidence/prototypes, not a stable checked-in dependency.
+- [x] Inspect `/tmp/cx-aim-smoke.py`, `/tmp/cx-aim-warnings-smoke.py` and corrected `/tmp/cx-footer-1561` before reusing. They are evidence/prototypes, not a stable checked-in dependency.
 - [ ] Persist a repeatable footer/layout regression gate. Exercise idle, warnings, draft typing, slash-menu open/close, refresh, response transition and narrow/wide terminal resize. Never declare a response tested without driving that transition. Keep ordinary CI independent of live model credentials; use Rust tests for transitions that cannot be driven deterministically through the CLI.
 - [ ] Run focused corrected Rust footer/composer tests. Add meaningful missing cases in the patch and prove the original broken layout fails them where practical. Do not regenerate unrelated upstream snapshots.
-- [ ] Wire focused Rust tests into prebuilt validation before publication. Record the terminal smoke scope separately from unit tests; CI gating must be executable, not just prose.
-- [ ] Use AIM for a local session check if configuration remains available, preserving global installation and the user's source checkout. Record exact commands, results and limits.
-- [ ] Commit `test: gate prebuilt releases on multiline footer behavior` after the runnable gate passes; report any toolchain blocker without weakening the gate.
+- [x] Wire focused Rust tests into prebuilt validation before publication. Record the terminal smoke scope separately from unit tests; CI gating must be executable, not just prose.
+- [x] Use AIM for a local session check if configuration remains available, preserving global installation and the user's source checkout. Record exact commands, results and limits.
+- [x] Commit `test: gate prebuilt releases on multiline footer behavior` after the runnable gate passes; report any toolchain blocker without weakening the gate.
 
 ## Task 7: Validate the four missing releases without speculative support
 
@@ -153,7 +153,7 @@ export interface CoverageRow { version: string; status: CoverageStatus; detail: 
 
 **Interfaces:** Compatibility entries stay exact. Candidate stays 0.156.1 while older gaps are filled. v1 owns tested 0.153.1–0.153.3; v2 owns tested 0.156.0. Do not change historical ownership.
 
-- [ ] Use dedicated upstream worktrees for each missing tag. Neighboring v1 patches apply to 0.153.1–0.153.3; corrected v2 applies to 0.156.0. Recheck exact patch digests and run apply tests without changing the existing user's checkout.
+- [x] Use dedicated upstream worktrees for each missing tag. Neighboring v1 patches apply to 0.153.1–0.153.3; corrected v2 applies to 0.156.0. Recheck exact patch digests and run apply tests without changing the existing user's checkout.
 - [ ] Compile and run version probes, focused Rust layout tests and applicable terminal smoke checks for each. Known possible blocker: upstream rusty_v8 150.4.0 macOS ARM archive returned 404 earlier. Capture an actual failing command if still blocked; do not repeatedly retry unchanged prerequisites.
 - [ ] Add only versions that pass the required gates. If validation is blocked, keep the audit gap, save exact reproducible commands and evidence, and mark this task partial rather than silently shipping support. Prefer available Linux CI validation when it can genuinely resolve a local platform dependency; do not publish while testing.
 - [ ] Regenerate/update manifest-derived fixtures and documentation. Run coverage dry-run to show the remaining real gaps and commit `feat: support validated intermediate Codex releases` only for validated additions; otherwise commit truthful validation documentation.
@@ -164,9 +164,9 @@ export interface CoverageRow { version: string; status: CoverageStatus; detail: 
 
 - [ ] Run `bun test ./test ./src`, `bun run typecheck`, `bun run build`, `git diff --check`. Record actual counts and any skipped/blocked integration tests. No success based only on a prior baseline.
 - [ ] Self-review against every R1–R6 requirement. Fix uncovered trust-boundary errors, cross-generation platform mixing, unchecked commands and stale immutability wording. Keep this task's acceptance criteria unchanged.
-- [ ] Push only `fix/upstream-release-coverage`. Open a Conventional Commit PR against `feat/patch-versions` while #103 remains open, with concise behavior/validation/limitations and dependency links. Do not modify #102.
+- [x] Push only `fix/upstream-release-coverage`. Open a Conventional Commit PR against `feat/patch-versions` while #103 remains open, with concise behavior/validation/limitations and dependency links. Do not modify #102.
 - [ ] Update plan checkboxes accurately. Report changed files, commit/PR, test results, unresolved blockers and exact next rollout step to the root agent. Root independently reviews the diff and focused evidence.
-- [ ] Document rollout order: integrate #100/#103 and this PR; release updated npm installer before schema-2 prebuilts; run coverage audit; build validated gaps; prepare backup/replacement of 0.156.1/v2; perform production publishing only as a separately requested rollout. Do not claim any release was published by this development task.
+- [x] Document rollout order: integrate #100/#103 and this PR; release updated npm installer before schema-2 prebuilts; run coverage audit; build validated gaps; prepare backup/replacement of 0.156.1/v2; perform production publishing only as a separately requested rollout. Do not claim any release was published by this development task.
 
 ## Plan self-review
 
@@ -186,3 +186,13 @@ Ruling: use GraphQL cursor pagination for upstream releases — a live REST audi
 Rollout after review: merge dependencies #100/#103 and this PR; ship the updated npm installer before schema-2 prebuilts; audit coverage; build validated gaps for the required platforms; back up and replace 0.156.1 under its existing tag. Production publication remains a separately requested operation.
 
 Ruling: footer runtime expectations follow the declared patch revision. V1 intentionally hides its footer under the slash popup and must restore it afterward; v2 must retain the footer during the popup. Keep v1 code unchanged, as explicitly required by the no-backport policy.
+
+Final independent review found and fixed two automation gaps: appended historical entries no
+longer determine the patch for future releases, and publish targets always include both baseline
+platforms. Both new regressions failed before the fixes and pass afterward. Application suite:
+1,006 pass, 2 optional skips, 0 fail; typecheck passes. The third finding added a deterministic
+running→complete transition with input/cursor assertions to the v2 Rust gate; remote execution
+is pending. Draft PR: https://github.com/adrijshikhar/cxstatusline/pull/104.
+
+User confirmed the v1/v2 slash-menu difference is intentional (bottom popup versus top popup),
+not a rendering defect. Revision-aware smoke checks preserve that behavior.

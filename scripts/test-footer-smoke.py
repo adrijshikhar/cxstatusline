@@ -49,7 +49,7 @@ def main() -> int:
         codex_home.mkdir()
         config = (
             'openai_base_url = "http://127.0.0.1:9/v1"\n'
-            '[tui]\nstatus_line = ["model"]\n\n'
+            '[tui]\nstatus_line = ["model"]\nshow_tooltips = false\n\n'
             f"[projects.{json.dumps(str(root))}]\ntrust_level = \"trusted\"\n"
         )
         (codex_home / "config.toml").write_text(config, encoding="utf-8")
