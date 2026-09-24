@@ -246,3 +246,12 @@ cxstatusline is [MIT licensed](LICENSE). See [SECURITY.md](SECURITY.md) for secu
 - 🌐 **Web Playground:** [cxstatusline.adrijshikhar.dev](https://cxstatusline.adrijshikhar.dev)
 - 💬 **Discussions & Ideas:** [github.com/adrijshikhar/cxstatusline/discussions](https://github.com/adrijshikhar/cxstatusline/discussions)
 - 📦 **npm Package:** [npmjs.com/package/cxstatusline](https://www.npmjs.com/package/cxstatusline)
+
+### Prebuilt build machine
+
+All Codex prebuilt jobs run on the owner's M5 Pro (`192.168.1.65`, Actions labels
+`self-hosted`, `macOS`, `ARM64`, `m5-pro`). macOS builds natively; Linux builds in
+Docker on that same M5. Keep the laptop and runner active until the workflow finishes.
+An offline M5 leaves jobs queued; there is no hosted fallback. Platform builds run
+sequentially, with two Rust compiler jobs. Dispatch from a ref containing this policy;
+older release tags may still contain the removed hosted-runner option.

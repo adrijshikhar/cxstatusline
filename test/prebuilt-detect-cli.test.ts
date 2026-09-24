@@ -102,7 +102,7 @@ describe("buildMatrix", () => {
   });
 
   test("self-hosted runner is pinned to ARM64 runner array", () => {
-    const m = buildMatrix(["darwin-arm64"], true);
+    const m = buildMatrix(["darwin-arm64"]);
     expect(m).toEqual([{
       runner: ["self-hosted", "macOS", "ARM64", "m5-pro"],
       arch: "arm64",
@@ -112,7 +112,7 @@ describe("buildMatrix", () => {
   });
 
   test("self-hosted runner maps both darwin-arm64 and linux-arm64", () => {
-    const m = buildMatrix(["darwin-arm64", "linux-arm64"], true);
+    const m = buildMatrix(["darwin-arm64", "linux-arm64"]);
     expect(m).toEqual([
       {
         runner: ["self-hosted", "macOS", "ARM64", "m5-pro"],
@@ -129,34 +129,29 @@ describe("buildMatrix", () => {
     ]);
   });
 
-  test("hosted runner maps each platform to its runner and target", () => {
-    const m = buildMatrix(["darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64"], false);
-    expect(m).toHaveLength(4);
-    expect(m[0]).toEqual({
-      runner: "macos-15",
-      arch: "arm64",
-      target: "aarch64-apple-darwin",
-      platform: "darwin-arm64",
-    });
-    expect(m[1]).toEqual({
-      runner: "macos-15-intel",
-      arch: "x64",
-      target: "x86_64-apple-darwin",
-      platform: "darwin-x64",
-    });
-    expect(m[2]).toEqual({
-      runner: "ubuntu-latest",
-      arch: "x64",
-      target: "x86_64-unknown-linux-gnu",
-      platform: "linux-x64",
-    });
-    expect(m[3]).toEqual({
-      runner: "ubuntu-24.04-arm",
-      arch: "arm64",
-      target: "aarch64-unknown-linux-gnu",
-      platform: "linux-arm64",
-    });
+  test("unsupported platforms never fall back to hosted runners", () => {
+    expect(() => buildMatrix(["darwin-x64"])).toThrow(/hosted fallback is forbidden/);
+    expect(() => buildMatrix(["linux-x64"])).toThrow(/hosted fallback is forbidden/);
   });
+
+  test("an explicit hosted request fails before discovery or publication", () => {
+    const run = runDetect(["--event", "schedule", "--self-hosted", "false"], []);
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain("hosted fallback is forbidden");
+    expect(run.outputs.should_build).toBeUndefined();
+  });
+
+  test("workflow pins every job to the M5 and serializes platform builds", () => {
+    const workflow = readFileSync(join(root, ".github/workflows/prebuilt.yml"), "utf8");
+    const runners = workflow.match(/^    runs-on: .+$/gm)!;
+    expect(runners.length).toBe(6);
+    expect(runners.every((line) => line === "    runs-on: [self-hosted, macOS, ARM64, m5-pro]")).toBe(true);
+    expect(workflow).not.toContain("self_hosted:");
+    expect(workflow).not.toContain("inputs.self_hosted");
+    expect(workflow).toContain("max-parallel: 1");
+    expect(workflow).toContain('CARGO_BUILD_JOBS: "2"');
+  });
+
 });
 
 describe("detect on a manual dispatch", () => {

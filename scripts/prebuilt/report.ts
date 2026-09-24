@@ -130,7 +130,7 @@ export function reportBody(i: ReportInput, stage: Stage): string {
     "",
     "Dispatch `Prebuilt release` manually from the Actions tab with:",
     "",
-    "- `self_hosted=true` (hosted macOS minutes are billing-blocked)",
+    "- Keep the M5 Pro and its `m5-pro` Actions runner active; macOS and Linux both build there. No hosted fallback.",
     `- \`codex_version=${i.codexVersion ?? "auto"}\``,
     "- `publish=true` only when the artifact should become a release",
     "",

@@ -169,7 +169,7 @@ echo "==> Running build inside container..."
     export RUNNER_TEMP=/tmp
     export GITHUB_WORKSPACE=/workspace
     export GITHUB_ENV=/tmp/cx-env.sh
-    export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-8}"
+    export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-2}"
     export CARGO_TERM_COLOR=never
     export CARGO_PROFILE_RELEASE_DEBUG=0
     touch /tmp/cx-env.sh
