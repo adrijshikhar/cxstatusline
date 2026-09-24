@@ -159,7 +159,14 @@ function dispatchDeps(): { deps: MainDeps; calls: RecordedCall[]; env: Env } {
     log: cio.log,
     say: cio.say,
   });
-  return { deps: { context }, calls, env };
+  return {
+    deps: {
+      context,
+      transport: { fetch: async () => new Response(JSON.stringify([{ tag_name: "codex-v0.152.1", draft: false }])) },
+    },
+    calls,
+    env,
+  };
 }
 
 describe("command dispatch", () => {

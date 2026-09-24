@@ -9,7 +9,7 @@ export async function prompt<T>(element: (select: (value: T) => void) => ReactEl
   }
   let resolveSelection!: (value: T) => void;
   const selection = new Promise<T>((resolve) => { resolveSelection = resolve; });
-  const instance = render(element(resolveSelection), { exitOnCtrlC: false, preserveScrollback: true });
+  const instance = render(element(resolveSelection), { exitOnCtrlC: false, preserveScrollback: true, isCI: false });
   try {
     return await Promise.race([selection, instance.waitUntilExit().then(() => cancelled)]);
   } finally {

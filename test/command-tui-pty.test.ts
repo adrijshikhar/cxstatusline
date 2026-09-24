@@ -67,7 +67,8 @@ beforeAll(() => {
 
 afterAll(() => { if (tempDir) rmSync(tempDir, { recursive: true, force: true }); });
 
-test.skipIf(!supported || !ptyAvailable)("Node PTY preserves prompt/progress history, handles resize and cancellation, and restores terminal mode", () => {
+for (const ci of [false, true]) {
+test.skipIf(!supported || !ptyAvailable)(`Node PTY preserves prompt/progress history, handles resize and cancellation, and restores terminal mode (CI=${ci})`, () => {
   const python = String.raw`
 import fcntl, json, os, pty, select, signal, struct, sys, termios, time
 bundle = sys.argv[1]
@@ -75,7 +76,7 @@ def run(mode):
     pid, fd = pty.fork()
     if pid == 0:
         env = dict(os.environ, TERM='xterm-256color')
-        env.pop('CI', None)
+        env['CI'] = sys.argv[2]
         os.execvpe('node', ['node', bundle, mode], env)
     initial_size = (12, 30) if mode == 'small' else (24, 80)
     fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', initial_size[0], initial_size[1], 0, 0))
@@ -172,10 +173,11 @@ def run(mode):
 for mode in ('small', 'workflow', 'interrupt', 'failure'):
     print('PASS', mode, run(mode))
 `;
-  const result = spawnSync("python3", ["-c", python, bundle], { encoding: "utf8", timeout: 45000 });
+  const result = spawnSync("python3", ["-c", python, bundle, String(ci)], { encoding: "utf8", timeout: 45000 });
   if (result.error) throw result.error;
   expect(result.status, result.stderr || result.stdout).toBe(0);
   expect(result.stdout).toContain("PASS workflow");
   expect(result.stdout).toContain("PASS interrupt");
   expect(result.stdout).toContain("PASS failure");
 }, 60_000);
+}

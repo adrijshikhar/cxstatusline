@@ -72,6 +72,7 @@ export function createInstallProgressTracker(
       exitOnCtrlC: false,
       patchConsole: false,
       preserveScrollback: true,
+      isCI: false,
     });
   };
 
