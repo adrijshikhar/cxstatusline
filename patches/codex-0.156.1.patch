@@ -422,10 +422,10 @@ index 0000000..64a85de
 +  CX row three
 +  ? for shortcuts                                                         ⚠ 3 warnings · f2 to view
 diff --git a/codex-rs/tui/src/bottom_pane/chat_composer/warning_notice_tests.rs b/codex-rs/tui/src/bottom_pane/chat_composer/warning_notice_tests.rs
-index 2e11e17..8b469d7 100644
+index 2e11e17236..9a849c940f 100644
 --- a/codex-rs/tui/src/bottom_pane/chat_composer/warning_notice_tests.rs
 +++ b/codex-rs/tui/src/bottom_pane/chat_composer/warning_notice_tests.rs
-@@ -163,3 +163,72 @@ fn warnings_yield_to_queue_controls_and_complete_navigation_hints() {
+@@ -163,3 +163,149 @@ fn warnings_yield_to_queue_controls_and_complete_navigation_hints() {
          }
      }
  }
@@ -496,6 +496,83 @@ index 2e11e17..8b469d7 100644
 +                );
 +            }
 +        }
++    }
++}
++
++#[test]
++fn cxstatusline_rows_survive_real_slash_popup_input_and_resize() {
++    let mut composer = composer();
++    composer.set_collaboration_modes_enabled(true);
++    composer.set_cxstatusline_block(vec![
++        "CX row one".into(),
++        "CX row two".into(),
++        "CX row three".into(),
++    ]);
++    for ch in ['/', 'm'] {
++        composer.handle_key_event(KeyEvent::from(KeyCode::Char(ch)));
++    }
++    composer.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
++    assert!(matches!(composer.popups.active, ActivePopup::Command(_)));
++
++    for width in [80, 32] {
++        let options = composer.resolve_render_options(ComposerRenderOptions {
++            separate_status_line: true,
++            command_popup_placement: CommandPopupPlacement::AboveComposer,
++            ..Default::default()
++        });
++        let area = Rect::new(
++            0,
++            0,
++            width,
++            composer.desired_height_with_options(width, options),
++        );
++        let mut buffer = Buffer::empty(area);
++        composer.render_with_options(area, &mut buffer, None, options);
++        let layout = composer.layout_with_options(area, options);
++        assert!(
++            layout.popup.height > 0,
++            "slash popup should remain open at width {width}: {}",
++            text(&buffer)
++        );
++        assert_eq!(layout.cxstatusline.height, 3);
++        assert_eq!(layout.cxstatusline.bottom(), layout.footer.y);
++        for row in ["CX row one", "CX row two", "CX row three"] {
++            assert!(
++                text(&buffer).contains(row),
++                "missing {row} at width {width}"
++            );
++        }
++        let (x, y) = composer
++            .cursor_pos_with_options(area, options)
++            .expect("input cursor");
++        assert!(
++            x >= area.x && x < area.right(),
++            "cursor x outside width {width}: {x}"
++        );
++        assert!(
++            y >= area.y && y < area.bottom(),
++            "cursor y outside screen: {y}"
++        );
++    }
++
++    composer.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
++    assert!(matches!(composer.popups.active, ActivePopup::None));
++    let options = composer.resolve_render_options(ComposerRenderOptions {
++        separate_status_line: true,
++        command_popup_placement: CommandPopupPlacement::AboveComposer,
++        ..Default::default()
++    });
++    let area = Rect::new(0, 0, 80, composer.desired_height_with_options(80, options));
++    let layout = composer.layout_with_options(area, options);
++    assert_eq!(layout.cxstatusline.height, 3);
++
++    composer.set_task_running(true);
++    let running = text(&render(&composer, 80, 0));
++    for row in ["CX row one", "CX row two", "CX row three"] {
++        assert!(
++            running.contains(row),
++            "missing {row} while response is running"
++        );
 +    }
 +}
 diff --git a/codex-rs/tui/src/bottom_pane/footer.rs b/codex-rs/tui/src/bottom_pane/footer.rs

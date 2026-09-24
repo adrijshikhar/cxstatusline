@@ -53,6 +53,7 @@ export async function runBuild(flags: Record<string, string>): Promise<void> {
     patch_sha256: (await sha256File(patch)).sha256,
     upstream_tag: detection.upstreamTag,
     patch_file: detection.patchFile,
+    patch_version: String(detection.patchVersion),
   });
 }
 

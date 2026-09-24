@@ -201,6 +201,15 @@ echo "==> Running build inside container..."
     cargo build --release -p codex-cli --bin codex -p codex-code-mode-host --bin codex-code-mode-host
     cd /workspace
 
+    if [[ "$SKIP_TESTS" != "true" ]]; then
+      echo "==> Checking the three-row footer in an isolated terminal..."
+      python3 -m venv /tmp/footer-smoke-venv
+      /tmp/footer-smoke-venv/bin/python -m pip install --disable-pip-version-check --no-deps pyte==0.8.2 wcwidth==0.2.13
+      patch_version=$(bun -e "import {loadManifest, resolvePatch} from \"./src/patch/manifest\"; import {parseSemver} from \"./src/version\"; console.log(resolvePatch(loadManifest(\"patches\"), parseSemver(process.env.CODEX_VERSION)).patchVersion)")
+      /tmp/footer-smoke-venv/bin/python scripts/test-footer-smoke.py \
+        --codex /workspace/upstream/codex-rs/target/release/codex --expected-version "$CODEX_VERSION" --patch-version "$patch_version"
+    fi
+
     echo "==> Auditing licenses and notices..."
     bun scripts/prebuilt.ts rust-notices --upstream /workspace/upstream --out /tmp/rust-notices.md
 
