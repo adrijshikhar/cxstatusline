@@ -309,6 +309,16 @@ describe("command dispatch", () => {
     })).rejects.toThrow("terminal disconnected");
   });
 
+  test("an invalid picker manifest is reported without falling through into acquisition", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    writeFileSync(join(d.env.HOME!, "patches", "manifest.json"), '{"version":2}');
+    expect(await main(["install"], { ...t.io, isTTY: true, env: d.env }, d.deps)).toBe(1);
+    expect(t.err.join("")).toContain("manifest is malformed");
+    expect(t.out.join("")).not.toContain("Acquiring prebuilt");
+    expect(d.calls).toHaveLength(0);
+  });
+
   test("interactive install with promptVersion selecting compile proceeds in compile mode", async () => {
     const t = io("");
     const d = dispatchDeps();

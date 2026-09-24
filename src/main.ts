@@ -154,8 +154,9 @@ async function installCommand(argv: readonly string[], io: MainIo, deps: MainDep
     let manifest;
     try {
       manifest = loadManifest(ctx.patchesDir);
-    } catch {
-      // runInstall surfaces manifest failures during acquisition.
+    } catch (e) {
+      io.stderr(`Cannot load supported Codex versions: ${e instanceof Error ? e.message : String(e)}\n`);
+      return 1;
     }
     if (manifest) {
       const supported = supportedCodexVersions(manifest);
