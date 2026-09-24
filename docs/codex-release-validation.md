@@ -105,8 +105,8 @@ compatibility; Linux builds and production publication remain release-pipeline g
 The corrected 0.156.1 executable pair completed its full release build in 33m14s; the
 version probe returned `codex-cli 0.156.1`. The isolated AIM 0.8.1 session passed all v2
 assertions, including three visible rows while the slash menu was open. Logs:
-`logs/0.156.1-retry.log` and `logs/0.156.1-early-aim-smoke.log`. Focused Rust tests are
-still compiling; these results do not claim that gate passed yet.
+`logs/0.156.1-retry.log` and `logs/0.156.1-early-aim-smoke.log`. The focused Rust tests
+subsequently passed, as recorded below.
 
 ## Final v2 validation and release scope
 

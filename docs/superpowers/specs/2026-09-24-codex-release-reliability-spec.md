@@ -20,9 +20,9 @@ Every stable upstream Codex release within our support horizon must be accounted
 
 Branch `feat/patch-versions`, commit `63610c2167131c5cd4784800fe5f7d9a0d6bc3aa`, includes #100 and #103. Baseline: 981 tests passed, one optional upstream-checkout test skipped; typecheck and bundle build passed.
 
-Current ownership: v1 = 0.152.1, 0.153.0, 0.153.4, 0.154.0, 0.155.0, 0.155.1; v2 = 0.156.1. Support floor is the earliest manifest minimum, currently 0.152.1. Audit every stable release in the latest major.minor series and only .0 baselines in older series at or above that floor, including releases newer than the candidate. Preserve existing published assets and tested compatibility entries. Do not invent intermediate semver versions that upstream never released.
+Current ownership: v1 = 0.152.1, 0.153.0, 0.153.1, 0.153.4, 0.154.0, 0.155.0, 0.155.1; v2 = 0.156.0, 0.156.1. Support floor is the earliest manifest minimum, currently 0.152.1. Audit every stable release in the latest major.minor series and only .0 baselines in older series at or above that floor, including releases newer than the candidate. Preserve existing published assets and tested compatibility entries. Do not invent intermediate semver versions that upstream never released.
 
-Confirmed gaps: 0.153.1, 0.153.2, 0.153.3 and 0.156.0. `git apply --cached --check` succeeds with the neighboring v1 patch for the three 0.153 releases and the corrected v2 patch for 0.156.0. This is applicability evidence only, not completed build/runtime validation.
+Original gaps before the approved policy revision: 0.153.1, 0.153.2, 0.153.3 and 0.156.0. `git apply --cached --check` succeeds with the neighboring v1 patch for the three 0.153 releases and the corrected v2 patch for 0.156.0. This is applicability evidence only, not completed build/runtime validation.
 
 Confirmed failures:
 
