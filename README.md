@@ -151,11 +151,15 @@ the **[Usage guide](docs/usage.md)**.
 cxstatusline update
 ```
 
-`cxstatusline update` runs a pre-flight check: if upstream Codex has a new version but prebuilts have not yet been published, it warns and stops before touching your active installation.
+`cxstatusline update` downloads and verifies the latest published prebuilt supported by your cxstatusline package, then activates the complete patched Codex pair. It does not run Codex's self-updater or modify your original Codex installation. Open a new Codex session afterward.
+
+The same Codex version is checked for rebuilt patch assets; a newer installed version is never downgraded. If discovery or verification fails, the active pair stays in place. Update the cxstatusline npm package to pick up support for newer Codex versions.
 
 Options:
-- `cxstatusline update --compile`: updates upstream Codex and compiles the statusline from source for the new version.
-- `cxstatusline update --force`: updates upstream Codex to stock immediately, even if prebuilt binaries are not yet published.
+- `cxstatusline update --compile`: builds the latest locally supported Codex patch from source instead.
+- `--force`, `-y`, and `--yes` remain accepted for compatibility; updates already run without a prompt and always verify the pair.
+
+Session-start updates also leave a newer patched pair in place when the original Codex installation is older, including under the `every` policy.
 
 ## Revert
 

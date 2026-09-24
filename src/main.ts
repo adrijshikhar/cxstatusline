@@ -44,7 +44,6 @@ export interface MainDeps {
   readonly promptVersion?: (
     options: PromptVersionOptions,
   ) => Promise<PromptVersionSelection | string>;
-  readonly ask?: (question: string) => Promise<string>;
   readonly fetchPrebuilts?: (fetchFn?: FetchLike, repo?: string) => Promise<string[]>;
 }
 
@@ -56,7 +55,7 @@ export const USAGE = `usage: cxstatusline [command]
                               install the published Codex pair (--compile builds it from source)
   patch [--force]             build and install the patched Codex from source
   patch --simulate-drift <v>  record <v> as the installed version so the next session sees drift
-  update [--compile|--force]  run upstream's own updater, then install the pair for it
+  update [--compile|--force]  install the latest supported patched Codex pair
   hook [install|uninstall]    manage the SessionStart entry; bare 'hook' is what Codex runs
   doctor                      report toolchain, drift, hook and wrapper state
   policy [get|set <policy>]   view or update policy (every, stable-minors, manual)
@@ -220,8 +219,6 @@ async function updateCommand(argv: readonly string[], io: MainIo, deps: MainDeps
     {
       compile: flags.includes("--compile"),
       force: flags.includes("--force") || flags.includes("-y") || flags.includes("--yes"),
-      isTTY: io.isTTY,
-      ask: deps.ask,
       fetchPrebuilts: deps.fetchPrebuilts,
     },
     deps.transport,

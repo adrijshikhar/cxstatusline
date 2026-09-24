@@ -4,14 +4,13 @@ import type { Context } from "../context";
 import { acquireLock } from "../lock";
 import type { FetchLike, TransportOptions } from "../distribution/transport";
 import { releaseTag } from "../distribution";
-import { readUpstreamVersion } from "../codex/upstream";
 import { installHook } from "../hook/install";
 import { writeState } from "../state";
+import { readInstallation } from "./generation";
 import { compareSemver, parseSemver } from "../version";
 import { fetchPublishedPrebuiltVersions } from "../distribution/prebuilt";
-import { defaultAsk } from "../ui/prompt-version";
-import { describeOutcome, loadState, runAcquisition, upstreamFor, type PatchOutcome } from "./acquire";
-import { ManifestError, loadManifest, resolvePatch } from "./manifest";
+import { loadState, runAcquisition, type PatchOutcome } from "./acquire";
+import { ManifestError, loadManifest, resolvePatch, supportedCodexVersions, isCodexVersionSupported } from "./manifest";
 import {
   renderInstallFailure,
   renderInstallHeader,
@@ -90,11 +89,6 @@ export function fallbackAdvice(ctx: Context, version: string): string[] {
   return lines;
 }
 
-function report(ctx: Context, outcome: PatchOutcome): void {
-  ctx.say(describeOutcome(outcome));
-  if (outcome.kind === "unavailable") for (const line of fallbackAdvice(ctx, outcome.version)) ctx.say(line);
-}
-
 import { createInstallProgressTracker } from "../ui/progress";
 
 export function runPatch(ctx: Context, opts: { force: boolean }, transport: TransportOptions = {}): Promise<PatchOutcome> {
@@ -169,8 +163,6 @@ export async function runInstall(ctx: Context, opts: InstallOptions, transport: 
 export interface UpdateOptions {
   readonly force?: boolean;
   readonly compile?: boolean;
-  readonly isTTY?: boolean;
-  readonly ask?: (question: string) => Promise<string>;
   readonly fetchPrebuilts?: (fetchFn?: FetchLike, repo?: string) => Promise<string[]>;
 }
 
@@ -188,33 +180,6 @@ export async function probeUpstreamLatest(fetchFn: FetchLike): Promise<string | 
     return data.tag_name.replace(/^rust-v/, "");
   } catch {
     return null;
-  }
-}
-
-export async function probePrebuiltExists(
-  targetCodexVersion: string,
-  cxVersionOrFetch: string | FetchLike,
-  fetchFnOrBaseUrl?: FetchLike | string,
-  baseUrl?: string,
-): Promise<boolean> {
-  const fetchFn: FetchLike =
-    typeof cxVersionOrFetch === "function"
-      ? cxVersionOrFetch
-      : ((fetchFnOrBaseUrl as FetchLike | undefined) ?? (globalThis.fetch as unknown as FetchLike));
-  const resolvedBaseUrl: string | undefined =
-    typeof cxVersionOrFetch === "function"
-      ? (typeof fetchFnOrBaseUrl === "string" ? fetchFnOrBaseUrl : baseUrl)
-      : baseUrl;
-
-  try {
-    const tag = releaseTag(targetCodexVersion);
-    const url = resolvedBaseUrl
-      ? `${resolvedBaseUrl}/${tag}/manifest.json`
-      : `https://github.com/adrijshikhar/cxstatusline/releases/download/${tag}/manifest.json`;
-    const res = await fetchFn(url, { method: "HEAD", signal: AbortSignal.timeout(5000) });
-    return res.ok || res.status === 302 || res.status === 301;
-  } catch {
-    return false;
   }
 }
 
@@ -250,180 +215,34 @@ export async function probeRemoteCandidate(
   }
 }
 
-/**
- * `codex update` -> upstream's own updater, then the prebuilt pair for whatever it landed on.
- * Performs a pre-flight probe: if upstream is moving to a version without a published prebuilt,
- * warns and stops before touching stock Codex unless --force or --compile is specified.
- */
+/** Install the latest supported pair directly; upstream is only retained for revert. */
 export async function runUpdate(
   ctx: Context,
-  optsOrTransport: UpdateOptions | TransportOptions = {},
-  maybeTransport?: TransportOptions,
+  opts: UpdateOptions = {},
+  transport: TransportOptions = {},
 ): Promise<number> {
-  const isOpts =
-    typeof optsOrTransport === "object" &&
-    optsOrTransport !== null &&
-    ("compile" in optsOrTransport ||
-      "force" in optsOrTransport ||
-      "isTTY" in optsOrTransport ||
-      "ask" in optsOrTransport ||
-      "fetchPrebuilts" in optsOrTransport);
-
-  let activeOpts: UpdateOptions = isOpts ? (optsOrTransport as UpdateOptions) : {};
-  const transport: TransportOptions =
-    !isOpts && ("baseUrl" in optsOrTransport || "fetch" in optsOrTransport)
-      ? (optsOrTransport as TransportOptions)
-      : (maybeTransport ?? {});
-
-  const state = loadState(ctx);
-  const located = upstreamFor(ctx, state);
-  if ("reason" in located) {
-    ctx.say(`no upstream Codex to update: ${located.reason}`);
+  const manifest = loadManifest(ctx.patchesDir);
+  const versions = opts.compile
+    ? supportedCodexVersions(manifest)
+    : await (opts.fetchPrebuilts ?? fetchPublishedPrebuiltVersions)(transport.fetch);
+  const target = versions
+    .filter((version) => isCodexVersionSupported(manifest, version))
+    .sort((a, b) => compareSemver(parseSemver(b)!, parseSemver(a)!))[0];
+  if (!target) {
+    ctx.say(opts.compile
+      ? "No supported source patch is available. Update the cxstatusline package and retry."
+      : "No supported prebuilt release could be found. Check your connection or update the cxstatusline package and retry. Your installation is unchanged.");
     return 1;
   }
 
-  const current = readUpstreamVersion(located.bin, ctx.run);
-  const fetchFn: FetchLike = transport.fetch ?? fetch;
-
-  if (current && !activeOpts.force && !activeOpts.compile) {
-    const latest = await probeUpstreamLatest(fetchFn);
-    if (latest && latest !== current.raw) {
-      const available = await probePrebuiltExists(latest, fetchFn, transport.baseUrl);
-      if (!available) {
-        const prebuiltsFetcher = activeOpts.fetchPrebuilts ?? fetchPublishedPrebuiltVersions;
-        const publishedPrebuilts = await prebuiltsFetcher(fetchFn);
-        const currentSem = parseSemver(current.raw);
-        const newerPrebuilts = currentSem
-          ? publishedPrebuilts.filter((v) => {
-              const s = parseSemver(v);
-              return s !== null && compareSemver(s, currentSem) > 0;
-            })
-          : [];
-        const highestAvailable = newerPrebuilts[0];
-
-        if (highestAvailable) {
-          ctx.say(`Warning: Upstream Codex update available: ${current.raw} -> ${latest}.`);
-          ctx.say(`However, cxstatusline has not yet published prebuilt binaries for Codex ${latest}.`);
-          ctx.say(`Newer prebuilt available: Codex ${highestAvailable} is published and ready to install.`);
-          ctx.say("");
-
-          if (!activeOpts.isTTY) {
-            ctx.say("Options:");
-            ctx.say(`  - Install latest available prebuilt: cxstatusline install --codex-version ${highestAvailable}`);
-            ctx.say(`  - Wait until cxstatusline publishes prebuilt binaries for ${latest}.`);
-            ctx.say("  - Update and compile from source:    cxstatusline update --compile");
-            ctx.say("  - Update to stock Codex anyway:      cxstatusline update --force");
-            return 1;
-          }
-
-          ctx.say("How would you like to proceed?");
-          ctx.say(`  1) Install latest available prebuilt (Codex ${highestAvailable}) [recommended]`);
-          ctx.say(`  2) Compile Codex ${latest} from source`);
-          ctx.say(`  3) Update to stock Codex ${latest} anyway`);
-          ctx.say("  4) Cancel");
-
-          const askFn = activeOpts.ask ?? defaultAsk;
-          let selectedAction: "prebuilt" | "compile" | "stock" | "cancel" | null = null;
-          while (!selectedAction) {
-            const choice = (await askFn("Enter choice [1-4] (default 1): ")).trim();
-            if (choice === "1" || choice === "") {
-              selectedAction = "prebuilt";
-            } else if (choice === "2") {
-              selectedAction = "compile";
-            } else if (choice === "3") {
-              selectedAction = "stock";
-            } else if (choice === "4") {
-              selectedAction = "cancel";
-            } else {
-              ctx.say(`Invalid choice "${choice}". Please select 1, 2, 3, or 4.`);
-            }
-          }
-
-          if (selectedAction === "prebuilt") {
-            ctx.say(`Installing prebuilt binaries for Codex ${highestAvailable}...`);
-            return runInstall(ctx, { compile: false, codexVersion: highestAvailable }, transport);
-          }
-          if (selectedAction === "cancel") {
-            ctx.say("Update cancelled.");
-            return 0;
-          }
-          if (selectedAction === "compile") {
-            activeOpts = { ...activeOpts, compile: true };
-          } else if (selectedAction === "stock") {
-            activeOpts = { ...activeOpts, force: true };
-          }
-        } else {
-          ctx.say(`Warning: Upstream Codex update available: ${current.raw} -> ${latest}.`);
-          ctx.say(`However, cxstatusline has not yet published prebuilt binaries for Codex ${latest}.`);
-          ctx.say("Updating now will replace your patched launcher with stock Codex.");
-          ctx.say("");
-
-          if (!activeOpts.isTTY) {
-            ctx.say("Options:");
-            ctx.say("  - Wait until cxstatusline publishes prebuilt binaries for this version.");
-            ctx.say("  - Update and compile from source: cxstatusline update --compile");
-            ctx.say("  - Update to stock Codex anyway:   cxstatusline update --force");
-            return 1;
-          }
-
-          ctx.say("How would you like to proceed?");
-          ctx.say(`  1) Compile Codex ${latest} from source`);
-          ctx.say(`  2) Update to stock Codex ${latest} anyway`);
-          ctx.say("  3) Cancel");
-
-          const askFn = activeOpts.ask ?? defaultAsk;
-          let selectedAction: "compile" | "stock" | "cancel" | null = null;
-          while (!selectedAction) {
-            const choice = (await askFn("Enter choice [1-3] (default 3): ")).trim();
-            if (choice === "1") {
-              selectedAction = "compile";
-            } else if (choice === "2") {
-              selectedAction = "stock";
-            } else if (choice === "3" || choice === "") {
-              selectedAction = "cancel";
-            } else {
-              ctx.say(`Invalid choice "${choice}". Please select 1, 2, or 3.`);
-            }
-          }
-
-          if (selectedAction === "cancel") {
-            ctx.say("Update cancelled.");
-            return 0;
-          }
-          if (selectedAction === "compile") {
-            activeOpts = { ...activeOpts, compile: true };
-          } else if (selectedAction === "stock") {
-            activeOpts = { ...activeOpts, force: true };
-          }
-        }
-      }
-    } else if (latest && latest === current.raw) {
-      ctx.say(`Codex is already at the latest version (${current.raw}).`);
-      return 0;
-    }
+  const installed = readInstallation(ctx.paths)?.codexVersion ?? loadState(ctx).patched_from;
+  const current = installed ? parseSemver(installed) : null;
+  if (current && compareSemver(current, parseSemver(target)!) > 0) {
+    ctx.say(`Installed Codex ${installed} is newer than the latest supported ${opts.compile ? "patch" : "prebuilt"} (${target}); leaving it unchanged.`);
+    return 0;
   }
-
-  ctx.say(`running upstream updater: ${located.bin} update`);
-  const r = ctx.run(located.bin, ["update"], { interactive: true });
-  if (r.status !== 0) {
-    ctx.say(`upstream updater exited ${String(r.status)}; see its output above. Not installing.`);
-    return 1;
-  }
-
-  const source = activeOpts.compile ? "compiled" : "prebuilt";
-  const progress = createInstallProgressTracker({
-    isTTY: process.stdout?.isTTY,
-    write: (s) => process.stdout.write(s),
-    say: (l) => ctx.say(l),
-  }, transport);
-  let outcome: PatchOutcome;
-  try {
-    outcome = await runAcquisition(ctx, { source, force: true }, progress.transport);
-  } finally {
-    progress.finish();
-  }
-  report(ctx, outcome);
-  return outcome.kind === "installed" ? 0 : 1;
+  // Re-check even the same version: a release may contain a newer statusline patch.
+  return runInstall(ctx, { compile: opts.compile ?? false, codexVersion: target }, transport);
 }
 
 export function appendLog(file: string, line: string): void {

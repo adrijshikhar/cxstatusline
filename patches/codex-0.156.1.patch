@@ -267,7 +267,7 @@ index 1129bbe..dfd794e 100644
  
  #[derive(Debug, Clone, PartialEq, Eq)]
 diff --git a/codex-rs/tui/src/bottom_pane/chat_composer.rs b/codex-rs/tui/src/bottom_pane/chat_composer.rs
-index 42937b1..7d745cd 100644
+index 42937b1..bcbbe5b 100644
 --- a/codex-rs/tui/src/bottom_pane/chat_composer.rs
 +++ b/codex-rs/tui/src/bottom_pane/chat_composer.rs
 @@ -319,6 +319,7 @@ use super::footer::inset_footer_hint_area;
@@ -309,46 +309,93 @@ index 42937b1..7d745cd 100644
      pub(crate) fn set_side_conversation_context_label(&mut self, label: Option<String>) -> bool {
          if self.footer.side_conversation_context_label == label {
              return false;
-@@ -4685,6 +4696,26 @@ impl ChatComposer {
-                 } else {
-                     footer_rect
-                 };
-+                let cxstatusline_height =
-+                    (footer_props.cxstatusline_block.len() as u16).min(hint_rect.height);
-+                if cxstatusline_height > 0 {
-+                    render_cxstatusline_block(
-+                        Rect::new(
-+                            hint_rect.x,
-+                            hint_rect.y,
-+                            hint_rect.width,
-+                            cxstatusline_height,
-+                        ),
-+                        buf,
-+                        &footer_props.cxstatusline_block,
-+                    );
-+                }
-+                let hint_rect = Rect::new(
-+                    hint_rect.x,
-+                    hint_rect.y.saturating_add(cxstatusline_height),
-+                    hint_rect.width,
-+                    hint_rect.height.saturating_sub(cxstatusline_height),
-+                );
-                 if let Some(input) = self.draft.textarea.vim_query() {
-                     input.render(inset_footer_hint_area(hint_rect), buf);
-                 } else if let Some(line) = self.history_search_footer_line() {
+@@ -4597,6 +4608,7 @@ impl ChatComposer {
+             remote_images: remote_images_rect,
+             textarea: textarea_rect,
+             popup: popup_rect,
++            cxstatusline,
+             footer: footer_rect,
+         } = self.layout_with_options(area, options);
+         self.render_status_surface(status, buf);
+@@ -4640,6 +4652,7 @@ impl ChatComposer {
+                 }
+             }
+         }
++        render_cxstatusline_block(cxstatusline, buf, &self.footer.cxstatusline_block);
+         let transcript_hint_area = inset_footer_hint_area(footer_rect);
+         let warning_notice = self.warning_notice_layout(transcript_hint_area, options);
+         let warning_area = warning_notice.as_ref().map(|(area, _)| *area);
+diff --git a/codex-rs/tui/src/bottom_pane/chat_composer/composer_layout.rs b/codex-rs/tui/src/bottom_pane/chat_composer/composer_layout.rs
+index b79c28b..c62c4a6 100644
+--- a/codex-rs/tui/src/bottom_pane/chat_composer/composer_layout.rs
++++ b/codex-rs/tui/src/bottom_pane/chat_composer/composer_layout.rs
+@@ -102,6 +102,12 @@ impl ChatComposer {
+             (composer, popup, popup)
+         };
+         footer_rect.y = footer_rect.y.saturating_add(status.height);
++        let cxstatusline = Rect {
++            height: (self.footer.cxstatusline_block.len() as u16).min(footer_rect.height),
++            ..footer_rect
++        };
++        footer_rect.y = footer_rect.y.saturating_add(cxstatusline.height);
++        footer_rect.height = footer_rect.height.saturating_sub(cxstatusline.height);
+         // Keep the draft visible when clipped.
+         let voice_rows = voice_rows * u16::from(composer_rect.height >= voice_rows + 3);
+         let mut textarea_rect = composer_rect.inset(Insets::tlbr(
+@@ -133,6 +139,7 @@ impl ChatComposer {
+             remote_images: remote_images_rect,
+             textarea: textarea_rect,
+             popup: popup_rect,
++            cxstatusline,
+             footer: footer_rect,
+         }
+     }
 diff --git a/codex-rs/tui/src/bottom_pane/chat_composer/footer_state.rs b/codex-rs/tui/src/bottom_pane/chat_composer/footer_state.rs
-index f13aaa7..089eb36 100644
+index f13aaa7..2ace588 100644
 --- a/codex-rs/tui/src/bottom_pane/chat_composer/footer_state.rs
 +++ b/codex-rs/tui/src/bottom_pane/chat_composer/footer_state.rs
-@@ -136,6 +136,7 @@ impl super::ChatComposer {
+@@ -1,6 +1,7 @@
+ //! Footer and status-row presentation state for the chat composer.
+ //! Owners schedule flash expiry redraws; replacing a draft clears its flash.
+ //! One resolved layout supplies the status, input, popup, and hint rectangles to each consumer.
++//! Renderer-owned status rows reserve their own rectangle above every native footer mode.
+ //! Slash-command and unified mention suggestions preserve passive footer content while keeping input.
+ //! Interactive transcript footers keep focus over nonempty composer hints. Their owner projects
+ //! actual pending chord hints; unrelated hints resume when the transcript interaction closes.
+@@ -39,6 +40,7 @@ pub(super) struct ComposerLayout {
+     pub(super) remote_images: Rect,
+     pub(super) textarea: Rect,
+     pub(super) popup: Rect,
++    pub(super) cxstatusline: Rect,
+     pub(super) footer: Rect,
+ }
+
+@@ -129,16 +131,22 @@ impl super::ChatComposer {
+
+     pub(super) fn footer_hint_height(&self, width: u16, options: ComposerRenderOptions<'_>) -> u16 {
+         if self.show_warning_notice(options) || self.shortcuts_above_composer(options) {
+-            return 1;
++            return (self.footer.cxstatusline_block.len() as u16).saturating_add(1);
+         }
+         options
+             .footer
              .map_or_else(
                  || {
                      self.custom_footer_height()
-+                        .map(|height| height.saturating_add(self.footer.cxstatusline_block.len() as u16))
++                        .map(|height| {
++                            height.saturating_add(self.footer.cxstatusline_block.len() as u16)
++                        })
                          .unwrap_or_else(|| footer_height(&self.hint_footer_props(options), width))
                  },
-                 |footer| footer.text.height().try_into().unwrap_or(u16::MAX),
-@@ -213,6 +214,7 @@ pub(super) struct FooterState {
+-                |footer| footer.text.height().try_into().unwrap_or(u16::MAX),
++                |footer| {
++                    let height: u16 = footer.text.height().try_into().unwrap_or(u16::MAX);
++                    height.saturating_add(self.footer.cxstatusline_block.len() as u16)
++                },
+             )
+             .max(u16::from(options.separate_status_line))
+     }
+@@ -213,6 +221,7 @@ pub(super) struct FooterState {
      pub(super) status_line_value: Option<Line<'static>>,
      pub(super) status_line_hyperlink_url: Option<String>,
      pub(super) status_line_enabled: bool,
@@ -356,27 +403,101 @@ index f13aaa7..089eb36 100644
      pub(super) side_conversation_context_label: Option<String>,
      pub(super) active_agent_label: Option<String>,
      pub(super) external_editor_key: Option<ShortcutHint>,
-diff --git a/codex-rs/tui/src/bottom_pane/chat_composer/history_search.rs b/codex-rs/tui/src/bottom_pane/chat_composer/history_search.rs
-index 9b14b39..884c78d 100644
---- a/codex-rs/tui/src/bottom_pane/chat_composer/history_search.rs
-+++ b/codex-rs/tui/src/bottom_pane/chat_composer/history_search.rs
-@@ -475,6 +475,16 @@ impl ChatComposer {
-     /// terminal backends do not receive an off-screen cursor position.
-     pub(super) fn history_search_cursor_pos(&self, hint_rect: Rect) -> Option<(u16, u16)> {
-         self.history_search.as_ref()?;
-+        let hint_rect = Rect::new(
-+            hint_rect.x,
-+            hint_rect
-+                .y
-+                .saturating_add(self.footer.cxstatusline_block.len() as u16),
-+            hint_rect.width,
-+            hint_rect
-+                .height
-+                .saturating_sub(self.footer.cxstatusline_block.len() as u16),
-+        );
-         if hint_rect.is_empty() {
-             return None;
+diff --git a/codex-rs/tui/src/bottom_pane/chat_composer/snapshots/codex_tui__bottom_pane__chat_composer__warning_notice__tests__cxstatusline_three_rows_with_warnings.snap b/codex-rs/tui/src/bottom_pane/chat_composer/snapshots/codex_tui__bottom_pane__chat_composer__warning_notice__tests__cxstatusline_three_rows_with_warnings.snap
+new file mode 100644
+index 0000000..64a85de
+--- /dev/null
++++ b/codex-rs/tui/src/bottom_pane/chat_composer/snapshots/codex_tui__bottom_pane__chat_composer__warning_notice__tests__cxstatusline_three_rows_with_warnings.snap
+@@ -0,0 +1,12 @@
++---
++source: tui/src/bottom_pane/chat_composer/warning_notice_tests.rs
++expression: "text(&render(&composer, 100, 3))"
++---
++
++› Ask Codex
++
++  MODEL · ~/project
++  CX row one
++  CX row two
++  CX row three
++  ? for shortcuts                                                         ⚠ 3 warnings · f2 to view
+diff --git a/codex-rs/tui/src/bottom_pane/chat_composer/warning_notice_tests.rs b/codex-rs/tui/src/bottom_pane/chat_composer/warning_notice_tests.rs
+index 2e11e17..8b469d7 100644
+--- a/codex-rs/tui/src/bottom_pane/chat_composer/warning_notice_tests.rs
++++ b/codex-rs/tui/src/bottom_pane/chat_composer/warning_notice_tests.rs
+@@ -163,3 +163,72 @@ fn warnings_yield_to_queue_controls_and_complete_navigation_hints() {
          }
+     }
+ }
++
++#[test]
++fn cxstatusline_rows_survive_warning_and_menu_transitions() {
++    let mut composer = composer();
++    composer.set_cxstatusline_block(vec![
++        "CX row one".into(),
++        "CX row two".into(),
++        "CX row three".into(),
++    ]);
++    for draft in ["", "/", "", "hello", ""] {
++        composer.set_text_content(draft.into(), Vec::new(), Vec::new());
++        for count in [0, 3, 0] {
++            let screen = text(&render(&composer, /*width*/ 100, count));
++            for row in ["CX row one", "CX row two", "CX row three"] {
++                assert!(screen.contains(row), "missing {row}: {screen}");
++            }
++        }
++    }
++    insta::assert_snapshot!(
++        "cxstatusline_three_rows_with_warnings",
++        text(&render(&composer, /*width*/ 100, /*count*/ 3))
++    );
++}
++
++#[test]
++fn cxstatusline_rows_preserve_transcript_cursor_and_shortcut_help() {
++    let mut composer = composer();
++    composer.set_cxstatusline_block(vec![
++        "CX row one".into(),
++        "CX row two".into(),
++        "CX row three".into(),
++    ]);
++    let footer = TranscriptFooter {
++        text: "transcript input".into(),
++        cursor_column: Some(3),
++        is_interactive: true,
++    };
++    for mode in [FooterMode::ComposerEmpty, FooterMode::ShortcutOverlay] {
++        composer.footer.mode = mode;
++        for transcript in [None, Some(&footer)] {
++            let options = composer.resolve_render_options(ComposerRenderOptions {
++                footer: transcript,
++                ..Default::default()
++            });
++            let area = Rect::new(
++                0,
++                0,
++                100,
++                composer.desired_height_with_options(100, options),
++            );
++            let mut buffer = Buffer::empty(area);
++            composer.render_with_options(area, &mut buffer, None, options);
++            let screen = text(&buffer);
++            for row in ["CX row one", "CX row two", "CX row three"] {
++                assert!(screen.contains(row), "missing {row}: {screen}");
++            }
++            if transcript.is_some() {
++                let row = screen
++                    .lines()
++                    .position(|line| line.contains("transcript input"))
++                    .unwrap();
++                assert_eq!(
++                    composer.cursor_pos_with_options(area, options),
++                    Some((5, row as u16))
++                );
++            }
++        }
++    }
++}
 diff --git a/codex-rs/tui/src/bottom_pane/footer.rs b/codex-rs/tui/src/bottom_pane/footer.rs
 index 76a13b7..8479e1e 100644
 --- a/codex-rs/tui/src/bottom_pane/footer.rs

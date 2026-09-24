@@ -42,7 +42,7 @@ export function compareSemver(a: SemVer, b: SemVer): -1 | 0 | 1 {
 /** Should the hook rebuild for `upstream`, given what we last built from and the policy? */
 export function needsRepatch(upstream: SemVer, patched: SemVer | null, policy: Policy): boolean {
   if (policy === "manual") return false;
-  if (policy === "every") return patched === null || compareSemver(upstream, patched) !== 0;
+  if (policy === "every") return patched === null || compareSemver(upstream, patched) > 0;
   if (upstream.pre !== null) return false;
   if (patched === null) return true;
   const minorOf = (v: SemVer): number => v.major * 100_000 + v.minor;

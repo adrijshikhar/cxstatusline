@@ -40,14 +40,14 @@ describe("needsRepatch", () => {
     expect(needsRepatch(v("0.153.0-alpha.3"), v("0.152.1"), "stable-minors")).toBe(false);
     expect(needsRepatch(v("1.0.0"), v("0.152.1"), "stable-minors")).toBe(true);
   });
-  test("every: any difference, including prerelease", () => {
+  test("every: any upgrade, including prerelease", () => {
     expect(needsRepatch(v("0.152.2"), v("0.152.1"), "every")).toBe(true);
     expect(needsRepatch(v("0.153.0-alpha.3"), v("0.152.1"), "every")).toBe(true);
     expect(needsRepatch(v("0.152.1"), v("0.152.1"), "every")).toBe(false);
   });
-  test("a downgrade is held by stable-minors but rebuilt under every", () => {
+  test("an older upstream never downgrades a directly installed pair", () => {
     expect(needsRepatch(v("0.151.0"), v("0.152.1"), "stable-minors")).toBe(false);
-    expect(needsRepatch(v("0.151.0"), v("0.152.1"), "every")).toBe(true);
+    expect(needsRepatch(v("0.151.0"), v("0.152.1"), "every")).toBe(false);
   });
 });
 
