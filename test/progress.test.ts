@@ -1,3 +1,4 @@
+import { PassThrough } from "node:stream";
 import { describe, expect, test } from "bun:test";
 import {
   formatBytes,
@@ -51,10 +52,8 @@ describe("renderProgressBar", () => {
 describe("createInstallProgressTracker", () => {
   test("reports status transitions cleanly", () => {
     const lines: string[] = [];
-    const written: string[] = [];
     const tracker = createInstallProgressTracker({
       isTTY: false,
-      write: (s) => written.push(s),
       say: (l) => lines.push(l),
     });
 
@@ -78,7 +77,6 @@ describe("createInstallProgressTracker", () => {
     const lines: string[] = [];
     const tracker = createInstallProgressTracker({
       isTTY: false,
-      write: () => {},
       say: (l) => lines.push(l),
     });
 
@@ -97,32 +95,41 @@ describe("createInstallProgressTracker", () => {
     expect(output).toContain("100%");
   });
 
-  test("writes carriage-return progress and manages cursor in TTY mode", () => {
+  test("Ink renders live progress, clears it for status, and releases the terminal", async () => {
+    const stdout = Object.assign(new PassThrough(), { columns: 80, rows: 24, isTTY: true });
     const writes: string[] = [];
+    const lines: string[] = [];
+    stdout.on("data", (chunk) => writes.push(chunk.toString()));
+    const progressEvents: number[] = [];
     const tracker = createInstallProgressTracker({
       isTTY: true,
-      write: (s) => writes.push(s),
-      say: () => {},
-    });
-
-    const total = 100 * 1024 * 1024;
-    tracker.transport.onProgress?.(50 * 1024 * 1024, total);
-    // Cursor hidden
-    expect(writes.some((w) => w.includes("\x1b[?25l"))).toBe(true);
-    // Line cleared with \r\x1b[2K
-    expect(writes.some((w) => w.includes("\r\x1b[2K") && w.includes("50%"))).toBe(true);
-
-    tracker.finish();
-    // Line cleared and cursor restored on finish
-    expect(writes.some((w) => w.includes("\x1b[2K"))).toBe(true);
-    expect(writes.some((w) => w.includes("\x1b[?25h"))).toBe(true);
+      stdout: stdout as unknown as NodeJS.WriteStream,
+      say: (line) => lines.push(line),
+    }, { onProgress: (loaded) => progressEvents.push(loaded) });
+    try {
+      tracker.transport.onProgress?.(512, 1024);
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      expect(writes.join("")).toContain("50%");
+      expect(writes.join("")).toContain("512 B / 1.0 KB");
+      tracker.transport.onProgress?.(1024, 1024);
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      expect(writes.join("")).toContain("100%");
+      tracker.transport.onStatus?.("download-done", "Archive ready");
+      expect(lines.join("\n")).toContain("Archive ready");
+      // A second download can mount a fresh progress view after the first is cleared.
+      tracker.transport.onStatus?.("download", "Next archive");
+      tracker.transport.onProgress?.(2048, null);
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      expect(writes.join("")).toContain("2.0 KB downloaded");
+      expect(progressEvents).toEqual([512, 1024, 2048]);
+    } finally { tracker.finish(); tracker.finish(); }
+    expect(writes.join("")).toContain("\x1b[?25h");
   });
 
   test("reports compile phases accurately", () => {
     const lines: string[] = [];
     const tracker = createInstallProgressTracker({
       isTTY: false,
-      write: () => {},
       say: (l) => lines.push(l),
     });
 
