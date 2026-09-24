@@ -5,6 +5,7 @@
   "patches": [
     { "patchVersion": 1, "min": "0.152.1", "max": "0.152.1", "file": "codex-0.152.1.patch" },
     { "patchVersion": 1, "min": "0.153.0", "max": "0.153.0", "file": "codex-0.153.0.patch" },
+    { "patchVersion": 1, "min": "0.153.1", "max": "0.153.1", "file": "codex-0.153.4.patch" },
     { "patchVersion": 1, "min": "0.153.4", "max": "0.153.4", "file": "codex-0.153.4.patch" },
     { "patchVersion": 1, "min": "0.154.0", "max": "0.154.0", "file": "codex-0.154.0.patch" },
     { "patchVersion": 1, "min": "0.155.0", "max": "0.155.0", "file": "codex-0.155.0.patch" },

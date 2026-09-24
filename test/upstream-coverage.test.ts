@@ -8,7 +8,10 @@ import { classifyCoverage, fetchAllReleasePages, fetchUpstreamPages, stableUpstr
 import type { GhRunner } from "../scripts/prebuilt/gh";
 
 const patchesDir = join(import.meta.dir, "..", "patches");
-const manifest = loadManifest(patchesDir);
+const shipped = loadManifest(patchesDir);
+// Preserve the original gap scenario as real compatibility entries are validated and added.
+const manifest = { ...shipped, patches: shipped.patches.filter((patch) =>
+  !["0.153.1", "0.153.2", "0.153.3", "0.156.0"].includes(patch.min)) };
 
 function metadata(version: string): ReleaseManifest {
   const patch = manifest.patches.find((entry) => entry.min === version)!;

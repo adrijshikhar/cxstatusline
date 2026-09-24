@@ -207,8 +207,10 @@ Rust patch versions are independent of Codex and cxstatusline package versions. 
 
 | Rust patch | Tested Codex versions |
 | --- | --- |
-| v1 | 0.152.1, 0.153.0, 0.153.4, 0.154.0, 0.155.0, 0.155.1 |
+| v1 | 0.152.1, 0.153.0, 0.153.1, 0.153.4, 0.154.0, 0.155.0, 0.155.1 |
 | v2 | 0.156.1 |
+
+Codex 0.153.1 is validated on macOS ARM64; its prebuilt release is pending. Compatibility entries do not imply that a prebuilt has already been published.
 
 `patches/manifest.json` records that ownership with `patchVersion` on each compatibility entry. Its `version: 2` is the manifest format, not the Rust patch version. Entries can describe inclusive ranges, but we currently list only the exact tested versions. Version-specific patch files remain separate because upstream source layouts differ.
 

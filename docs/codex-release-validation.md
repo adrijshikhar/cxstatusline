@@ -9,7 +9,7 @@ explicit coverage gap.
 
 | Upstream tag | Patch / revision | Patch applies | Rust layout tests | Native build, version probe, footer smoke |
 | --- | --- | --- | --- | --- |
-| `rust-v0.153.1` | `codex-0.153.4.patch` / v1 | Pass | Pending | Pending |
+| `rust-v0.153.1` | `codex-0.153.4.patch` / v1 | Pass | 9 passed | Pass (direct + AIM) |
 | `rust-v0.153.2` | `codex-0.153.4.patch` / v1 | Pass | Pending | Pending |
 | `rust-v0.153.3` | `codex-0.153.4.patch` / v1 | Pass | Pending | Pending |
 | `rust-v0.156.0` | `codex-0.156.1.patch` / v2 | Pass | Pending | Pending |
@@ -90,3 +90,13 @@ adapter). A temporary wrapper puts the validation binary first on PATH and launc
 renderer. Idle, draft typing, menu close, refresh, 36×18/120×32 resize, and cursor
 placement passed. Evidence: `logs/0.153.1-aim-smoke.log` in the remote validation root.
 This proves the session check, not completion of the still-running Rust test gate.
+
+## Completed compatibility evidence
+
+`0.153.1`: upstream commit `985641272869835d01d025ed2a218fbbce35fa9f`, unchanged v1
+patch SHA-256 `e7a6b28bcc06ea0cd56913235803c7406fcb0b070e6256e9e08b3dbe21d6d3f6`.
+The synchronized release executable pair built successfully; the version probe returned
+`codex-cli 0.153.1`. All 9 focused `cxstatusline` Rust tests passed (4,102 unrelated tests
+filtered out). Direct and AIM PTY smoke checks passed. Verified binaries and provenance are
+retained in `verified/0.153.1/` under the remote root. This establishes macOS ARM64
+compatibility; Linux builds and production publication remain release-pipeline gates.
