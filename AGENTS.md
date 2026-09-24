@@ -19,7 +19,7 @@
 - Never use GitHub-hosted runners or the current laptop for Codex/Rust builds. Never change runner selection because the M5 is offline, asleep, unreachable, or busy. Wait and tell the user the M5 and its runner must be active.
 - Before dispatching a prebuilt workflow, check the exact workflow ref and all resolved runner labels. Old tags may still expose hosted options: do not dispatch them. Use a ref with the M5-only guardrail.
 - State that the M5 is required whenever these builds are pending. Do not tell the user it can sleep until all M5 work is finished.
-- Run platform builds sequentially with at most two Rust compiler jobs. Keep existing verified outputs; do not restart expensive builds unnecessarily.
+- Run platform builds sequentially and preserve the existing compiler settings: 3 jobs for native macOS and 8 inside Docker. Do not tune these limits without an explicit user request. Keep existing verified outputs; do not restart expensive builds unnecessarily.
 - A different build machine requires an explicit new user instruction. General permission to continue or release does not authorize a runner change.
 
 - Preserve the existing rebuilder toolchain/setup. Do not add hosted-runner bootstrap actions, Python installers, or new environment dependencies without an explicit user request. Run the existing build/test flow on the M5; keep supplemental footer smoke checks separate from builder setup.
