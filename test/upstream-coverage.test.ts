@@ -4,7 +4,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadManifest } from "../src/patch/manifest";
 import { DEFAULT_PREBUILT_PLATFORMS, type ReleaseManifest } from "../src/distribution";
-import { classifyCoverage, fetchAllReleasePages, stableUpstreamVersions, type CoverageRelease } from "../scripts/upstream-coverage";
+import { classifyCoverage, fetchAllReleasePages, stableUpstreamVersions, upsertCoverageIssue, COVERAGE_ISSUE_MARKER, COVERAGE_ISSUE_TITLE, type CoverageRelease, type CoverageReport } from "../scripts/upstream-coverage";
+import type { GhRunner } from "../scripts/prebuilt/gh";
 
 const patchesDir = join(import.meta.dir, "..", "patches");
 const manifest = loadManifest(patchesDir);
@@ -37,6 +38,50 @@ function metadata(version: string): ReleaseManifest {
 }
 
 describe("upstream release coverage", () => {
+  const gapReport: CoverageReport = { checkedAt: "2026-09-24T00:00:00.000Z", floor: "0.152.1", gapCount: 1,
+    rows: [{ version: "0.153.1", status: "unsupported", detail: "No compatibility entry" }] };
+
+  test("creates and updates only the marked stable tracking issue; dry run does not write", () => {
+    let callList: string[][] = [];
+    const gh: GhRunner = (args) => {
+      callList.push([...args]);
+      if (args[0] === "issue" && args[1] === "list") return { status: 0, stdout: JSON.stringify([
+        { number: 5, title: COVERAGE_ISSUE_TITLE, body: "unmarked", state: "OPEN" },
+      ]), stderr: "" };
+      if (args[0] === "issue" && args[1] === "create") return { status: 0, stdout: "https://github.com/adrijshikhar/cxstatusline/issues/7", stderr: "" };
+      return { status: 0, stdout: "", stderr: "" };
+    };
+    upsertCoverageIssue(gh, "adrijshikhar/cxstatusline", gapReport, true);
+    expect(callList).toHaveLength(1);
+    expect(callList[0]?.[0]).toBe("issue");
+    callList = [];
+    upsertCoverageIssue(gh, "adrijshikhar/cxstatusline", gapReport);
+    expect(callList.at(-1)?.[1]).toBe("create");
+    expect(callList.at(-1)).toContain("--body-file");
+    expect(COVERAGE_ISSUE_MARKER).toContain("cxstatusline-codex-coverage");
+  });
+
+  test("closes the marked issue only after a complete healthy report", () => {
+    const calls: string[][] = [];
+    const healthy: CoverageReport = { ...gapReport, gapCount: 0, rows: [] };
+    const gh: GhRunner = (args) => {
+      calls.push([...args]);
+      if (args[0] === "issue" && args[1] === "list") return { status: 0, stdout: JSON.stringify([
+        { number: 9, title: COVERAGE_ISSUE_TITLE, body: COVERAGE_ISSUE_MARKER, state: "OPEN" },
+      ]), stderr: "" };
+      return { status: 0, stdout: "", stderr: "" };
+    };
+    upsertCoverageIssue(gh, "adrijshikhar/cxstatusline", healthy);
+    expect(calls.map((args) => args[1])).toEqual(["list", "edit", "close"]);
+  });
+
+  test("a failed issue lookup aborts without writes", () => {
+    let calls = 0;
+    const gh: GhRunner = () => ({ status: ++calls === 1 ? 1 : 0, stdout: "", stderr: "API unavailable" });
+    expect(() => upsertCoverageIssue(gh, "adrijshikhar/cxstatusline", gapReport)).toThrow(/gh issue list -R failed/);
+    expect(calls).toBe(1);
+  });
+
   test("enumerates stable releases semantically, with pagination and deduplication", async () => {
     const releases = await fetchAllReleasePages(async (page) => page === 1
       ? [...Array.from({ length: 100 }, (_, i) => ({ tag_name: `rust-v0.${200 - i}.0` })), { tag_name: "rust-v0.153.0" }]

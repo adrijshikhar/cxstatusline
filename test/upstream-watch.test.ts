@@ -11,7 +11,6 @@ import {
   updateManifestContent,
   updateManifestTestContent,
   updatePackageTestContent,
-  updatePrebuiltWorkflowContent,
   type GitRunner,
 } from "../scripts/upstream-watch";
 import type { GhResult, GhRunner } from "../scripts/prebuilt/gh";
@@ -56,14 +55,6 @@ describe("upstream-watch file mutators", () => {
     expect(parsed.patches.map((p: { patchVersion: number }) => p.patchVersion)).toEqual([1, 2, 1]);
     expect(() => updateManifestContent(original, "0.157.0", "codex-0.157.0.patch")).toThrow(/patchVersion/);
     expect(() => updateManifestContent(original, "0.153.4", "codex-0.153.4.patch", 2)).toThrow(/ownership/);
-  });
-
-  test("updatePrebuiltWorkflowContent adds version choice", () => {
-    const original = 'options: ["auto", "0.153.4", "0.153.0"]';
-    const updated = updatePrebuiltWorkflowContent(original, "0.154.0");
-    expect(updated).toBe('options: ["auto", "0.154.0", "0.153.4", "0.153.0"]');
-    // Idempotent
-    expect(updatePrebuiltWorkflowContent(updated, "0.154.0")).toBe(updated);
   });
 
   test("updateCiPrebuiltTestContent bumps tested uncovered version", () => {

@@ -67,12 +67,6 @@ export function updateManifestContent(content: string, newVersion: string, patch
   return `${JSON.stringify(m, null, 2)}\n`;
 }
 
-export function updatePrebuiltWorkflowContent(content: string, newVersion: string): string {
-  const marker = 'options: ["auto", ';
-  if (content.includes(`"${newVersion}"`) || !content.includes(marker)) return content;
-  return content.replace(marker, `options: ["auto", "${newVersion}", `);
-}
-
 export function updateCiPrebuiltTestContent(content: string, newVersion: string): string {
   const pattern = /for \(const version of \["([^"]+)"/;
   const match = content.match(pattern);
@@ -341,11 +335,6 @@ function applyCleanSupport(
   const manifestFile = join(repoDir, "patches", "manifest.json");
   writeFileSync(manifestFile, updateManifestContent(readFileSync(manifestFile, "utf8"), targetVersion, patchName, patchVersion));
 
-  const prebuiltFile = join(repoDir, ".github", "workflows", "prebuilt.yml");
-  if (existsSync(prebuiltFile)) {
-    writeFileSync(prebuiltFile, updatePrebuiltWorkflowContent(readFileSync(prebuiltFile, "utf8"), targetVersion));
-  }
-
   const ciTest = join(repoDir, "test", "ci-prebuilt.test.ts");
   if (existsSync(ciTest)) writeFileSync(ciTest, updateCiPrebuiltTestContent(readFileSync(ciTest, "utf8"), targetVersion));
 
@@ -357,7 +346,7 @@ function applyCleanSupport(
 
   checkedGit(git, ["config", "user.name", "Adrij Shikhar"], repoDir);
   checkedGit(git, ["config", "user.email", "adrijshikhar26@gmail.com"], repoDir);
-  checkedGit(git, ["add", "patches/", ".github/workflows/prebuilt.yml", "test/"], repoDir);
+  checkedGit(git, ["add", "patches/", "test/"], repoDir);
   checkedGit(git, ["commit", "-m", `feat: support Codex ${targetVersion}`], repoDir);
   checkedGit(git, ["push", "-u", "origin", branchName], repoDir);
 

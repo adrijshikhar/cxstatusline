@@ -217,6 +217,8 @@ Add newly tested Codex versions to the existing patch version while it continues
 New builds record the patch version in release and installation metadata; `cxstatusline doctor` displays it. Older releases remain readable and report `unknown (legacy)` rather than guessing. New prebuilt manifests use schema 2, so installing them requires a cxstatusline package that supports this format. Release tags remain `codex-v<version>`.
 
 If your Codex version is not listed, cxstatusline fails closed: it will neither download an unverified prebuilt nor attempt source compilation. New versions require a tested patch file, an entry in `patches/manifest.json`, and a release workflow run.
+
+The daily upstream watcher also audits every stable Codex release at or above the support floor, including older releases that are missing a prebuilt. It updates one `Codex release coverage gaps` issue and uploads a machine-readable report. A separate watchdog fails if no successful scheduled watcher run has completed in the last 36 hours. Enable repository **Settings → Notifications → Actions** and select failed workflow runs (or enable email notifications for Actions) to receive these failures. The watchdog runs inside GitHub Actions, so a GitHub-wide scheduling outage cannot be detected from within GitHub.
  
 ## 🩺 Troubleshooting
  
@@ -238,4 +240,3 @@ cxstatusline is [MIT licensed](LICENSE). See [SECURITY.md](SECURITY.md) for secu
 - 🌐 **Web Playground:** [cxstatusline.adrijshikhar.dev](https://cxstatusline.adrijshikhar.dev)
 - 💬 **Discussions & Ideas:** [github.com/adrijshikhar/cxstatusline/discussions](https://github.com/adrijshikhar/cxstatusline/discussions)
 - 📦 **npm Package:** [npmjs.com/package/cxstatusline](https://www.npmjs.com/package/cxstatusline)
-
