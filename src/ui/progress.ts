@@ -1,4 +1,6 @@
 import chalk from "chalk";
+import { render, Text, type Instance } from "ink";
+import { createElement } from "react";
 import { symbols } from "./box";
 import type { TransportOptions } from "../distribution/transport";
 
@@ -28,18 +30,18 @@ export function renderProgressBar(ratio: number, width = 24): string {
 
 export interface ProgressIO {
   readonly isTTY?: boolean;
-  write(text: string): void;
+  readonly stdout?: NodeJS.WriteStream;
   say(line: string): void;
 }
 
 export interface InstallProgressTracker {
   readonly transport: TransportOptions;
-  finish(success?: boolean): void;
+  finish(): void;
 }
 
 /**
  * Creates an interactive progress reporter for both prebuilt downloads and source compilations.
- * In a TTY environment, it updates progress bars in-place using `\r`. In a non-interactive stream,
+ * Ink owns live progress rendering and terminal cleanup. In a non-interactive stream,
  * it emits clean, unspammed milestone lines.
  */
 export function createInstallProgressTracker(
@@ -50,92 +52,31 @@ export function createInstallProgressTracker(
   let downloadStart = 0;
   let initialLoaded = 0;
   let lastDownloadUpdate = 0;
-  let hasProgressBar = false;
   let lastReportedPct = -1;
-  let cursorHidden = false;
-  let stdinConfigured = false;
-
-  const hideCursor = () => {
-    if (isTTY && !cursorHidden) {
-      io.write("\x1b[?25l");
-      cursorHidden = true;
-    }
-  };
-
-  const showCursor = () => {
-    if (isTTY && cursorHidden) {
-      io.write("\x1b[?25h");
-      cursorHidden = false;
-    }
-  };
-
-  const handleStdinData = (data: Buffer | string) => {
-    const str = typeof data === "string" ? data : data.toString("utf8");
-    if (str === "\u0003") {
-      cleanupStdin();
-      showCursor();
-      if (typeof process !== "undefined" && typeof process.kill === "function") {
-        process.kill(process.pid, "SIGINT");
-      }
-    }
-  };
-
-  const setupStdin = () => {
-    if (!isTTY || stdinConfigured) return;
-    if (typeof process !== "undefined" && process.stdin?.isTTY && typeof process.stdin.setRawMode === "function") {
-      try {
-        process.stdin.setRawMode(true);
-        process.stdin.resume();
-        process.stdin.on("data", handleStdinData);
-        stdinConfigured = true;
-      } catch {
-        // Ignored if terminal does not support raw mode
-      }
-    }
-  };
-
-  const cleanupStdin = () => {
-    if (!stdinConfigured) return;
-    stdinConfigured = false;
-    if (typeof process !== "undefined" && process.stdin) {
-      try {
-        process.stdin.removeListener("data", handleStdinData);
-        if (typeof process.stdin.setRawMode === "function") {
-          process.stdin.setRawMode(false);
-        }
-        process.stdin.pause();
-      } catch {}
-    }
-  };
-
-  const onExit = () => {
-    cleanupStdin();
-    if (cursorHidden) {
-      try {
-        io.write("\x1b[?25h");
-      } catch {}
-      cursorHidden = false;
-    }
-  };
-
-  const proc = typeof process !== "undefined" ? (process as unknown as NodeJS.EventEmitter) : null;
-
-  if (proc?.once && isTTY) {
-    proc.once("exit", onExit);
-    proc.once("SIGINT", onExit);
-    proc.once("SIGTERM", onExit);
-  }
+  let view: Instance | undefined;
 
   const clearProgressLine = () => {
-    if (hasProgressBar && isTTY) {
-      io.write("\r\x1b[2K");
-      hasProgressBar = false;
-    }
+    if (!view) return;
+    view.rerender(createElement(Text, {}, ""));
+    view.clear();
+    view.unmount();
+    view.cleanup();
+    view = undefined;
+  };
+
+  const showProgress = (text: string) => {
+    const element = createElement(Text, { wrap: "truncate-end" }, `    ${text}`);
+    if (view) view.rerender(element);
+    else view = render(element, {
+      stdout: io.stdout ?? process.stdout,
+      exitOnCtrlC: false,
+      patchConsole: false,
+      preserveScrollback: true,
+      isCI: false,
+    });
   };
 
   const onProgress = (loaded: number, total: number | null) => {
-    hideCursor();
-    setupStdin();
     const now = Date.now();
     if (!downloadStart) {
       downloadStart = now;
@@ -158,12 +99,13 @@ export function createInstallProgressTracker(
       const pct = Math.floor(ratio * 100);
 
       if (isTTY) {
-        const bar = renderProgressBar(ratio, 24);
         const loadedStr = formatBytes(loaded);
         const totalStr = formatBytes(total);
-        const text = `\r\x1b[2K    ${bar} ${chalk.bold(String(pct).padStart(3))}%  ${loadedStr} / ${totalStr} (${chalk.dim(speedStr)})`;
-        io.write(text);
-        hasProgressBar = true;
+        const label = `${String(pct).padStart(3)}%  ${loadedStr} / ${totalStr} (${speedStr})`;
+        const columns = io.stdout?.columns || process.stdout?.columns || 80;
+        const barWidth = Math.max(4, Math.min(24, columns - 7 - label.length));
+        const text = `${renderProgressBar(ratio, barWidth)} ${chalk.bold(`${String(pct).padStart(3)}%`)}  ${loadedStr} / ${totalStr} (${chalk.dim(speedStr)})`;
+        showProgress(text);
       } else {
         // In non-TTY mode, log at 25%, 50%, 75%, 100%
         const milestone = Math.floor(pct / 25) * 25;
@@ -174,8 +116,7 @@ export function createInstallProgressTracker(
       }
     } else {
       if (isTTY) {
-        io.write(`\r\x1b[2K    ${symbols.activeBullet} ${formatBytes(loaded)} downloaded (${chalk.dim(speedStr)})`);
-        hasProgressBar = true;
+        showProgress(`${symbols.activeBullet} ${formatBytes(loaded)} downloaded (${chalk.dim(speedStr)})`);
       }
     }
   };
@@ -262,15 +203,6 @@ export function createInstallProgressTracker(
 
   return {
     transport,
-    finish: () => {
-      if (proc?.removeListener) {
-        proc.removeListener("exit", onExit);
-        proc.removeListener("SIGINT", onExit);
-        proc.removeListener("SIGTERM", onExit);
-      }
-      cleanupStdin();
-      clearProgressLine();
-      showCursor();
-    },
+    finish: clearProgressLine,
   };
 }

@@ -9,6 +9,7 @@ import { writeState } from "../state";
 import { readInstallation } from "./generation";
 import { compareSemver, parseSemver } from "../version";
 import { fetchPublishedPrebuiltVersions } from "../distribution/prebuilt";
+import { promptUpdate, type UpdateAction, type UpdatePickerOptions } from "../ui/UpdatePicker";
 import { loadState, runAcquisition, type PatchOutcome } from "./acquire";
 import { ManifestError, loadManifest, resolvePatch, supportedCodexVersions, isCodexVersionSupported } from "./manifest";
 import {
@@ -95,7 +96,7 @@ export function runPatch(ctx: Context, opts: { force: boolean }, transport: Tran
   ctx.say(renderInstallHeader(true));
   const progress = createInstallProgressTracker({
     isTTY: process.stdout?.isTTY,
-    write: (s) => process.stdout.write(s),
+    stdout: process.stdout,
     say: (l) => ctx.say(l),
   }, transport);
   return runAcquisition(ctx, { source: "compiled", force: opts.force }, progress.transport).finally(() => {
@@ -117,7 +118,7 @@ export async function runInstall(ctx: Context, opts: InstallOptions, transport: 
   ctx.say(renderInstallHeader(opts.compile));
   const progress = createInstallProgressTracker({
     isTTY: process.stdout?.isTTY,
-    write: (s) => process.stdout.write(s),
+    stdout: process.stdout,
     say: (l) => ctx.say(l),
   }, transport);
 
@@ -161,6 +162,8 @@ export async function runInstall(ctx: Context, opts: InstallOptions, transport: 
 }
 
 export interface UpdateOptions {
+  readonly isTTY?: boolean;
+  readonly promptUpdate?: (options: UpdatePickerOptions) => Promise<UpdateAction>;
   readonly force?: boolean;
   readonly compile?: boolean;
   readonly fetchPrebuilts?: (fetchFn?: FetchLike, repo?: string) => Promise<string[]>;
@@ -240,6 +243,14 @@ export async function runUpdate(
   if (current && compareSemver(current, parseSemver(target)!) > 0) {
     ctx.say(`Installed Codex ${installed} is newer than the latest supported ${opts.compile ? "patch" : "prebuilt"} (${target}); leaving it unchanged.`);
     return 0;
+  }
+  if (opts.isTTY && !opts.force && !opts.compile) {
+    const action = await (opts.promptUpdate ?? promptUpdate)({ latest: target, highestAvailable: target });
+    if (action === "cancel") {
+      ctx.say("Update cancelled.");
+      return 0;
+    }
+    if (action === "compile") return runInstall(ctx, { compile: true, codexVersion: target }, transport);
   }
   // Re-check even the same version: a release may contain a newer statusline patch.
   return runInstall(ctx, { compile: opts.compile ?? false, codexVersion: target }, transport);

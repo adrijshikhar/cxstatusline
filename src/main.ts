@@ -21,6 +21,7 @@ import { getTerminalWidth } from "./utils/terminal";
 import { runTUI as runTUIFromApp } from "./tui/App";
 import { readMemoryUsage } from "./utils/memory";
 
+import type { UpdateOptions } from "./patch/run";
 import type { FetchLike, TransportOptions } from "./distribution/transport";
 
 export interface MainIo {
@@ -43,7 +44,8 @@ export interface MainDeps {
   readonly transport?: TransportOptions;
   readonly promptVersion?: (
     options: PromptVersionOptions,
-  ) => Promise<PromptVersionSelection | string>;
+  ) => Promise<PromptVersionSelection | string | null>;
+  readonly promptUpdate?: UpdateOptions["promptUpdate"];
   readonly fetchPrebuilts?: (fetchFn?: FetchLike, repo?: string) => Promise<string[]>;
 }
 
@@ -149,8 +151,14 @@ async function installCommand(argv: readonly string[], io: MainIo, deps: MainDep
   const ctx = contextFor(io, deps);
 
   if (io.isTTY === true && !yes && !codexVersion) {
+    let manifest;
     try {
-      const manifest = loadManifest(ctx.patchesDir);
+      manifest = loadManifest(ctx.patchesDir);
+    } catch (e) {
+      io.stderr(`Cannot load supported Codex versions: ${e instanceof Error ? e.message : String(e)}\n`);
+      return 1;
+    }
+    if (manifest) {
       const supported = supportedCodexVersions(manifest);
       if (supported.length > 0) {
         let prebuiltVersions: string[] | undefined;
@@ -189,15 +197,18 @@ async function installCommand(argv: readonly string[], io: MainIo, deps: MainDep
           supportedVersions: supported,
           prebuiltVersions,
           defaultVersion,
+          compile,
           isTTY: true,
           say: (l) => io.stdout(`${l}\n`),
         });
+        if (result === null) {
+          io.stdout("Installation cancelled.\n");
+          return 0;
+        }
         const selection = typeof result === "string" ? { version: result, compile: false } : result;
         codexVersion = selection.version;
         compile = compile || selection.compile;
       }
-    } catch {
-      // If manifest fails to load, runInstall will surface it during acquisition
     }
   }
 
@@ -219,6 +230,8 @@ async function updateCommand(argv: readonly string[], io: MainIo, deps: MainDeps
     {
       compile: flags.includes("--compile"),
       force: flags.includes("--force") || flags.includes("-y") || flags.includes("--yes"),
+      isTTY: io.isTTY,
+      promptUpdate: deps.promptUpdate,
       fetchPrebuilts: deps.fetchPrebuilts,
     },
     deps.transport,

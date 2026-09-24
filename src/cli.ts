@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { main } from "./main";
+import { canPrompt } from "./utils/interactive";
 
 const argv = process.argv.slice(2);
 /** The bare `hook` invocation Codex runs. It must exit 0 no matter what happens. */
@@ -7,7 +8,7 @@ const isHook = argv.length === 1 && argv[0] === "hook";
 
 main(argv, {
   env: process.env,
-  isTTY: Boolean(process.stdin.isTTY),
+  isTTY: canPrompt(process.stdin, process.stdout),
   stdin: () => {
     try {
       return readFileSync(0, "utf8");
