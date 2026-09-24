@@ -3,6 +3,21 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.9.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.8.0...v0.9.0) (2026-09-24)
+
+
+### Features
+
+* add IndexNow host verification key and submission workflow ([#97](https://github.com/adrijshikhar/cxstatusline/issues/97)) ([1e1090a](https://github.com/adrijshikhar/cxstatusline/commit/1e1090ae41160ba6e5c419934c08398817f00cfb))
+* use inline Ink workflows for install and update ([#102](https://github.com/adrijshikhar/cxstatusline/issues/102)) ([64bc901](https://github.com/adrijshikhar/cxstatusline/commit/64bc901e7dfee8d5b863934c0cb30205991b5f21))
+* version Rust patches by supported Codex releases ([#103](https://github.com/adrijshikhar/cxstatusline/issues/103)) ([8388d32](https://github.com/adrijshikhar/cxstatusline/commit/8388d327ab2aa64b0f9ae2b1f9f5afdd88c64466))
+
+
+### Bug Fixes
+
+* audit Codex release gaps and safely replace prebuilts ([#104](https://github.com/adrijshikhar/cxstatusline/issues/104)) ([220fdef](https://github.com/adrijshikhar/cxstatusline/commit/220fdef56c4efe7bda6c819cbac0cc8026d88429))
+* update prebuilts directly and preserve multiline footer ([#100](https://github.com/adrijshikhar/cxstatusline/issues/100)) ([4cd201b](https://github.com/adrijshikhar/cxstatusline/commit/4cd201bb97a0f6f00a30298beb1a162d445f4b7c))
+
 ## [0.8.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.7.0...v0.8.0) (2026-09-23)
 
 
