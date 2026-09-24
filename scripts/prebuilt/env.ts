@@ -9,7 +9,7 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { PLATFORMS, type Platform } from "../../src/distribution";
+import { DEFAULT_PREBUILT_PLATFORMS, PLATFORMS, type Platform } from "../../src/distribution";
 
 export const root = resolve(import.meta.dir, "..", "..");
 
@@ -65,7 +65,7 @@ export function releasePlatforms(flags: Record<string, string>): Platform[] {
     return [releasePlatform(flags)];
   }
   const value = flags["platforms"];
-  if (value === undefined || value === "true") return ["darwin-arm64"];
+  if (value === undefined || value === "true") return [...DEFAULT_PREBUILT_PLATFORMS];
   if (value === "all") return [...PLATFORMS];
   if (value === "darwin") return ["darwin-arm64", "darwin-x64"];
   if (value === "linux") return ["linux-x64", "linux-arm64"];

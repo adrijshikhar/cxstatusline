@@ -6,7 +6,7 @@
  * is also how the "no shell interpolation" and "never --clobber" rules are asserted.
  */
 import { createHash } from "node:crypto";
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -178,6 +178,14 @@ export function releaseServer(h: Handles, extra: Record<string, (a: readonly str
       h.draft.value = false;
       return ok();
     },
+    "release delete": () => {
+      h.assets.splice(0);
+      h.body.value = "";
+      h.draft.value = false;
+      rmSync(server, { recursive: true, force: true });
+      mkdirSync(server, { recursive: true });
+      return ok();
+    },
     ...extra,
   });
 }
@@ -200,4 +208,3 @@ export const publishArgs = (dir: string, run: GhRunner) => ({
   tmpRoot: tmp("pubtmp"),
   summary: () => {},
 });
-
