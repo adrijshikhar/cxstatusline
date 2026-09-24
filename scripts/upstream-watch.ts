@@ -277,15 +277,12 @@ export async function runUpstreamWatch(options: WatchOptions = {}): Promise<Watc
     return { action: "pr_exists", version: targetVersion, detail: `PR already open: ${JSON.stringify(prList)}` };
   }
 
-  const latestPatchRange = manifest.patches[manifest.patches.length - 1];
+  const latestPatchRange = [...manifest.patches].sort((a, b) => compareSemver(parseSemver(b.max)!, parseSemver(a.max)!))[0];
   if (!latestPatchRange) {
     throw new Error("patches/manifest.json does not contain any patch ranges");
   }
-  if (manifest.candidate) {
-    const candidate = parseSemver(manifest.candidate);
-    if (candidate && compareSemver(parsed, candidate) < 0) {
-      return { action: "dry_run", version: targetVersion, detail: "Historical gap requires maintainer review; patch ownership was not inferred." };
-    }
+  if (compareSemver(parsed, parseSemver(latestPatchRange.max)!) < 0) {
+    return { action: "dry_run", version: targetVersion, detail: "Historical gap requires maintainer review; patch ownership was not inferred." };
   }
   const latestPatchPath = join(repoDir, "patches", latestPatchRange.file);
   const upstreamTag = `${manifest.tag_prefix}${targetVersion}`;

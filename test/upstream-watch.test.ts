@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   bumpMinor,
   extractRelevantChanges,
@@ -113,6 +115,28 @@ describe("testPatchAgainstUpstream", () => {
 });
 
 describe("runUpstreamWatch orchestration", () => {
+  test("historical insertion does not select v1 for the next upstream release", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cx-watch-order-"));
+    try {
+      mkdirSync(join(dir, "patches"));
+      writeFileSync(join(dir, "patches", "manifest.json"), JSON.stringify({
+        version: 2, tag_prefix: "rust-v", candidate: "0.156.1",
+        patches: [
+          { min: "0.156.1", max: "0.156.1", file: "v2.patch", patchVersion: 2 },
+          { min: "0.153.3", max: "0.153.3", file: "v1.patch", patchVersion: 1 },
+        ],
+      }));
+      const calls: string[][] = [];
+      const git: GitRunner = (args) => {
+        calls.push([...args]);
+        return { status: 0, stdout: "", stderr: "" };
+      };
+      await runUpstreamWatch({ repoDir: dir, version: "0.157.0", dryRun: true, git,
+        gh: () => ({ status: 0, stdout: "[]", stderr: "" }) });
+      expect(calls.find((args) => args.includes("apply"))).toContain(join(dir, "patches", "v2.patch"));
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
   test("returns already_covered when version is already in manifest", async () => {
     const res = await runUpstreamWatch({
       version: "0.153.4",

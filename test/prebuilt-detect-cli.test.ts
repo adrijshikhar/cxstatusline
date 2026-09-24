@@ -41,6 +41,14 @@ function runDetect(args: readonly string[], releases: unknown): CliRun {
 }
 
 describe("detect on a schedule", () => {
+  test("publication includes both baseline platforms even when only one is requested", () => {
+    const run = runDetect(["--event", "schedule", "--platforms", "linux-arm64", "--repo", "adrijshikhar/cxstatusline"], []);
+    expect(run.status).toBe(0);
+    expect(run.outputs.platforms?.split(",").sort()).toEqual(["darwin-arm64", "linux-arm64"]);
+    const dry = runDetect(["--event", "schedule", "--publish-requested", "false", "--platforms", "linux-arm64", "--repo", "adrijshikhar/cxstatusline"], []);
+    expect(dry.outputs.platforms).toBe("linux-arm64");
+  });
+
   test("skips successfully when no v<CX> source release has been published", () => {
     const run = runDetect(["--event", "schedule", "--repo", "adrijshikhar/cxstatusline"], []);
     expect(run.status).toBe(0);

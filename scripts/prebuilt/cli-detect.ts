@@ -5,7 +5,7 @@
  * about, and what release already exists for the tag they imply.
  */
 import { readFileSync } from "node:fs";
-import type { Platform } from "../../src/distribution";
+import { DEFAULT_PREBUILT_PLATFORMS, type Platform } from "../../src/distribution";
 import { loadManifest, type Manifest } from "../../src/patch/manifest";
 import {
   blockedIssueTitle,
@@ -338,6 +338,7 @@ export async function runDetect(flags: Record<string, string>): Promise<void> {
   if (selfHosted && platforms.some((p) => !p.endsWith("-arm64"))) {
     throw new Error("self-hosted runner is arm64 only");
   }
+  if (publishRequested) platforms = unionReleasePlatforms(platforms, DEFAULT_PREBUILT_PLATFORMS);
   const matrix = buildMatrix(platforms, selfHosted);
   const source = resolveSource(flags, execGh, event);
   if (source === null) {
