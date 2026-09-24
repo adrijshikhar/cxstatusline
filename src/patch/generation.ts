@@ -243,6 +243,7 @@ const RecordSchema = z.object({
     source: z.enum(["prebuilt", "compiled"]),
     cxVersion: z.string(),
     platform: z.string(),
+    patchVersion: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
     patchSha256: z.string().regex(HEX64, "patchSha256 must be 64 lowercase hex chars"),
     upstreamCommit: z.string().regex(HEX40, "upstreamCommit must be 40 lowercase hex chars"),
     sourceCommit: z.string().regex(HEX40, "sourceCommit must be 40 lowercase hex chars").nullable(),
@@ -275,6 +276,7 @@ function checkedRecord(v: unknown): InstallationRecord | null {
       codexVersion: parsed.data.codexVersion,
       platform: provenance.platform as Platform,
     });
+    if (provenance.patchVersion !== manifest.patchVersion) return null;
     const release = { ...provenance.release, manifest };
     return { ...parsed.data, provenance: { ...provenance, release } } as unknown as InstallationRecord;
   } catch {

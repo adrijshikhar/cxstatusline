@@ -63,6 +63,7 @@ export type ExpectedReleaseInput = {
 export interface ExpectedIdentity {
   readonly sourceCommit: string;
   readonly patchSha256: string;
+  readonly patchVersion?: number;
 }
 
 // ---- pure helpers ----
@@ -167,6 +168,9 @@ export function compareIdentity(
   expected: ExpectedIdentity,
 ): { readonly identical: boolean; readonly detail: string } {
   const problems: string[] = [];
+  if (manifest.patchVersion !== expected.patchVersion) {
+    problems.push(`patchVersion ${manifest.patchVersion ?? "legacy"} (published) vs ${expected.patchVersion ?? "legacy"} (this run)`);
+  }
   if (manifest.sourceCommit !== expected.sourceCommit) {
     problems.push(`sourceCommit ${manifest.sourceCommit} (published) vs ${expected.sourceCommit} (this run)`);
   }
@@ -250,7 +254,7 @@ export async function checkExistingRelease(c: ExistingCheck): Promise<ExistingVe
     const raw = JSON.parse(readFileSync(file, "utf8"));
     
     if (missing.length > 0) {
-      if (raw.patchSha256 === c.expected.patchSha256) {
+      if (raw.patchSha256 === c.expected.patchSha256 && raw.patchVersion === c.expected.patchVersion) {
         return { state: "published-partial", view, missing };
       }
       return { state: "published", view, identical: false, detail: `published release is missing ${missing.join(", ")}` };
@@ -273,7 +277,7 @@ export async function checkExistingRelease(c: ExistingCheck): Promise<ExistingVe
     }
     
     if (!valid) {
-      if (raw.patchSha256 === c.expected.patchSha256) {
+      if (raw.patchSha256 === c.expected.patchSha256 && raw.patchVersion === c.expected.patchVersion) {
         return { state: "published-partial", view, missing };
       }
       return { state: "published", view, identical: false, detail: "published release manifest is invalid for requested platforms" };

@@ -102,7 +102,7 @@ function strayStaging(paths: ReturnType<typeof resolvePaths>): string[] {
 
 describe("runAcquisition (compiled)", () => {
   test("first run: builds both binaries, activates one generation, records provenance", async () => {
-    const { c, paths, real, calls } = ctx();
+    const { c, paths, real, calls } = ctx({ manifest: JSON.stringify({ version: 2, tag_prefix: "rust-v", patches: [{ min: "0.152.1", max: "0.152.1", file: "p.patch", patchVersion: 1 }] }) });
     expect(await runAcquisition(c, { source: "compiled", force: false }))
       .toEqual({ kind: "installed", version: "0.152.1", source: "compiled", reused: false });
     expect(activePair(paths)).toEqual({ codex: "ELF-codex", host: "ELF-codex-code-mode-host" });
@@ -113,6 +113,7 @@ describe("runAcquisition (compiled)", () => {
       cxVersion: VERSION,
       upstreamCommit: UPSTREAM_COMMIT,
       patchSha256: PATCH_SHA,
+      patchVersion: 1,
       sourceCommit: null,
       sourceDirty: false,
     });

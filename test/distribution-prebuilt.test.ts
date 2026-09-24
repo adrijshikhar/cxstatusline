@@ -7,7 +7,7 @@ import type { RunResult } from "../src/env";
 import { releaseTag, type ArtifactFile, type ReleaseManifest } from "../src/distribution";
 import { preparePrebuilt } from "../src/distribution";
 import type { FetchLike } from "../src/distribution/transport";
-import { activeGeneration, createGeneration, swapPointer } from "../src/patch/generation";
+import { activeGeneration, createGeneration, readInstallation, swapPointer } from "../src/patch/generation";
 import { resolvePaths } from "../src/paths";
 import { fakeExec, tarStream, tmpEnv, type RecordedCall, type TarEntry } from "./helpers";
 import { releaseEntries as entries, releaseFixture, releaseServer, routesFor, sha256, type ReleaseFixture, type Route } from "./release-fixture";
@@ -366,4 +366,29 @@ test("a redirect off https is refused", async () => {
     new Response(null, { status: 302, headers: { location: "file:///etc/passwd" } });
   await expect(preparePrebuilt(ctx, EXPECTED, { fetch: stub })).rejects.toThrow(/file: URL/);
   expect(libexecEntries(ctx)).toEqual([]);
+});
+
+
+test("patch revision survives download and activation; conflicting metadata is rejected", async () => {
+  const fixture = release();
+  fixture.manifest.schema = 2;
+  fixture.manifest.patchVersion = 2;
+  const server = await releaseServer(routesFor(fixture));
+  const { ctx } = prebuiltCtx();
+  try {
+    const first = await preparePrebuilt(ctx, EXPECTED, { baseUrl: server.baseUrl });
+    expect(first.pair.provenance.patchVersion).toBe(2);
+    const generation = createGeneration(first.pair, ctx.paths);
+    swapPointer(ctx.paths, generation);
+    expect(readInstallation(ctx.paths)?.provenance.patchVersion).toBe(2);
+    const second = await preparePrebuilt(ctx, EXPECTED, { baseUrl: server.baseUrl });
+    expect(second.kind).toBe("unchanged");
+    const file = join(generation, "installation.json");
+    const record = JSON.parse(readFileSync(file, "utf8"));
+    record.provenance.patchVersion = 1;
+    writeFileSync(file, JSON.stringify(record));
+    expect(readInstallation(ctx.paths)).toBeNull();
+  } finally {
+    await server.close();
+  }
 });

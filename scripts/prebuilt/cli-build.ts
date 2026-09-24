@@ -95,6 +95,8 @@ export async function runPackage(flags: Record<string, string>): Promise<void> {
     codexVersion: detection.codexVersion,
     platform,
     upstreamCommit: upstreamCommit(upstream),
+    patchVersion: detection.patchVersion,
+    patchFile: detection.patchFile,
     patchSha256: (await sha256File(join(patchesDir(), detection.patchFile))).sha256,
     sourceCommit: frozenCommit,
     workflowUrl,

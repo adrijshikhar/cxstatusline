@@ -203,6 +203,19 @@ cxstatusline install --codex-version 0.154.0
 ```
 </details>
 
+Rust patch versions are independent of Codex and cxstatusline package versions. Each supported Codex version belongs to exactly one patch version:
+
+| Rust patch | Tested Codex versions |
+| --- | --- |
+| v1 | 0.152.1, 0.153.0, 0.153.4, 0.154.0, 0.155.0, 0.155.1 |
+| v2 | 0.156.1 |
+
+`patches/manifest.json` records that ownership with `patchVersion` on each compatibility entry. Its `version: 2` is the manifest format, not the Rust patch version. Entries can describe inclusive ranges, but we currently list only the exact tested versions. Version-specific patch files remain separate because upstream source layouts differ.
+
+Add newly tested Codex versions to the existing patch version while it continues to work. When a newer Codex needs a changed Rust integration, introduce the next patch version for that Codex version and future compatible releases. Do not backport it or reassign older Codex versions. Overlapping entries are rejected.
+
+New builds record the patch version in release and installation metadata; `cxstatusline doctor` displays it. Older releases remain readable and report `unknown (legacy)` rather than guessing. New prebuilt manifests use schema 2, so installing them requires a cxstatusline package that supports this format. Release tags remain `codex-v<version>`.
+
 If your Codex version is not listed, cxstatusline fails closed: it will neither download an unverified prebuilt nor attempt source compilation. New versions require a tested patch file, an entry in `patches/manifest.json`, and a release workflow run.
  
 ## 🩺 Troubleshooting

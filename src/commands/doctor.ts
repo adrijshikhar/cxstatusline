@@ -248,6 +248,7 @@ export async function doctorReport(ctx: Context, opts?: DoctorOptions): Promise<
     line("settings", `${ctx.paths.settingsFile} ${existsSync(ctx.paths.settingsFile) ? "present" : "absent (written on first render)"}`),
     upstreamLine(ctx, upstreamBin, upstream?.raw ?? null, lookupNote),
     line("state", corrupt ? `${ctx.paths.stateFile} CORRUPT (recovered from ${ctx.paths.stateBackupFile} where possible)` : ctx.paths.stateFile, corrupt ? false : null),
+    line("patch_version", status.record?.provenance.patchVersion === undefined ? "unknown (legacy)" : `v${status.record.provenance.patchVersion}`),
     line("patched_from", state.patched_from ?? "never"),
     line("policy", state.policy),
     codexTarget,

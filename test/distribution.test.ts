@@ -223,3 +223,16 @@ for (const { name, mutate } of cases) {
     expect(() => validateManifest(manifest, EXPECTED_ARM)).toThrow();
   });
 }
+
+
+test("versioned release manifests require a valid revision; legacy remains readable", () => {
+  const legacy = validManifest();
+  expect(validateManifest(legacy, EXPECTED_ARM).patchVersion).toBeUndefined();
+  const versioned = { ...legacy, schema: 2, patchVersion: 2, patchFile: "codex-0.152.1.patch" };
+  expect(validateManifest(versioned, EXPECTED_ARM).patchVersion).toBe(2);
+  for (const patchVersion of [undefined, 0, -1, 1.5, "2"]) {
+    expect(() => validateManifest({ ...versioned, patchVersion }, EXPECTED_ARM)).toThrow();
+  }
+  expect(() => validateManifest({ ...legacy, patchVersion: 1 }, EXPECTED_ARM)).toThrow();
+  expect(() => validateManifest({ ...versioned, patchFile: "../evil.patch" }, EXPECTED_ARM)).toThrow();
+});

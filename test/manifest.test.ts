@@ -49,7 +49,7 @@ describe("loadManifest", () => {
     const { existsSync } = await import("node:fs");
     const dir = join(import.meta.dir, "..", "patches");
     const shipped = loadManifest(dir);
-    expect(shipped.version).toBe(1);
+    expect(shipped.version).toBe(2);
     expect(shipped.patches.length).toBeGreaterThan(0);
     for (const p of shipped.patches) expect(existsSync(join(dir, p.file))).toBe(true);
   });
@@ -116,5 +116,32 @@ describe("supportedCodexVersions and isCodexVersionSupported", () => {
     expect(isCodexVersionSupported(m, "0.152.2")).toBe(true);
     expect(isCodexVersionSupported(m, "0.154.0")).toBe(false);
     expect(isCodexVersionSupported(m, "invalid")).toBe(false);
+  });
+});
+
+
+describe("patch versions", () => {
+  test("each tested Codex version has exactly one patch owner", () => {
+    const shipped = loadManifest(join(import.meta.dir, "..", "patches"));
+    for (const version of ["0.152.1", "0.153.0", "0.153.4", "0.154.0", "0.155.0", "0.155.1"]) {
+      expect(resolvePatch(shipped, v(version))?.patchVersion).toBe(1);
+    }
+    expect(resolvePatch(shipped, v("0.156.1"))?.patchVersion).toBe(2);
+    for (const version of ["0.152.2", "0.156.0", "0.157.0"]) {
+      expect(resolvePatch(shipped, v(version))).toBeNull();
+    }
+  });
+  test("v2 requires positive revisions and rejects ambiguous ownership", () => {
+    const entry = { min: "0.155.0", max: "0.155.1", file: "codex-0.155.0.patch", patchVersion: 1 };
+    const load = (patches: unknown[]) => loadManifest(manifestDir(JSON.stringify({ version: 2, tag_prefix: "rust-v", patches })));
+    expect(resolvePatch(load([entry]), v("0.155.1"))?.patchVersion).toBe(1);
+    for (const patchVersion of [undefined, 0, -1, 1.5, "1"]) {
+      expect(() => load([{ ...entry, patchVersion }])).toThrow(ManifestError);
+    }
+    for (const patchVersion of [1, 2]) {
+      expect(() => load([entry, { ...entry, patchVersion }])).toThrow(ManifestError);
+    }
+    expect(() => load([{ ...entry, min: "0.156.0" }])).toThrow(ManifestError);
+    expect(() => load([{ ...entry, min: "0.155.0-rc.1" }])).toThrow(ManifestError);
   });
 });

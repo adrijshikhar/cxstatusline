@@ -74,7 +74,7 @@ function stage(ctx: Context, built: BuildResult): { directory: string; executabl
 export function prepareCompiled(
   ctx: Context,
   upstream: SemVer,
-  ref: { file: string; tag: string },
+  ref: { file: string; tag: string; patchVersion?: number },
   onStatus?: (phase: string, message: string) => void,
 ): PreparedPair {
   const patchFile = join(ctx.patchesDir, ref.file);
@@ -96,6 +96,7 @@ export function prepareCompiled(
       source: "compiled",
       cxVersion: VERSION,
       platform: platformLabel(),
+      patchVersion: ref.patchVersion,
       patchSha256,
       upstreamCommit: built.upstreamCommit,
       // Stamped into this bundle at build time; null/false for a run straight from source.
