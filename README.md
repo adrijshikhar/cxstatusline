@@ -253,5 +253,5 @@ All Codex prebuilt jobs run on the owner's M5 Pro (`192.168.1.65`, Actions label
 `self-hosted`, `macOS`, `ARM64`, `m5-pro`). macOS builds natively; Linux builds in
 Docker on that same M5. Keep the laptop and runner active until the workflow finishes.
 An offline M5 leaves jobs queued; there is no hosted fallback. Platform builds run
-sequentially, with two Rust compiler jobs. Dispatch from a ref containing this policy;
+sequentially, preserving 3 native Rust compiler jobs and 8 inside Docker. Dispatch from a ref containing this policy;
 older release tags may still contain the removed hosted-runner option.
