@@ -293,6 +293,27 @@ describe("publishRelease", () => {
     expect(fake.of("release upload")).toHaveLength(0);
   });
 
+  test("does not retry deletion through rollback when the initial delete fails", async () => {
+    const oldDir = await releaseDir("d".repeat(40));
+    const newDir = await releaseDir(SOURCE, "e".repeat(64));
+    const fake = releaseServer(handles());
+    await publishRelease({ ...publishArgs(oldDir, fake.run), sourceCommit: "d".repeat(40) });
+    const backupDir = tmp("delete-failure-backup");
+    await backupPublishedRelease(fake.run, TAG, CODEX, backupDir);
+    let deletions = 0;
+    const run: GhRunner = (args) => {
+      if (args[0] === "release" && args[1] === "delete") {
+        deletions++;
+        return { status: 1, stdout: "", stderr: "delete rejected" };
+      }
+      return fake.run(args);
+    };
+    await expect(publishRelease({ ...publishArgs(newDir, run), backupDir })).rejects.toThrow(/delete rejected/);
+    expect(deletions).toBe(1);
+    expect(fake.of("release create")).toHaveLength(1);
+    expect(readFileSync(join(backupDir, "backup.json"), "utf8")).toContain("published");
+  });
+
   test("restores the complete old set after a replacement upload fails", async () => {
     const oldDir = await releaseDir("d".repeat(40));
     const newDir = await releaseDir(SOURCE, "e".repeat(64));
@@ -330,6 +351,17 @@ describe("publishRelease", () => {
       : fake.run(args);
     await expect(publishRelease({ ...publishArgs(newDir, run), backupDir })).rejects.toThrow(/automatic restoration also failed.*Keep workflow backup artifact/);
     expect(readFileSync(join(backupDir, "backup.json"), "utf8")).toContain("published");
+  });
+
+  test("refuses a changed published identity that drops a platform", async () => {
+    const oldDir = await multiReleaseDir(["darwin-arm64", "linux-x64"], "d".repeat(40));
+    const newDir = await releaseDir(SOURCE, "e".repeat(64));
+    const fake = releaseServer(handles());
+    await publishRelease({ ...publishArgs(oldDir, fake.run), sourceCommit: "d".repeat(40), platforms: ["darwin-arm64", "linux-x64"] });
+    const backupDir = tmp("missing-platform-backup");
+    await backupPublishedRelease(fake.run, TAG, CODEX, backupDir);
+    await expect(publishRelease({ ...publishArgs(newDir, fake.run), backupDir })).rejects.toThrow(/omits.*linux-x64/);
+    expect(fake.of("release delete")).toHaveLength(0);
   });
 
   test("rebuilds every retained platform from the new identity", async () => {

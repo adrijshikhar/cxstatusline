@@ -1,5 +1,5 @@
 /**
- * Atomic release publication.
+ * Verified release publication with backup and recovery.
  *
  * A replacement is a complete verified release generation. Published assets are backed up before
  * mutation, and failed publication attempts restore that verified set.
@@ -60,8 +60,8 @@ function draftBlock(tag: string, codexVersion: string, recorded: string): Blocke
     blockedIssueTitle(codexVersion),
     `An unpublished draft release ${tag} already exists, but it records ${recorded}, which is not this build's `
       + `manifest. That is a conflicting build set, not a transient upload failure, so this run will not touch it. `
-      + `Restart options (owner action, both manual and deliberate): delete the unpublished draft ${tag} in the `
-      + `GitHub Releases UI and re-run this workflow, or bump the cxstatusline version to publish under a new tag. `
+      + `Recovery (manual owner action): delete the unpublished draft ${tag} in the `
+      + `GitHub Releases UI and re-run this workflow after confirming the conflicting build is no longer needed. `
       + `Nothing was deleted, uploaded or overwritten by this run.`,
   );
 }
@@ -124,7 +124,7 @@ async function restorePublishedBackup(o: PublishOptions, backup: ReleaseBackup):
   const manifest = JSON.parse(readFileSync(join(backupAssets, "manifest.json"), "utf8")) as ReleaseManifest;
   const platforms = manifest.artifacts.map((artifact) => artifact.platform);
   const verified = await verifyReleaseDir(backupAssets, { codexVersion: o.codexVersion, platforms });
-  const current = inspectRelease(o.run, o.tag);
+  const current = inspectRelease(o.run, o.tag, repository(o));
   if (current.state !== "absent") ghText(o.run, ["release", "delete", o.tag, "--yes", "--repo", repository(o)]);
   const notesFile = join(o.tmpRoot, "restore-release-notes.md");
   writeFileSync(notesFile, backup.view.body);
@@ -167,8 +167,14 @@ export async function restoreReleaseBackup(o: PublishOptions): Promise<void> {
 
 async function replacePublished(o: PublishOptions, set: VerifiedSet, backup: ReleaseBackup): Promise<PublishOutcome> {
   if (backup.state !== "published" || !o.backupDir) throw new Error("a complete published-release backup is required before replacement");
+  const previous = JSON.parse(readFileSync(join(o.backupDir, "assets", "manifest.json"), "utf8")) as ReleaseManifest;
+  const built = new Set(set.manifest.artifacts.map((artifact) => artifact.platform));
+  const omitted = previous.artifacts.map((artifact) => artifact.platform).filter((platform) => !built.has(platform));
+  if (omitted.length) throw new Error(`replacement build omits already-published platform(s) ${omitted.join(", ")}`);
+  // A failed delete must not trigger another destructive delete during restoration.
+  // The verified backup remains available if GitHub applied an ambiguously failed request.
+  ghText(o.run, ["release", "delete", o.tag, "--yes", "--repo", repository(o)]);
   try {
-    ghText(o.run, ["release", "delete", o.tag, "--yes", "--repo", repository(o)]);
     const url = createDraft(o, set);
     const order = [...set.assets].sort((a, b) =>
       (a.name === "manifest.json" ? 2 : a.name === "SHA256SUMS" ? 1 : 0)
@@ -252,7 +258,7 @@ export async function publishRelease(o: PublishOptions): Promise<PublishOutcome>
       return { kind: "skipped-identical", url: verdict.view.url };
     }
     if (!o.backupDir) throw immutabilityBlock(o.tag, o.codexVersion, verdict.detail);
-    const backup = await verifyReleaseBackup(o.run, o.tag, o.backupDir);
+    const backup = await verifyReleaseBackup(o.run, o.tag, o.backupDir, repository(o));
     return await replacePublished(o, set, backup);
   }
   if (verdict.state === "published-partial") {

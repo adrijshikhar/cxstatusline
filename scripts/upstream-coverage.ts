@@ -143,6 +143,7 @@ export function upsertCoverageIssue(run: GhRunner, repo: string, report: Coverag
   try {
     if (report.gapCount > 0 && issue) {
       ghText(run, ["issue", "edit", String(issue.number), "-R", repo, "--body-file", bodyFile]);
+      if (issue.state === "CLOSED") ghText(run, ["issue", "reopen", String(issue.number), "-R", repo]);
     } else if (report.gapCount > 0) {
       const created = ghText(run, ["issue", "create", "-R", repo, "--title", COVERAGE_ISSUE_TITLE, "--body-file", bodyFile]).trim();
       if (!created) throw new Error("gh issue create succeeded without returning an issue URL");
@@ -155,17 +156,37 @@ export function upsertCoverageIssue(run: GhRunner, repo: string, report: Coverag
   }
 }
 
-async function fetchUpstreamPages(): Promise<unknown[]> {
-  const headers: Record<string, string> = { accept: "application/vnd.github+json", "user-agent": "cxstatusline-coverage-audit" };
-  const token = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN;
-  if (token) headers.authorization = `Bearer ${token}`;
-  return fetchAllReleasePages(async (page) => {
-    const response = await fetch(`https://api.github.com/repos/openai/codex/releases?per_page=100&page=${page}`, {
-      headers, signal: AbortSignal.timeout(30_000),
-    });
-    if (!response.ok) throw new Error(`upstream release listing page ${page} failed with HTTP ${response.status}`);
-    return response.json();
-  });
+/** Cursor pagination avoids GitHub REST's 1,000-release result cap. */
+export function fetchUpstreamPages(run: GhRunner): unknown[] {
+  const query = `query($cursor: String) { repository(owner: "openai", name: "codex") {
+    releases(first: 100, after: $cursor) {
+      nodes { tagName isDraft isPrerelease }
+      pageInfo { hasNextPage endCursor }
+    }
+  } }`;
+  const all: unknown[] = [];
+  const cursors = new Set<string>();
+  let cursor: string | undefined;
+  for (;;) {
+    const args = ["api", "graphql", "-f", `query=${query}`];
+    if (cursor) args.push("-f", `cursor=${cursor}`);
+    const result = ghJson<{ data?: { repository?: { releases?: {
+      nodes: { tagName: string; isDraft: boolean; isPrerelease: boolean }[];
+      pageInfo: { hasNextPage: boolean; endCursor: string | null };
+    } } }; errors?: unknown[] }>(run, args);
+    const page = result.data?.repository?.releases;
+    if (result.errors?.length || !page || !Array.isArray(page.nodes)
+      || typeof page.pageInfo?.hasNextPage !== "boolean") throw new Error("upstream release cursor page is invalid");
+    for (const node of page.nodes) {
+      if (!node || typeof node.tagName !== "string" || typeof node.isDraft !== "boolean"
+        || typeof node.isPrerelease !== "boolean") throw new Error("upstream release node is invalid");
+      all.push({ tag_name: node.tagName, draft: node.isDraft, prerelease: node.isPrerelease });
+    }
+    if (!page.pageInfo.hasNextPage) return all;
+    cursor = page.pageInfo.endCursor ?? undefined;
+    if (!cursor || cursors.has(cursor)) throw new Error("upstream release cursor did not advance");
+    cursors.add(cursor);
+  }
 }
 
 async function fetchOwnReleases(run: GhRunner, repo: string): Promise<CoverageRelease[]> {
@@ -183,7 +204,7 @@ export async function runCoverageAudit(options: {
   const run = options.run ?? execGh;
   const repo = options.repo ?? "adrijshikhar/cxstatusline";
   const manifest = loadManifest(options.patchesDirectory ?? defaultPatchesDir());
-  const upstream = options.upstream ?? await fetchUpstreamPages();
+  const upstream = options.upstream ?? fetchUpstreamPages(run);
   const versions = stableUpstreamVersions(upstream, manifest.patches.map((p) => p.min)
     .sort((a, b) => compareSemver(parseSemver(a)!, parseSemver(b)!))[0]!);
   const releases = options.releases ?? await fetchOwnReleases(run, repo);
@@ -218,7 +239,7 @@ if (import.meta.main) {
       mkdirSync(dirname(jsonPath), { recursive: true });
       writeFileSync(jsonPath, json);
     }
-    const gaps = report.rows.filter((row) => row.status !== "ready");
+    upsertCoverageIssue(execGh, repo, report, dryRun);
     const summary = [
       "## Codex release coverage audit",
       "",
@@ -232,7 +253,6 @@ if (import.meta.main) {
     ].join("\n");
     if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
     console.log(json);
-    upsertCoverageIssue(execGh, repo, report, dryRun);
   }).catch((error) => {
     console.error(`coverage audit failed: ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;

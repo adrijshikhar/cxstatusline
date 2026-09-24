@@ -215,12 +215,8 @@ export async function preparePrebuilt(
     opts.onStatus?.("manifest-done", `Found release for Codex ${manifest.codexVersion} (${artifact.platform})`);
 
     const unchanged = unchangedPair(ctx, manifest, artifact, tag);
-    const staged = await stageArchive(ctx, download, manifest, artifact, tag, opts);
-    if (unchanged !== null) {
-      rmSync(staged.directory, { recursive: true, force: true });
-      return { kind: "unchanged", pair: unchanged };
-    }
-    return { kind: "staged", pair: staged };
+    if (unchanged !== null) return { kind: "unchanged", pair: unchanged };
+    return { kind: "staged", pair: await stageArchive(ctx, download, manifest, artifact, tag, opts) };
   } finally {
     rmSync(download, { recursive: true, force: true });
   }

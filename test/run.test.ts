@@ -275,7 +275,7 @@ describe("runAcquisition (prebuilt)", () => {
     expect(calls.some((k) => k.cmd === "cargo" || k.cmd === "rustup" || k.cmd === "git")).toBe(false);
     expect(strayStaging(paths)).toEqual([]);
   });
-  test("a second install verifies the archive before reusing the existing generation", async () => {
+  test("a second install verifies local bytes and reuses the generation without downloading again", async () => {
     const f = fixture();
     const { c, paths } = ctx({ upstreamVersion: CODEX, noRust: true });
     await withServer(routesFor(f), async (baseUrl, requests) => {
@@ -284,7 +284,7 @@ describe("runAcquisition (prebuilt)", () => {
       expect(await runAcquisition(c, { source: "prebuilt", force: true }, { baseUrl }))
         .toEqual({ kind: "installed", version: CODEX, source: "prebuilt", reused: true });
       expect(activeGeneration(paths)).toBe(first);
-      expect(requests.filter((r) => r.endsWith(".tar.gz"))).toHaveLength(2);
+      expect(requests.filter((r) => r.endsWith(".tar.gz"))).toHaveLength(1);
     });
   });
   test("refused: targetVersion not supported by manifest", async () => {
@@ -552,7 +552,7 @@ describe("runUpdate", () => {
       const unchanged = activeGeneration(paths);
       const badSets: Route[] = [old.archive, 404, next.archive.subarray(0, 12)];
       for (const badArchive of badSets) {
-        routes[`/${old.tag}/manifest.json`] = Buffer.from(JSON.stringify(next.manifest));
+        routes[`/${old.tag}/manifest.json`] = Buffer.from(JSON.stringify({ ...next.manifest, patchSha256: "e".repeat(64) }));
         routes[`/${old.tag}/${old.archiveName}`] = badArchive;
         expect(await runUpdate(c, opts, { baseUrl: server.baseUrl })).toBe(1);
         expect(activeGeneration(paths)).toBe(unchanged);

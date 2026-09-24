@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadManifest } from "../src/patch/manifest";
 import { DEFAULT_PREBUILT_PLATFORMS, type ReleaseManifest } from "../src/distribution";
-import { classifyCoverage, fetchAllReleasePages, stableUpstreamVersions, upsertCoverageIssue, COVERAGE_ISSUE_MARKER, COVERAGE_ISSUE_TITLE, type CoverageRelease, type CoverageReport } from "../scripts/upstream-coverage";
+import { classifyCoverage, fetchAllReleasePages, fetchUpstreamPages, stableUpstreamVersions, upsertCoverageIssue, COVERAGE_ISSUE_MARKER, COVERAGE_ISSUE_TITLE, type CoverageRelease, type CoverageReport } from "../scripts/upstream-coverage";
 import type { GhRunner } from "../scripts/prebuilt/gh";
 
 const patchesDir = join(import.meta.dir, "..", "patches");
@@ -75,6 +75,18 @@ describe("upstream release coverage", () => {
     expect(calls.map((args) => args[1])).toEqual(["list", "edit", "close"]);
   });
 
+  test("reopens a closed marked issue when a gap returns", () => {
+    const calls: string[][] = [];
+    const run: GhRunner = (args) => {
+      calls.push([...args]);
+      return { status: 0, stderr: "", stdout: args[1] === "list" ? JSON.stringify([
+        { number: 9, title: COVERAGE_ISSUE_TITLE, body: COVERAGE_ISSUE_MARKER, state: "CLOSED" },
+      ]) : "" };
+    };
+    upsertCoverageIssue(run, "adrijshikhar/cxstatusline", gapReport);
+    expect(calls.map((args) => args[1])).toEqual(["list", "edit", "reopen"]);
+  });
+
   test("a failed issue lookup aborts without writes", () => {
     let calls = 0;
     const gh: GhRunner = () => ({ status: ++calls === 1 ? 1 : 0, stdout: "", stderr: "API unavailable" });
@@ -132,4 +144,31 @@ describe("upstream release coverage", () => {
     expect(classifyCoverage(manifest, [version], [draft], new Map(), patchesDir)[0]?.status).toBe("missing-prebuilt");
     expect(classifyCoverage(manifest, ["0.153.3"], [], new Map(), patchesDir)[0]?.status).toBe("unsupported");
   });
+});
+
+
+test("upstream cursor pagination reaches past REST's 1000-release cap", () => {
+  let page = 0;
+  const run: GhRunner = (args) => {
+    if (page > 0) expect(args).toContain(`cursor=page-${page}`);
+    page += 1;
+    return { status: 0, stderr: "", stdout: JSON.stringify({ data: { repository: { releases: {
+      nodes: Array.from({ length: 100 }, (_, i) => ({ tagName: `rust-v0.${page * 100 + i}.0`, isDraft: false, isPrerelease: false })),
+      pageInfo: { hasNextPage: page < 11, endCursor: `page-${page}` },
+    } } } }) };
+  };
+  expect(fetchUpstreamPages(run)).toHaveLength(1100);
+  expect(page).toBe(11);
+});
+
+test("a failed or repeated upstream cursor cannot produce a complete audit", () => {
+  let calls = 0;
+  const run: GhRunner = () => ({ status: ++calls === 2 ? 1 : 0, stderr: "later page failed", stdout: JSON.stringify({ data: { repository: { releases: {
+    nodes: [], pageInfo: { hasNextPage: true, endCursor: "same" },
+  } } } }) });
+  expect(() => fetchUpstreamPages(run)).toThrow(/later page failed/);
+  const repeat: GhRunner = () => ({ status: 0, stderr: "", stdout: JSON.stringify({ data: { repository: { releases: {
+    nodes: [], pageInfo: { hasNextPage: true, endCursor: "same" },
+  } } } }) });
+  expect(() => fetchUpstreamPages(repeat)).toThrow(/did not advance/);
 });

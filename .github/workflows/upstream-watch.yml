@@ -75,7 +75,11 @@ jobs:
       - name: Audit all stable Codex releases
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bun scripts/upstream-coverage.ts --repo "$GITHUB_REPOSITORY" --json coverage-report.json
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          ARGS=()
+          if [ "$INPUT_DRY_RUN" = "true" ]; then ARGS+=(--dry-run); fi
+          bun scripts/upstream-coverage.ts --repo "$GITHUB_REPOSITORY" --json coverage-report.json "${ARGS[@]}"
       - name: Upload coverage report
         if: always() && hashFiles('coverage-report.json') != ''
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
