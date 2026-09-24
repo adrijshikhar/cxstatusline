@@ -1,6 +1,6 @@
 import { existsSync, realpathSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Env, Runner } from "./env";
 import { resolvePaths, type Paths } from "./paths";
 import { realDeps } from "./patch/preflight";
@@ -53,8 +53,8 @@ export function realContext(env: Env, io: { say(line: string): void; log(line: s
     which: deps.which,
     freeBytes: deps.freeBytes,
     cxBin: own,
-    // Resolves relative to the *real* file behind the symlink: dist/cxstatusline.js -> ../patches.
-    patchesDir: join(dirname(realpathSync(own)), "..", "patches"),
+    // Assets belong to the running build, even when the trusted renderer link targets another install.
+    patchesDir: fileURLToPath(new URL("../patches", import.meta.url)),
     now: () => new Date(),
     log: io.log,
     say: io.say,

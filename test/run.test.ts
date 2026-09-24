@@ -444,6 +444,24 @@ describe("runPatch", () => {
 });
 
 describe("runInstall", () => {
+  test.each(["0.155.0-alpha.16", "0.155.0-beta.1", "0.155.0-rc.1"])("explains unsupported prerelease %s before downloading", async (version) => {
+    const { c, paths, said, calls } = ctx({ upstreamVersion: version, noRust: true });
+    let downloads = 0;
+    const fetch = async (): Promise<Response> => { downloads++; throw new Error("unexpected download"); };
+    expect(await runInstall(c, { compile: false }, { fetch })).toBe(1);
+    const output = said.join("\n");
+    expect(output).toContain(`Cannot install a prebuilt for Codex ${version}`);
+    expect(output).toContain("stable releases only");
+    expect(output).toContain("cxstatusline install");
+    expect(output).not.toContain("releaseTag");
+    expect(readState(paths.stateFile).state.last_attempt).toMatchObject({
+      ok: false, version, reason: expect.stringContaining("stable releases only"),
+    });
+    expect(downloads).toBe(0);
+    expect(calls.some((k) => k.cmd === "gh" || k.cmd === "cargo")).toBe(false);
+    expect(activeGeneration(paths)).toBeNull();
+    expect(existsSync(paths.hooksFile)).toBe(false);
+  });
   test("prebuilt by default, then merges the SessionStart hook and prints the trust sentence", async () => {
     const f = fixture();
     const { c, paths, said, calls } = ctx({ upstreamVersion: CODEX, noRust: true });
@@ -626,7 +644,7 @@ describe("runUpdate", () => {
     expect(output).toMatch(/Newer prebuilt available: Codex 0\.155\.1 is published and ready to install/);
     expect(output).toMatch(/cxstatusline install --codex-version 0\.155\.1/);
   });
-  test("interactive update when newer prebuilt exists and user selects choice 1 installs available prebuilt", async () => {
+  test("interactive update when newer prebuilt exists and user selects the prebuilt action installs available prebuilt", async () => {
     const f = releaseFixture({ cxVersion: VERSION, codexVersion: "0.155.1" });
     const { c, paths, said } = ctx({
       upstreamVersion: "0.153.0",
@@ -641,15 +659,15 @@ describe("runUpdate", () => {
     const fetchPrebuilts = async () => ["0.155.1", "0.153.0"];
     const mockFetch = mockFetchLatest("0.156.1");
     let asked = false;
-    const ask = async () => {
+    const promptUpdate = async () => {
       asked = true;
-      return "1";
+      return "prebuilt" as const;
     };
 
     await withServer(routesFor(f), async (baseUrl) => {
       const res = await runUpdate(c, {
         isTTY: true,
-        ask,
+        promptUpdate,
         fetchPrebuilts,
       }, { baseUrl, fetch: mockFetch });
       expect(res).toBe(0);
@@ -659,15 +677,27 @@ describe("runUpdate", () => {
     expect(readState(paths.stateFile).state.patched_from).toBe("0.155.1");
     expect(said.join("\n")).toMatch(/Installing prebuilt binaries for Codex 0\.155\.1/);
   });
+  for (const published of [["0.155.1"], []]) {
+    test(`update prompt failure stops before mutation (${published.length} prebuilts)`, async () => {
+      const { c, calls, paths } = ctx({ upstreamVersion: "0.153.0", noRust: true });
+      await expect(runUpdate(c, {
+        isTTY: true,
+        fetchPrebuilts: async () => published,
+        promptUpdate: async () => { throw new Error("terminal disconnected"); },
+      }, { fetch: mockFetchLatest("0.156.1") })).rejects.toThrow("terminal disconnected");
+      expect(calls.some((call) => call.args[0] === "update" || call.cmd === "cargo")).toBe(false);
+      expect(readState(paths.stateFile).state.patched_from).toBeNull();
+    });
+  }
   test("interactive update when user selects cancel exits 0 without modifying system", async () => {
     const { c, paths, said } = ctx({ upstreamVersion: "0.153.0", noRust: true });
     const fetchPrebuilts = async () => ["0.155.1", "0.153.0"];
     const mockFetch = mockFetchLatest("0.156.1");
-    const ask = async () => "4";
+    const promptUpdate = async () => "cancel" as const;
 
     const res = await runUpdate(c, {
       isTTY: true,
-      ask,
+      promptUpdate,
       fetchPrebuilts,
     }, { fetch: mockFetch });
 

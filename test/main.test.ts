@@ -5,6 +5,7 @@ import type { Context } from "../src/context";
 import type { Env } from "../src/env";
 import { USAGE, main, type MainDeps } from "../src/main";
 import { resolvePaths } from "../src/paths";
+import { canPrompt } from "../src/utils/interactive";
 import { fakeExec, tmpEnv, type RecordedCall } from "./helpers";
 
 const golden = readFileSync(new URL("./fixtures/payload-v1.json", import.meta.url), "utf8");
@@ -158,7 +159,14 @@ function dispatchDeps(): { deps: MainDeps; calls: RecordedCall[]; env: Env } {
     log: cio.log,
     say: cio.say,
   });
-  return { deps: { context }, calls, env };
+  return {
+    deps: {
+      context,
+      transport: { fetch: async () => new Response(JSON.stringify([{ tag_name: "codex-v0.152.1", draft: false }])) },
+    },
+    calls,
+    env,
+  };
 }
 
 describe("command dispatch", () => {
@@ -285,6 +293,39 @@ describe("command dispatch", () => {
     })).toBe(1);
     expect(receivedPrebuilts).toEqual(["0.152.1"]);
   });
+  test("cancelling the version picker exits without starting installation", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    const result = await main(["install"], { ...t.io, isTTY: true, env: d.env }, {
+      ...d.deps,
+      transport: { fetch: async () => new Response("[]") },
+      promptVersion: async () => null,
+    });
+    expect(result).toBe(0);
+    expect(t.out.join("")).toContain("Installation cancelled.");
+    expect(t.out.join("")).not.toContain("Installing");
+  });
+
+  test("a failed picker never falls through into an installation", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    await expect(main(["install"], { ...t.io, isTTY: true, env: d.env }, {
+      ...d.deps,
+      transport: { fetch: async () => new Response("[]") },
+      promptVersion: async () => { throw new Error("terminal disconnected"); },
+    })).rejects.toThrow("terminal disconnected");
+  });
+
+  test("an invalid picker manifest is reported without falling through into acquisition", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    writeFileSync(join(d.env.HOME!, "patches", "manifest.json"), '{"version":2}');
+    expect(await main(["install"], { ...t.io, isTTY: true, env: d.env }, d.deps)).toBe(1);
+    expect(t.err.join("")).toContain("manifest is malformed");
+    expect(t.out.join("")).not.toContain("Acquiring prebuilt");
+    expect(d.calls).toHaveLength(0);
+  });
+
   test("interactive install with promptVersion selecting compile proceeds in compile mode", async () => {
     const t = io("");
     const d = dispatchDeps();
@@ -304,20 +345,65 @@ describe("command dispatch", () => {
       return new Response("not found", { status: 404 });
     };
     let askCalled = false;
-    const ask = async () => {
+    const promptUpdate = async () => {
       askCalled = true;
-      return "4"; // Cancel
+      return "cancel" as const; // Cancel
     };
     const res = await main(["update"], { ...t.io, isTTY: true, env: d.env }, {
       ...d.deps,
       transport: { fetch: mockFetch as any },
       fetchPrebuilts: mockReleases,
-      ask,
+      promptUpdate,
     });
     expect(res).toBe(0);
     expect(askCalled).toBe(true);
     expect(t.out.join("")).toMatch(/Update cancelled/);
   });
+  for (const stdinTTY of [false, true]) {
+    for (const stdoutTTY of [false, true]) {
+      test(`install/update prompt dispatch uses both TTYs (stdin=${stdinTTY}, stdout=${stdoutTTY})`, async () => {
+        const shouldPrompt = stdinTTY && stdoutTTY;
+        const installIO = io("");
+        const install = dispatchDeps();
+        let installPrompted = false;
+        const releases = [{ tag_name: "codex-v0.152.1", draft: false }];
+        const installResult = await main(["install"], {
+          ...installIO.io,
+          env: install.env,
+          isTTY: canPrompt({ isTTY: stdinTTY }, { isTTY: stdoutTTY }),
+        }, {
+          ...install.deps,
+          transport: { fetch: async () => new Response(JSON.stringify(releases)) },
+          promptVersion: async () => { installPrompted = true; return null; },
+        });
+        expect(installPrompted).toBe(shouldPrompt);
+        expect(installResult).toBe(shouldPrompt ? 0 : 1);
+
+        const updateIO = io("");
+        const update = dispatchDeps();
+        let updatePrompted = false;
+        const fetchUpdate = async (url: string | URL | Request) => {
+          const value = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+          return value.includes("releases/latest")
+            ? new Response(JSON.stringify({ tag_name: "rust-v0.156.1" }), { status: 200 })
+            : new Response("not found", { status: 404 });
+        };
+        const updateResult = await main(["update"], {
+          ...updateIO.io,
+          env: update.env,
+          isTTY: canPrompt({ isTTY: stdinTTY }, { isTTY: stdoutTTY }),
+        }, {
+          ...update.deps,
+          transport: { fetch: fetchUpdate as any },
+          fetchPrebuilts: async () => ["0.155.1", "0.152.1"],
+          promptUpdate: async () => { updatePrompted = true; return "cancel"; },
+        });
+        expect(updatePrompted).toBe(shouldPrompt);
+        expect(updateResult).toBe(shouldPrompt ? 0 : 1);
+        expect(update.calls.some((call) => call.args[0] === "update")).toBe(false);
+      });
+    }
+  }
   test("--internal-refresh-command is dispatched without reading stdin, produces no stdout, and is absent from USAGE", async () => {
     const t = io("");
     const throwingIo = {

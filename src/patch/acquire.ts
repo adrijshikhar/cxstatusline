@@ -259,6 +259,9 @@ async function prebuiltAcquisition(
   }
   let prepared;
   try {
+    if (upstream.pre !== null) {
+      throw new Error(`Cannot install a prebuilt for Codex ${upstream.raw}. Prebuilt binaries currently support stable releases only. Run cxstatusline install to choose a supported stable version.`);
+    }
     prepared = await preparePrebuilt(ctx, expected, transport);
   } catch (e) {
     // Only a genuine "no such release/asset" gets the "unavailable" treatment (24h backoff, "not
