@@ -4,11 +4,11 @@
  * `publish` is the only one that writes release state, and it is the only place `contents: write`
  * is granted. `report` only ever touches issues, and only through `issues: write`.
  */
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { emit, optional, releasePlatforms, repoSlug, required, runnerTmp, summary } from "./env";
 import { execGh } from "./gh";
-import { publishRelease, type PublishOptions } from "./publish";
-import { BlockedError } from "./release";
+import { publishRelease, restoreReleaseBackup, type PublishOptions } from "./publish";
+import { backupPublishedRelease, BlockedError } from "./release";
 import { excerptFromFile, runReport, type JobResults, type ReportInput } from "./report";
 
 /**
@@ -31,6 +31,8 @@ export async function runPublish(flags: Record<string, string>): Promise<void> {
     platforms,
     event: flags["event"] ?? process.env.GITHUB_EVENT_NAME ?? "workflow_dispatch",
     tmpRoot: runnerTmp("prebuilt-publish"),
+    backupDir: flags["backup-dir"] ? resolve(flags["backup-dir"]!) : undefined,
+    repo: repoSlug(flags),
     summary,
   };
   try {
@@ -41,6 +43,35 @@ export async function runPublish(flags: Record<string, string>): Promise<void> {
     summary([`## ${e.title}`, "", e.message]);
     process.exit(e.exitCode);
   }
+}
+
+export async function runBackup(flags: Record<string, string>): Promise<void> {
+  const dir = resolve(required(flags, "dir"));
+  const backup = await backupPublishedRelease(execGh, required(flags, "tag"), required(flags, "codex-version"), dir, repoSlug(flags));
+  summary([
+    `## Release backup ${backup.tag}`, "",
+    backup.state === "published" ? `Complete verified backup saved to ${dir}.` : `Existing release state: ${backup.state}.`,
+    "Replacement must upload this directory as a workflow artifact before changing release state.",
+  ]);
+  emit({ backup_state: backup.state, backup_dir: dir });
+}
+
+export async function runRestore(flags: Record<string, string>): Promise<void> {
+  const backupDir = resolve(required(flags, "backup-dir"));
+  await restoreReleaseBackup({
+    run: execGh,
+    tag: required(flags, "tag"),
+    dir: resolve(flags.dir ?? join(backupDir, "assets")),
+    backupDir,
+    runId: "restore",
+    runUrl: flags["run-url"] ?? "",
+    sourceCommit: "restore",
+    codexVersion: required(flags, "codex-version"),
+    repo: repoSlug(flags),
+    event: "restore",
+    tmpRoot: runnerTmp("prebuilt-restore"),
+    summary,
+  });
 }
 
 function jobResult(flags: Record<string, string>, name: string): string {
@@ -81,4 +112,3 @@ export async function runReportCommand(flags: Record<string, string>): Promise<v
   const code = await runReport({ run: execGh, input, summary, tmpRoot: runnerTmp("prebuilt-report") });
   if (code !== 0) process.exit(code);
 }
-

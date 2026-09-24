@@ -34,13 +34,24 @@ export interface Detection {
 }
 
 /** A stable version string, or null for anything we must not build from. */
-function stableTagVersion(entry: unknown): SemVer | null {
+export function stableTagVersion(entry: unknown): SemVer | null {
   if (typeof entry !== "object" || entry === null) return null;
   const r = entry as Record<string, unknown>;
   if (r.draft === true || r.prerelease === true) return null;
   if (typeof r.tag_name !== "string" || !r.tag_name.startsWith(UPSTREAM_TAG_PREFIX)) return null;
   const parsed = parseSemver(r.tag_name.slice(UPSTREAM_TAG_PREFIX.length));
   return parsed !== null && parsed.pre === null ? parsed : null;
+}
+
+/** Stable release versions, deduplicated and ordered by semver across any number of API pages. */
+export function listStableVersions(releases: unknown): string[] {
+  if (!Array.isArray(releases)) throw new Error("upstream detection expected a JSON list of releases");
+  const byVersion = new Map<string, SemVer>();
+  for (const entry of releases) {
+    const version = stableTagVersion(entry);
+    if (version) byVersion.set(version.raw, version);
+  }
+  return [...byVersion.values()].sort((a, b) => compareSemver(a, b)).map((v) => v.raw);
 }
 
 /**
@@ -51,8 +62,7 @@ function stableTagVersion(entry: unknown): SemVer | null {
  * upstream. Drafts, prereleases and tags that are not `rust-v<stable semver>` are dropped.
  */
 export function selectStableVersion(releases: unknown): string {
-  if (!Array.isArray(releases)) throw new Error("upstream detection expected a JSON list of releases");
-  const stable = releases.map(stableTagVersion).filter((v): v is SemVer => v !== null);
+  const stable = listStableVersions(releases).map((v) => parseSemver(v)!);
   if (stable.length === 0) throw new Error("upstream detection found no stable rust-v* Codex release");
   const highest = stable.reduce((best, v) => (compareSemver(v, best) > 0 ? v : best));
   return highest.raw;

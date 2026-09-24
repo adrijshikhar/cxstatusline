@@ -209,8 +209,10 @@ Rust patch versions are independent of Codex and cxstatusline package versions. 
 
 | Rust patch | Tested Codex versions |
 | --- | --- |
-| v1 | 0.152.1, 0.153.0, 0.153.4, 0.154.0, 0.155.0, 0.155.1 |
-| v2 | 0.156.1 |
+| v1 | 0.152.1, 0.153.0, 0.153.1, 0.153.4, 0.154.0, 0.155.0, 0.155.1 |
+| v2 | 0.156.0, 0.156.1 |
+
+Codex 0.153.1 is validated on macOS ARM64; its prebuilt release is pending. Compatibility entries do not imply that a prebuilt has already been published.
 
 `patches/manifest.json` records that ownership with `patchVersion` on each compatibility entry. Its `version: 2` is the manifest format, not the Rust patch version. Entries can describe inclusive ranges, but we currently list only the exact tested versions. Version-specific patch files remain separate because upstream source layouts differ.
 
@@ -218,7 +220,11 @@ Add newly tested Codex versions to the existing patch version while it continues
 
 New builds record the patch version in release and installation metadata; `cxstatusline doctor` displays it. Older releases remain readable and report `unknown (legacy)` rather than guessing. New prebuilt manifests use schema 2, so installing them requires a cxstatusline package that supports this format. Release tags remain `codex-v<version>`.
 
+Rebuilding an existing Codex tag replaces its complete release asset set. The workflow verifies the new build, downloads and verifies every old asset, and saves a 90-day workflow artifact before mutation. The Git tag remains; the release may be briefly unavailable while the replacement is uploaded and verified. If automatic recovery fails, download the matching `release-backup-<tag>-<run-id>` artifact and restore it with `bun scripts/prebuilt.ts restore --tag codex-v0.156.1 --codex-version 0.156.1 --backup-dir ./release-backup --repo adrijshikhar/cxstatusline`.
+
 If your Codex version is not listed, cxstatusline fails closed: it will neither download an unverified prebuilt nor attempt source compilation. New versions require a tested patch file, an entry in `patches/manifest.json`, and a release workflow run.
+
+The daily upstream watcher audits every stable release in the newest Codex major.minor series and only the `.0` baseline of older series, at or above the support floor. For example, while 0.156.x is newest, 0.156.0 and 0.156.1 are required alongside 0.155.0; 0.155.1 is not a backfill requirement. Existing published assets and tested compatibility mappings are retained. It updates one `Codex release coverage gaps` issue and uploads a machine-readable report. A separate watchdog fails if no successful scheduled watcher run has completed in the last 36 hours. Enable repository **Settings → Notifications → Actions** and select failed workflow runs (or enable email notifications for Actions) to receive these failures. The watchdog runs inside GitHub Actions, so a GitHub-wide scheduling outage cannot be detected from within GitHub.
  
 ## 🩺 Troubleshooting
  
@@ -240,4 +246,3 @@ cxstatusline is [MIT licensed](LICENSE). See [SECURITY.md](SECURITY.md) for secu
 - 🌐 **Web Playground:** [cxstatusline.adrijshikhar.dev](https://cxstatusline.adrijshikhar.dev)
 - 💬 **Discussions & Ideas:** [github.com/adrijshikhar/cxstatusline/discussions](https://github.com/adrijshikhar/cxstatusline/discussions)
 - 📦 **npm Package:** [npmjs.com/package/cxstatusline](https://www.npmjs.com/package/cxstatusline)
-

@@ -12,7 +12,7 @@ import { readState, writeState, DEFAULT_STATE, RELEASE_UNAVAILABLE } from "../sr
 import { VERSION } from "../src/version-info";
 import { isOurGroup, type HooksFile } from "../src/hook/install";
 import { fakeExec, tmpEnv } from "./helpers";
-import { releaseFixture, releaseServer, routesFor, type Route } from "./release-fixture";
+import { releaseEntries, releaseFixture, releaseServer, routesFor, type Route } from "./release-fixture";
 
 const UPSTREAM_COMMIT = "f".repeat(40);
 const PATCH_BODY = "diff --git a/x b/x\n";
@@ -275,7 +275,7 @@ describe("runAcquisition (prebuilt)", () => {
     expect(calls.some((k) => k.cmd === "cargo" || k.cmd === "rustup" || k.cmd === "git")).toBe(false);
     expect(strayStaging(paths)).toEqual([]);
   });
-  test("a second install of the same pair reuses the existing generation and downloads no archive", async () => {
+  test("a second install verifies local bytes and reuses the generation without downloading again", async () => {
     const f = fixture();
     const { c, paths } = ctx({ upstreamVersion: CODEX, noRust: true });
     await withServer(routesFor(f), async (baseUrl, requests) => {
@@ -545,6 +545,47 @@ describe("runInstall", () => {
 });
 
 describe("runUpdate", () => {
+  test("updates a same-version release generation and preserves it across mixed or interrupted assets", async () => {
+    const old = releaseFixture({ cxVersion: VERSION, codexVersion: CODEX });
+    const changedEntries = releaseEntries().map((entry) => entry.name === "codex" ? { ...entry, data: "CODEX-BINARY-REBUILT" } : entry);
+    const generated = releaseFixture({ cxVersion: VERSION, codexVersion: CODEX, entries: changedEntries });
+    const next = { ...generated, manifest: { ...generated.manifest, patchSha256: "f".repeat(64) } };
+    const routes: Record<string, Route> = { ...routesFor(old) };
+    const server = await releaseServer(routes);
+    const { c, paths } = ctx({ upstreamVersion: CODEX, noRust: true });
+    const opts = { fetchPrebuilts: async () => [CODEX] };
+    try {
+      expect(await runUpdate(c, opts, { baseUrl: server.baseUrl })).toBe(0);
+      const oldGeneration = activeGeneration(paths);
+      expect(readFileSync(join(oldGeneration!, "codex"), "utf8")).toBe("CODEX-BINARY");
+
+      routes[`/${old.tag}/manifest.json`] = Buffer.from(JSON.stringify(next.manifest));
+      routes[`/${old.tag}/${old.archiveName}`] = next.archive;
+      expect(await runUpdate(c, opts, { baseUrl: server.baseUrl })).toBe(0);
+      const updatedGeneration = activeGeneration(paths);
+      expect(updatedGeneration).not.toBe(oldGeneration);
+      expect(readFileSync(join(updatedGeneration!, "codex"), "utf8")).toBe("CODEX-BINARY-REBUILT");
+      expect(readInstallation(paths)?.provenance.patchSha256).toBe("f".repeat(64));
+
+      const unchanged = activeGeneration(paths);
+      const badSets: Route[] = [old.archive, 404, next.archive.subarray(0, 12)];
+      for (const badArchive of badSets) {
+        routes[`/${old.tag}/manifest.json`] = Buffer.from(JSON.stringify({ ...next.manifest, patchSha256: "e".repeat(64) }));
+        routes[`/${old.tag}/${old.archiveName}`] = badArchive;
+        expect(await runUpdate(c, opts, { baseUrl: server.baseUrl })).toBe(1);
+        expect(activeGeneration(paths)).toBe(unchanged);
+        expect(readFileSync(join(unchanged!, "codex"), "utf8")).toBe("CODEX-BINARY-REBUILT");
+      }
+
+      routes[`/${old.tag}/manifest.json`] = Buffer.from(JSON.stringify(old.manifest));
+      routes[`/${old.tag}/${old.archiveName}`] = next.archive;
+      expect(await runUpdate(c, opts, { baseUrl: server.baseUrl })).toBe(1);
+      expect(activeGeneration(paths)).toBe(unchanged);
+    } finally {
+      await server.close();
+    }
+  });
+
   test("installs the latest supported prebuilt without updating the app-bundled upstream", async () => {
     const f = releaseFixture({ cxVersion: VERSION, codexVersion: "0.153.0" });
     const { c, paths, real, calls } = ctx({ upstreamVersion: "0.152.1", stagedVersion: "0.153.0", noRust: true });

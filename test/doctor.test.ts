@@ -251,11 +251,12 @@ describe("doctorReport", () => {
     expect(get(lines, "cx_version")).toMatchObject({ ok: true });
     expect(get(lines, "release")).toMatchObject({ ok: true });
     expect(get(lines, "patch")).toMatchObject({ ok: null, value: "a".repeat(12) });
+    expect(get(lines, "patch_version")).toMatchObject({ ok: null, value: "unknown (legacy)" });
     expect(get(lines, "source_commit")).toMatchObject({ ok: null, value: "unknown" });
     expect(get(lines, "upstream_commit")).toMatchObject({ ok: null, value: "b".repeat(12) });
     expect(get(lines, "codex_digest")).toMatchObject({ ok: true, value: "verified" });
     expect(get(lines, "host_digest")).toMatchObject({ ok: true, value: "verified" });
-    expect(get(lines, "codex_version")).toMatchObject({ ok: true });
+    expect(get(lines, "codex_version")).toMatchObject({ ok: true, value: `codex-cli ${codexVersion}` });
     expect(get(lines, "legal")).toMatchObject({ ok: true, value: "present" });
     expect(get(lines, "toolchain")).toMatchObject({ ok: null, value: expect.stringContaining("optional for prebuilt") });
     expect(get(lines, "drift")).toMatchObject({ ok: true, value: "none" });

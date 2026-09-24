@@ -10,7 +10,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildMatrix, commitPatches, selectSourceRelease, sha256File, workingTreePatches } from "../scripts/prebuilt";
+import { buildMatrix, commitPatches, selectSourceRelease, sha256File, unionReleasePlatforms, workingTreePatches } from "../scripts/prebuilt";
 import { loadManifest } from "../src/patch/manifest";
 
 const root = join(import.meta.dir, "..");
@@ -41,6 +41,14 @@ function runDetect(args: readonly string[], releases: unknown): CliRun {
 }
 
 describe("detect on a schedule", () => {
+  test("publication includes both baseline platforms even when only one is requested", () => {
+    const run = runDetect(["--event", "schedule", "--platforms", "linux-arm64", "--repo", "adrijshikhar/cxstatusline"], []);
+    expect(run.status).toBe(0);
+    expect(run.outputs.platforms?.split(",").sort()).toEqual(["darwin-arm64", "linux-arm64"]);
+    const dry = runDetect(["--event", "schedule", "--publish-requested", "false", "--platforms", "linux-arm64", "--repo", "adrijshikhar/cxstatusline"], []);
+    expect(dry.outputs.platforms).toBe("linux-arm64");
+  });
+
   test("skips successfully when no v<CX> source release has been published", () => {
     const run = runDetect(["--event", "schedule", "--repo", "adrijshikhar/cxstatusline"], []);
     expect(run.status).toBe(0);
@@ -88,6 +96,11 @@ describe("detect on a schedule", () => {
 });
 
 describe("buildMatrix", () => {
+  test("replacement targets keep every previously published platform", () => {
+    expect(unionReleasePlatforms(["darwin-arm64", "linux-arm64"], ["darwin-x64", "linux-arm64"]))
+      .toEqual(["darwin-arm64", "linux-arm64", "darwin-x64"]);
+  });
+
   test("self-hosted runner is pinned to ARM64 runner array", () => {
     const m = buildMatrix(["darwin-arm64"], true);
     expect(m).toEqual([{

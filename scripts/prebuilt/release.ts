@@ -5,7 +5,7 @@
  * without importing the upload flow. Everything here either reads or classifies; nothing here
  * creates, edits, uploads or deletes.
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { validateManifest, type ExpectedRelease, type Platform, type ReleaseManifest } from "../../src/distribution";
 import { ghText, type GhRunner } from "./gh";
@@ -14,6 +14,7 @@ import { redact } from "./redact";
 
 /** Asset names are our own, but they still index into a filesystem and a `--pattern`. */
 export const SAFE_ASSET_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$/;
+const DEFAULT_REPOSITORY = process.env.GITHUB_REPOSITORY ?? "adrijshikhar/cxstatusline";
 
 /**
  * A state only the owner can resolve. Exit code 3 is the pipeline's "blocked, not broken" signal
@@ -42,6 +43,9 @@ export interface ReleaseView {
   readonly state: ReleaseState;
   readonly url: string;
   readonly body: string;
+  readonly title?: string;
+  readonly id?: number;
+  readonly isPrerelease?: boolean;
   readonly assets: readonly ReleaseAsset[];
 }
 
@@ -133,10 +137,8 @@ export async function verifyReleaseDir(dir: string, expected: ExpectedReleaseInp
 }
 
 /**
- * Which assets still need uploading. An asset already attached with the same size is skipped -
- * that is what makes an interrupted upload resumable without regenerating any bytes. An asset
- * attached with a *different* size means two build sets are being mixed, which is never resolved
- * automatically.
+ * Re-upload every draft asset: size alone cannot establish byte identity. Archives go first,
+ * checksums next and the manifest last so an interrupted draft never advertises a mixed manifest.
  */
 export function planUploads(
   existing: readonly ReleaseAsset[],
@@ -146,19 +148,10 @@ export function planUploads(
   const skip: string[] = [];
   for (const asset of local) {
     const attached = existing.find((a) => a.name === asset.name);
-    if (attached === undefined) upload.push(asset.name);
-    else if (attached.size === asset.size) skip.push(asset.name);
-    else if (asset.name === "manifest.json" || asset.name === "SHA256SUMS") {
-      upload.push(asset.name);
-    } else {
-      throw new BlockedError(
-        "Prebuilt blocked: release asset conflict",
-        `${asset.name} is already attached to the release with size ${attached.size}, but this build produced `
-          + `${asset.size}. Two different build sets must never be combined. Delete the unpublished draft (owner `
-          + `action) and re-run, or bump the cxstatusline version if the release is already published.`,
-      );
-    }
+    upload.push(asset.name);
   }
+  const order = (name: string): number => name === "manifest.json" ? 2 : name === "SHA256SUMS" ? 1 : 0;
+  upload.sort((a, b) => order(a) - order(b));
   return { upload, skip };
 }
 
@@ -183,8 +176,8 @@ export function compareIdentity(
 // ---- gh-backed helpers ----
 
 /** `gh release view`, with "no such release" separated from every other failure. */
-export function inspectRelease(run: GhRunner, tag: string): ReleaseView {
-  const args = ["release", "view", tag, "--json", "isDraft,url,body,assets"];
+export function inspectRelease(run: GhRunner, tag: string, repo = DEFAULT_REPOSITORY): ReleaseView {
+  const args = ["release", "view", tag, "--repo", repo, "--json", "isDraft,isPrerelease,url,name,body,assets"];
   const result = run(args);
   if (result.status !== 0) {
     if (/release not found|not found|HTTP 404/i.test(result.stderr)) {
@@ -198,6 +191,9 @@ export function inspectRelease(run: GhRunner, tag: string): ReleaseView {
     isDraft?: unknown;
     url?: unknown;
     body?: unknown;
+    name?: unknown;
+    id?: unknown;
+    isPrerelease?: unknown;
     assets?: readonly { name?: unknown; size?: unknown }[];
   };
   const assets = (raw.assets ?? [])
@@ -207,17 +203,20 @@ export function inspectRelease(run: GhRunner, tag: string): ReleaseView {
     state: raw.isDraft === true ? "draft" : "published",
     url: typeof raw.url === "string" ? raw.url : "",
     body: typeof raw.body === "string" ? raw.body : "",
+    title: typeof raw.name === "string" ? raw.name : undefined,
+    id: typeof raw.id === "number" ? raw.id : undefined,
+    isPrerelease: raw.isPrerelease === true,
     assets,
   };
 }
 
 /** Download one named asset into `dir`, refusing a name that is not one of ours. */
-export function downloadAsset(run: GhRunner, tag: string, name: string, dir: string): string {
+export function downloadAsset(run: GhRunner, tag: string, name: string, dir: string, repo = DEFAULT_REPOSITORY): string {
   if (!SAFE_ASSET_NAME.test(name)) throw new Error(`refusing to download unusable asset name ${JSON.stringify(name)}`);
   mkdirSync(dir, { recursive: true });
   const file = join(dir, name);
   if (existsSync(file)) rmSync(file, { force: true });
-  ghText(run, ["release", "download", tag, "--pattern", name, "--dir", dir]);
+  ghText(run, ["release", "download", tag, "--pattern", name, "--dir", dir, "--repo", repo]);
   if (!existsSync(file)) throw new Error(`gh release download ${tag} did not produce ${name}`);
   return file;
 }
@@ -235,6 +234,85 @@ export interface ExistingCheck {
   readonly release: ExpectedReleaseInput;
   readonly assetNames: readonly string[];
   readonly tmpRoot: string;
+  readonly repo?: string;
+}
+
+export interface ReleaseBackup {
+  readonly schema: 1;
+  readonly state: "absent" | "draft" | "published";
+  readonly tag: string;
+  readonly view?: ReleaseView;
+  readonly manifestSha256?: string;
+}
+
+function releaseSnapshot(view: ReleaseView): string {
+  return JSON.stringify({
+    id: view.id ?? null,
+    title: view.title ?? "",
+    body: view.body,
+    isPrerelease: view.isPrerelease === true,
+    assets: [...view.assets].sort((a, b) => a.name.localeCompare(b.name)),
+  });
+}
+
+/** Download and verify the whole currently published generation before replacement. */
+export async function backupPublishedRelease(run: GhRunner, tag: string, codexVersion: string, dir: string, repo = DEFAULT_REPOSITORY): Promise<ReleaseBackup> {
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(dir, { recursive: true });
+  const view = inspectRelease(run, tag, repo);
+  if (view.state !== "published") {
+    const backup: ReleaseBackup = { schema: 1, state: view.state === "draft" ? "draft" : "absent", tag, view };
+    writeFileSync(join(dir, "backup.json"), `${JSON.stringify(backup, null, 2)}\n`);
+    return backup;
+  }
+  const assetsDir = join(dir, "assets");
+  const manifestFile = downloadAsset(run, tag, "manifest.json", assetsDir, repo);
+  const raw = JSON.parse(readFileSync(manifestFile, "utf8")) as { artifacts?: { platform?: unknown }[] };
+  const validPlatforms = ["darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64"];
+  const platforms = raw.artifacts?.map((artifact) => artifact.platform)
+    .filter((platform): platform is Platform => typeof platform === "string" && validPlatforms.includes(platform)) ?? [];
+  if (platforms.length === 0 || platforms.length !== (raw.artifacts?.length ?? 0)) throw new Error(`release ${tag} has no valid platform manifest`);
+  let releaseManifest!: ReleaseManifest;
+  for (const platform of platforms) releaseManifest = validateManifest(raw, { codexVersion, platform });
+  const names = [...releaseManifest.artifacts.map((artifact) => artifact.filename), "manifest.json", "SHA256SUMS"].sort();
+  const publishedNames = view.assets.map((asset) => asset.name).sort();
+  if (JSON.stringify(names) !== JSON.stringify(publishedNames)) throw new Error(`release ${tag} contains assets outside its verified manifest`);
+  for (const name of names) if (name !== "manifest.json") downloadAsset(run, tag, name, assetsDir, repo);
+  const verified = await verifyReleaseDir(assetsDir, { codexVersion, platforms });
+  const backup: ReleaseBackup = { schema: 1, state: "published", tag, view, manifestSha256: verified.manifestSha256 };
+  writeFileSync(join(dir, "backup.json"), `${JSON.stringify(backup, null, 2)}\n`);
+  return backup;
+}
+
+/** Verify the saved bytes and ensure GitHub still holds the identity saved before mutation. */
+export async function verifyReleaseBackup(run: GhRunner, tag: string, dir: string, repo = DEFAULT_REPOSITORY): Promise<ReleaseBackup> {
+  const backup = JSON.parse(readFileSync(join(dir, "backup.json"), "utf8")) as ReleaseBackup;
+  if (backup.schema !== 1 || backup.tag !== tag) throw new Error("release backup tag or schema does not match");
+  if (backup.state === "published") {
+    const raw = JSON.parse(readFileSync(join(dir, "assets", "manifest.json"), "utf8")) as {
+      codexVersion?: unknown; artifacts?: { platform?: unknown }[];
+    };
+    if (typeof raw.codexVersion !== "string") throw new Error("backup manifest has no Codex version");
+    const platforms = raw.artifacts?.map((artifact) => artifact.platform).filter((p): p is Platform => typeof p === "string") ?? [];
+    const verified = await verifyReleaseDir(join(dir, "assets"), { codexVersion: raw.codexVersion, platforms });
+    if (verified.manifestSha256 !== backup.manifestSha256) throw new Error("release backup manifest digest changed");
+    const current = inspectRelease(run, tag, repo);
+    if (!backup.view || current.state !== "published" || releaseSnapshot(current) !== releaseSnapshot(backup.view)) {
+      throw new Error(`release ${tag} changed after backup; refusing replacement`);
+    }
+    const currentDir = join(dir, "current-check");
+    rmSync(currentDir, { recursive: true, force: true });
+    for (const asset of current.assets) downloadAsset(run, tag, asset.name, currentDir, repo);
+    const currentSet = await verifyReleaseDir(currentDir, { codexVersion: raw.codexVersion, platforms });
+    if (currentSet.manifestSha256 !== backup.manifestSha256) throw new Error(`release ${tag} asset bytes changed after backup; refusing replacement`);
+  } else {
+    const current = inspectRelease(run, tag, repo);
+    if (backup.state === "absent" && current.state !== "absent") throw new Error(`release ${tag} appeared after backup; refusing publication`);
+    if (backup.state === "draft" && (current.state !== "draft" || !backup.view || releaseSnapshot(current) !== releaseSnapshot(backup.view))) {
+      throw new Error(`draft ${tag} changed after backup; refusing publication`);
+    }
+  }
+  return backup;
 }
 
 /**
@@ -243,14 +321,14 @@ export interface ExistingCheck {
  * for the state to have changed.
  */
 export async function checkExistingRelease(c: ExistingCheck): Promise<ExistingVerdict> {
-  const view = inspectRelease(c.run, c.tag);
+  const view = inspectRelease(c.run, c.tag, c.repo);
   if (view.state !== "published") return { state: view.state, view } as ExistingVerdict;
 
   const attached = new Map(view.assets.map((a) => [a.name, a.size]));
   const missing = c.assetNames.filter((n) => !attached.has(n));
   
   if (attached.has("manifest.json")) {
-    const file = downloadAsset(c.run, c.tag, "manifest.json", join(c.tmpRoot, "published"));
+    const file = downloadAsset(c.run, c.tag, "manifest.json", join(c.tmpRoot, "published"), c.repo);
     const raw = JSON.parse(readFileSync(file, "utf8"));
     
     if (missing.length > 0) {
@@ -308,8 +386,7 @@ export async function checkExistingRelease(c: ExistingCheck): Promise<ExistingVe
 /** The message a published-but-different release earns. Shared by `detect` and `publish`. */
 export function immutabilityMessage(tag: string, detail: string): string {
   return (
-    `Release ${tag} is already published but was built from different inputs (${detail}). Published releases `
-    + `are immutable: their assets are never replaced. Publishing this build requires a `
-    + `cxstatusline version bump so it gets its own tag. Nothing was uploaded, deleted or overwritten.`
+    `Release ${tag} must be rebuilt from different inputs (${detail}). A complete verified backup is required `
+    + `before its release assets can be replaced.`
   );
 }

@@ -9,7 +9,7 @@
  */
 import { runBuild, runMerge, runPackage, runRustNotices, runVerify } from "./prebuilt/cli-build";
 import { runDetect } from "./prebuilt/cli-detect";
-import { runPublish, runReportCommand } from "./prebuilt/cli-publish";
+import { runBackup, runPublish, runReportCommand, runRestore } from "./prebuilt/cli-publish";
 import { parseFlags } from "./prebuilt/env";
 
 export * from "./prebuilt/api";
@@ -29,7 +29,9 @@ const USAGE = [
   "  verify       --out DIR --codex-version X.Y.Z [--cx-version X.Y.Z] [--platform P] [--skip-macho]",
   "  merge        --inputs DIR[,DIR...] --out DIR --platforms P[,P...]",
   "  publish      --tag TAG --dir DIR --run-id ID --run-url URL --source-commit SHA",
-  "               --codex-version X.Y.Z [--cx-version X.Y.Z] [--event NAME] [--platforms P]",
+  "               --codex-version X.Y.Z --backup-dir DIR [--cx-version X.Y.Z] [--event NAME] [--platforms P]",
+  "  backup       --tag TAG --codex-version X.Y.Z --dir DIR [--repo OWNER/NAME]",
+  "  restore      --tag TAG --codex-version X.Y.Z --backup-dir DIR [--repo OWNER/NAME]",
   "  report       --detect R --validate R --native R [--merge R] --publish R --codex-version V --tag TAG --run-url URL",
   "               --source-commit SHA --patch-sha256 SHA --event NAME [--cx-version V] [--upstream-tag TAG]",
   "               [--repo OWNER/NAME] [--should-build true|false] [--publish-requested true|false]",
@@ -47,6 +49,8 @@ if (import.meta.main) {
     else if (command === "verify") await runVerify(flags);
     else if (command === "merge") await runMerge(flags);
     else if (command === "publish") await runPublish(flags);
+    else if (command === "backup") await runBackup(flags);
+    else if (command === "restore") await runRestore(flags);
     else if (command === "report") await runReportCommand(flags);
     else {
       process.stderr.write(`${USAGE}\n`);

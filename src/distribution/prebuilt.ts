@@ -216,7 +216,6 @@ export async function preparePrebuilt(
 
     const unchanged = unchangedPair(ctx, manifest, artifact, tag);
     if (unchanged !== null) return { kind: "unchanged", pair: unchanged };
-
     return { kind: "staged", pair: await stageArchive(ctx, download, manifest, artifact, tag, opts) };
   } finally {
     rmSync(download, { recursive: true, force: true });
@@ -241,13 +240,18 @@ export async function fetchPublishedPrebuiltVersions(
     if (process.env.GITHUB_TOKEN) {
       headers.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
     }
-    const res = await fetcher(`https://api.github.com/repos/${repo}/releases?per_page=100`, {
-      headers,
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) return [];
-    const data = (await res.json()) as unknown;
-    if (!Array.isArray(data)) return [];
+    const data: unknown[] = [];
+    for (let page = 1; ; page += 1) {
+      const res = await fetcher(`https://api.github.com/repos/${repo}/releases?per_page=100&page=${page}`, {
+        headers,
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) return [];
+      const result = (await res.json()) as unknown;
+      if (!Array.isArray(result)) return [];
+      data.push(...result);
+      if (result.length < 100) break;
+    }
     const versions = new Set<string>();
     for (const item of data) {
       if (typeof item === "object" && item !== null) {
@@ -270,4 +274,3 @@ export async function fetchPublishedPrebuiltVersions(
     return [];
   }
 }
-

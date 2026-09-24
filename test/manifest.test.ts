@@ -123,11 +123,13 @@ describe("supportedCodexVersions and isCodexVersionSupported", () => {
 describe("patch versions", () => {
   test("each tested Codex version has exactly one patch owner", () => {
     const shipped = loadManifest(join(import.meta.dir, "..", "patches"));
-    for (const version of ["0.152.1", "0.153.0", "0.153.4", "0.154.0", "0.155.0", "0.155.1"]) {
+    for (const version of ["0.152.1", "0.153.0", "0.153.1", "0.153.4", "0.154.0", "0.155.0", "0.155.1"]) {
       expect(resolvePatch(shipped, v(version))?.patchVersion).toBe(1);
     }
-    expect(resolvePatch(shipped, v("0.156.1"))?.patchVersion).toBe(2);
-    for (const version of ["0.152.2", "0.156.0", "0.157.0"]) {
+    for (const version of ["0.156.0", "0.156.1"]) {
+      expect(resolvePatch(shipped, v(version))?.patchVersion).toBe(2);
+    }
+    for (const version of ["0.152.2", "0.153.2", "0.153.3", "0.157.0"]) {
       expect(resolvePatch(shipped, v(version))).toBeNull();
     }
   });

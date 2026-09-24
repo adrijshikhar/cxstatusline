@@ -5,7 +5,7 @@
  * about, and what release already exists for the tag they imply.
  */
 import { readFileSync } from "node:fs";
-import type { Platform } from "../../src/distribution";
+import { DEFAULT_PREBUILT_PLATFORMS, type Platform } from "../../src/distribution";
 import { loadManifest, type Manifest } from "../../src/patch/manifest";
 import {
   blockedIssueTitle,
@@ -28,7 +28,7 @@ import {
 import { execGh, type GhRunner } from "./gh";
 import { archiveFilename, sha256File } from "./pack";
 import { commitPatches, workingTreePatches, type PatchTree } from "./patch-tree";
-import { checkExistingRelease, immutabilityMessage, type ReleaseState } from "./release";
+import { checkExistingRelease, type ReleaseState } from "./release";
 import { listSourceReleases, resolveTagCommit, selectSourceRelease } from "./source";
 
 const RELEASES_URL = "https://api.github.com/repos/openai/codex/releases?per_page=100";
@@ -150,17 +150,21 @@ export function buildMatrix(platforms: readonly Platform[], selfHosted: boolean)
   });
 }
 
+export function unionReleasePlatforms(requested: readonly Platform[], alreadyPublished: readonly Platform[]): Platform[] {
+  return [...new Set([...requested, ...alreadyPublished])];
+}
+
 /**
  * Classify the release that already exists for this tag. `published` and identical means this run
- * has nothing to do (success, no build); `published` and different means the immutability rule has
- * been hit and only the owner can resolve it; `draft` means the publish job resumes it.
+ * has nothing to do (success, no build); `published` and different means rebuild and replace the
+ * complete release set; `draft` means resume only when its provenance matches the verified build.
  */
 async function releaseState(
   run: GhRunner,
   detection: Detection,
   expected: { readonly sourceCommit: string; readonly patchSha256: string; readonly patchVersion?: number },
   platforms: readonly Platform[],
-): Promise<{ state: ReleaseState; identical: boolean; detail: string; url: string }> {
+): Promise<{ state: ReleaseState; identical: boolean; detail: string; url: string; publishedPlatforms: Platform[] }> {
   const verdict = await checkExistingRelease({
     run,
     tag: detection.tag,
@@ -174,6 +178,10 @@ async function releaseState(
     identical: verdict.state === "published" && verdict.identical,
     detail: verdict.state === "published" ? verdict.detail : "",
     url: verdict.view.url,
+    publishedPlatforms: verdict.view.assets.flatMap((asset) => {
+      const match = asset.name.match(/^cxstatusline-codex-\d+\.\d+\.\d+-(darwin-arm64|darwin-x64|linux-x64|linux-arm64)\.tar\.gz$/);
+      return match ? [match[1] as Platform] : [];
+    }),
   };
 }
 
@@ -291,19 +299,15 @@ function finish(
     matrix: JSON.stringify(matrix),
   };
   if (existing.state === "published" && !existing.identical) {
-    if (!publishRequested) {
-      summary([
-        `## Prebuilt ${detection.tag}`,
-        "",
-        `already published: ${existing.url}`,
-        "",
-        "Skipping build because publish=false (dry-run).",
-      ]);
-      emit({ ...frozen, patches_from: resolved.patchesFrom, should_build: "false" });
-      return;
-    }
-    // Immutability: the tag is taken by different bytes. Only a CX version bump resolves it.
-    blockedExit(frozen, blockedIssueTitle(detection.codexVersion), immutabilityMessage(detection.tag, existing.detail));
+    summary([
+      `## Prebuilt ${detection.tag}`,
+      "",
+      `Existing release must be rebuilt from new inputs: ${existing.detail}`,
+      "",
+      publishRequested ? "A verified backup and complete replacement will be required before publication." : "publish=false; this build will be verified without publication.",
+    ]);
+    emit({ ...frozen, patches_from: resolved.patchesFrom, should_build: "true" });
+    return;
   }
   const shouldBuild = !(existing.state === "published" && existing.identical);
   if (!shouldBuild) {
@@ -334,6 +338,7 @@ export async function runDetect(flags: Record<string, string>): Promise<void> {
   if (selfHosted && platforms.some((p) => !p.endsWith("-arm64"))) {
     throw new Error("self-hosted runner is arm64 only");
   }
+  if (publishRequested) platforms = unionReleasePlatforms(platforms, DEFAULT_PREBUILT_PLATFORMS);
   const matrix = buildMatrix(platforms, selfHosted);
   const source = resolveSource(flags, execGh, event);
   if (source === null) {
@@ -346,5 +351,10 @@ export async function runDetect(flags: Record<string, string>): Promise<void> {
   const patchSha256 = (await sha256File(patches.patchPath(detection.patchFile))).sha256;
   const expected = { sourceCommit: source.sourceCommit, patchSha256, patchVersion: detection.patchVersion };
   const existing = await releaseState(execGh, detection, expected, platforms);
-  finish(detection, source, existing, { patchSha256, pinned, patchesFrom: patches.describe }, platforms, matrix, publishRequested);
+  if (existing.publishedPlatforms.length > 0) {
+    platforms = unionReleasePlatforms(platforms, existing.publishedPlatforms);
+  }
+  const finalMatrix = buildMatrix(platforms, selfHosted);
+  const finalExisting = await releaseState(execGh, detection, expected, platforms);
+  finish(detection, source, finalExisting, { patchSha256, pinned, patchesFrom: patches.describe }, platforms, finalMatrix, publishRequested);
 }

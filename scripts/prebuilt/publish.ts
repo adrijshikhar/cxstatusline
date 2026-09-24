@@ -1,10 +1,8 @@
 /**
- * Atomic release publication.
+ * Verified release publication with backup and recovery.
  *
- * The contract this module exists to keep: a published release is immutable, an unfinished draft
- * is never silently thrown away, and no byte reaches a release asset that has not been verified
- * both before upload and after download. Every branch that cannot be made safe automatically
- * raises `BlockedError` with restart instructions for the owner instead of guessing.
+ * A replacement is a complete verified release generation. Published assets are backed up before
+ * mutation, and failed publication attempts restore that verified set.
  *
  * Release *classification* lives in `release.ts`; this module is the part that writes.
  */
@@ -22,9 +20,10 @@ import {
   immutabilityMessage,
   inspectRelease,
   planUploads,
+  verifyReleaseBackup,
   verifyReleaseDir,
   type ExpectedIdentity,
-  type ReleaseAsset,
+  type ReleaseBackup,
   type VerifiedSet,
 } from "./release";
 
@@ -42,6 +41,8 @@ export interface PublishOptions {
   readonly platforms?: readonly Platform[];
   readonly event: string;
   readonly tmpRoot: string;
+  readonly backupDir?: string;
+  readonly repo?: string;
   readonly summary: (lines: readonly string[]) => void;
 }
 
@@ -59,8 +60,8 @@ function draftBlock(tag: string, codexVersion: string, recorded: string): Blocke
     blockedIssueTitle(codexVersion),
     `An unpublished draft release ${tag} already exists, but it records ${recorded}, which is not this build's `
       + `manifest. That is a conflicting build set, not a transient upload failure, so this run will not touch it. `
-      + `Restart options (owner action, both manual and deliberate): delete the unpublished draft ${tag} in the `
-      + `GitHub Releases UI and re-run this workflow, or bump the cxstatusline version to publish under a new tag. `
+      + `Recovery (manual owner action): delete the unpublished draft ${tag} in the `
+      + `GitHub Releases UI and re-run this workflow after confirming the conflicting build is no longer needed. `
       + `Nothing was deleted, uploaded or overwritten by this run.`,
   );
 }
@@ -69,6 +70,10 @@ function buildIdentity(o: PublishOptions): BuildIdentity {
   return o.event === "schedule"
     ? { kind: "schedule", cxVersion: o.cxVersion }
     : { kind: "dispatch", sha: o.sourceCommit };
+}
+
+function repository(o: PublishOptions): string {
+  return o.repo ?? process.env.GITHUB_REPOSITORY ?? "adrijshikhar/cxstatusline";
 }
 
 function createDraft(o: PublishOptions, set: VerifiedSet): string {
@@ -94,8 +99,8 @@ function createDraft(o: PublishOptions, set: VerifiedSet): string {
   writeFileSync(notesFile, notes);
   const title = releaseTitle({ cxVersion: o.cxVersion, codexVersion: o.codexVersion, platforms });
   // --draft: nothing is visible as a release until every asset has been downloaded back and
-  // re-verified. No --clobber anywhere in this module, deliberately.
-  return ghText(o.run, [
+  // re-verified before it becomes visible.
+  const url = ghText(o.run, [
     "release",
     "create",
     o.tag,
@@ -106,7 +111,95 @@ function createDraft(o: PublishOptions, set: VerifiedSet): string {
     title,
     "--notes-file",
     notesFile,
+    "--repo",
+    repository(o),
   ]).trim();
+  if (!url) throw new Error(`gh release create ${o.tag} succeeded without a release URL`);
+  return url;
+}
+
+async function restorePublishedBackup(o: PublishOptions, backup: ReleaseBackup): Promise<void> {
+  if (backup.state !== "published" || !backup.view) throw new Error("no published release backup is available for restoration");
+  const backupAssets = join(o.backupDir!, "assets");
+  const manifest = JSON.parse(readFileSync(join(backupAssets, "manifest.json"), "utf8")) as ReleaseManifest;
+  const platforms = manifest.artifacts.map((artifact) => artifact.platform);
+  const verified = await verifyReleaseDir(backupAssets, { codexVersion: o.codexVersion, platforms });
+  const current = inspectRelease(o.run, o.tag, repository(o));
+  if (current.state !== "absent") ghText(o.run, ["release", "delete", o.tag, "--yes", "--repo", repository(o)]);
+  const notesFile = join(o.tmpRoot, "restore-release-notes.md");
+  writeFileSync(notesFile, backup.view.body);
+  ghText(o.run, [
+    "release", "create", o.tag, "--draft", "--target", manifest.sourceCommit,
+    "--title", backup.view.title ?? `[Prebuilt] Codex ${o.codexVersion}`,
+    "--notes-file", notesFile,
+    "--repo", repository(o),
+  ]);
+  const names = [
+    ...manifest.artifacts.map((artifact) => artifact.filename),
+    "SHA256SUMS",
+    "manifest.json",
+  ];
+  for (const name of names) ghText(o.run, ["release", "upload", o.tag, join(backupAssets, name), "--clobber", "--repo", repository(o)]);
+  const checkDir = join(o.tmpRoot, "restored-release-check");
+  for (const name of names) downloadAsset(o.run, o.tag, name, checkDir, repository(o));
+  const checked = await verifyReleaseDir(checkDir, { codexVersion: o.codexVersion, platforms });
+  if (checked.manifestSha256 !== verified.manifestSha256) throw new Error("restored release manifest did not verify");
+  const publishArgs = ["release", "edit", o.tag, "--draft=false", "--repo", repository(o)];
+  if (backup.view.isPrerelease) publishArgs.push("--prerelease");
+  ghText(o.run, publishArgs);
+}
+
+export async function restoreReleaseBackup(o: PublishOptions): Promise<void> {
+  if (!o.backupDir) throw new Error("--backup-dir is required for release restoration");
+  const backup = JSON.parse(readFileSync(join(o.backupDir, "backup.json"), "utf8")) as ReleaseBackup;
+  if (backup.schema !== 1 || backup.tag !== o.tag || backup.state !== "published") {
+    throw new Error("backup does not contain a published release matching the requested tag");
+  }
+  const manifest = JSON.parse(readFileSync(join(o.backupDir, "assets", "manifest.json"), "utf8")) as ReleaseManifest;
+  const verified = await verifyReleaseDir(join(o.backupDir, "assets"), {
+    codexVersion: o.codexVersion,
+    platforms: manifest.artifacts.map((artifact) => artifact.platform),
+  });
+  if (verified.manifestSha256 !== backup.manifestSha256) throw new Error("backup manifest digest does not match backup metadata");
+  await restorePublishedBackup(o, backup);
+  o.summary([`## Restored ${o.tag}`, "", `Previous complete release set restored and verified from ${o.backupDir}.`]);
+}
+
+async function replacePublished(o: PublishOptions, set: VerifiedSet, backup: ReleaseBackup): Promise<PublishOutcome> {
+  if (backup.state !== "published" || !o.backupDir) throw new Error("a complete published-release backup is required before replacement");
+  const previous = JSON.parse(readFileSync(join(o.backupDir, "assets", "manifest.json"), "utf8")) as ReleaseManifest;
+  const built = new Set(set.manifest.artifacts.map((artifact) => artifact.platform));
+  const omitted = previous.artifacts.map((artifact) => artifact.platform).filter((platform) => !built.has(platform));
+  if (omitted.length) throw new Error(`replacement build omits already-published platform(s) ${omitted.join(", ")}`);
+  // A failed delete must not trigger another destructive delete during restoration.
+  // The verified backup remains available if GitHub applied an ambiguously failed request.
+  ghText(o.run, ["release", "delete", o.tag, "--yes", "--repo", repository(o)]);
+  try {
+    const url = createDraft(o, set);
+    const order = [...set.assets].sort((a, b) =>
+      (a.name === "manifest.json" ? 2 : a.name === "SHA256SUMS" ? 1 : 0)
+      - (b.name === "manifest.json" ? 2 : b.name === "SHA256SUMS" ? 1 : 0));
+    for (const asset of order) ghText(o.run, ["release", "upload", o.tag, join(o.dir, asset.name), "--repo", repository(o)]);
+    await reverifyUploaded(o, set);
+    ghText(o.run, ["release", "edit", o.tag, "--draft=false", "--latest=false", "--prerelease", "--repo", repository(o)]);
+    o.summary([
+      `## Prebuilt ${o.tag}`, "", `Replaced and verified: ${url}`, "",
+      "The release was temporarily unavailable while its complete asset set was replaced.",
+      `Verified backup: ${o.backupDir}`,
+    ]);
+    return { kind: "published", url };
+  } catch (error) {
+    try {
+      await restorePublishedBackup(o, backup);
+    } catch (restoreError) {
+      throw new Error(
+        `replacement failed (${error instanceof Error ? error.message : String(error)}); `
+        + `automatic restoration also failed (${restoreError instanceof Error ? restoreError.message : String(restoreError)}). `
+        + `Keep workflow backup artifact and restore from ${o.backupDir}.`,
+      );
+    }
+    throw new Error(`replacement failed; the verified previous release was restored: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 /** Download every uploaded asset back and prove the bytes GitHub holds are the bytes we built. */
@@ -118,7 +211,7 @@ async function reverifyUploaded(o: PublishOptions, set: VerifiedSet): Promise<vo
     "SHA256SUMS": (await sha256File(join(o.dir, "SHA256SUMS"))).sha256,
   };
   for (const asset of set.assets) {
-    const file = downloadAsset(o.run, o.tag, asset.name, dir);
+    const file = downloadAsset(o.run, o.tag, asset.name, dir, repository(o));
     const actual = await sha256File(file);
     if (actual.sha256 !== expected[asset.name]) {
       throw new Error(
@@ -140,7 +233,7 @@ async function reverifyUploaded(o: PublishOptions, set: VerifiedSet): Promise<vo
 export async function publishRelease(o: PublishOptions): Promise<PublishOutcome> {
   const platforms = o.platforms ?? (o.platform ? [o.platform] : ["darwin-arm64"]);
   const release = { cxVersion: o.cxVersion, codexVersion: o.codexVersion, platforms };
-  let set = await verifyReleaseDir(o.dir, release);
+  const set = await verifyReleaseDir(o.dir, release);
   if (set.manifest.sourceCommit !== o.sourceCommit) {
     throw new Error(
       `the downloaded artifact was built from ${set.manifest.sourceCommit} but this run resolved `
@@ -156,12 +249,31 @@ export async function publishRelease(o: PublishOptions): Promise<PublishOutcome>
     release,
     assetNames,
     tmpRoot: o.tmpRoot,
+    repo: repository(o),
   });
 
   if (verdict.state === "published") {
-    if (!verdict.identical) throw immutabilityBlock(o.tag, o.codexVersion, verdict.detail);
-    o.summary([`## Prebuilt ${o.tag}`, "", `Already published, identical: ${verdict.view.url}`, "", "Nothing to do."]);
-    return { kind: "skipped-identical", url: verdict.view.url };
+    if (verdict.identical) {
+      o.summary([`## Prebuilt ${o.tag}`, "", `Already published, identical: ${verdict.view.url}`, "", "Nothing to do."]);
+      return { kind: "skipped-identical", url: verdict.view.url };
+    }
+    if (!o.backupDir) throw immutabilityBlock(o.tag, o.codexVersion, verdict.detail);
+    const backup = await verifyReleaseBackup(o.run, o.tag, o.backupDir, repository(o));
+    return await replacePublished(o, set, backup);
+  }
+  if (verdict.state === "published-partial") {
+    const previousFile = downloadAsset(o.run, o.tag, "manifest.json", join(o.tmpRoot, "published-platforms"), repository(o));
+    const previous = JSON.parse(readFileSync(previousFile, "utf8")) as ReleaseManifest;
+    const built = new Set(set.manifest.artifacts.map((artifact) => artifact.platform));
+    const omitted = previous.artifacts.map((artifact) => artifact.platform).filter((platform) => !built.has(platform));
+    if (omitted.length > 0) {
+      throw new BlockedError(
+        blockedIssueTitle(o.codexVersion),
+        `replacement build omits already-published platform(s) ${omitted.join(", ")}; include the complete existing platform set before publication`,
+      );
+    }
+    if (!o.backupDir) throw immutabilityBlock(o.tag, o.codexVersion, "complete replacement backup is required");
+    return await replacePublished(o, set, await verifyReleaseBackup(o.run, o.tag, o.backupDir, repository(o)));
   }
 
   let url = verdict.view.url;
@@ -176,90 +288,21 @@ export async function publishRelease(o: PublishOptions): Promise<PublishOutcome>
         provenance === null ? "no build provenance" : `manifest_sha=${provenance.manifestSha256}`,
       );
     }
-  } else if (verdict.state === "published-partial") {
-    // published-partial: download existing manifest and merge any previously published platform artifacts
-    const publishedManifestFile = downloadAsset(o.run, o.tag, "manifest.json", join(o.tmpRoot, "published-manifest"));
-    const publishedManifest = JSON.parse(readFileSync(publishedManifestFile, "utf8")) as ReleaseManifest;
-    const newPlatforms = new Set(set.manifest.artifacts.map((a) => a.platform));
-    const retainedArtifacts = publishedManifest.artifacts.filter((a) => !newPlatforms.has(a.platform));
-
-    if (retainedArtifacts.length > 0) {
-      const unifiedArtifacts = [...retainedArtifacts, ...set.manifest.artifacts].sort((a, b) =>
-        a.platform.localeCompare(b.platform),
-      );
-      const unifiedManifest: ReleaseManifest = {
-        ...set.manifest,
-        artifacts: unifiedArtifacts,
-      };
-      writeFileSync(join(o.dir, "manifest.json"), `${JSON.stringify(unifiedManifest, null, 2)}\n`);
-
-      // Merge SHA256SUMS as well so all archives have their checksums present
-      const publishedSumsFile = downloadAsset(o.run, o.tag, "SHA256SUMS", join(o.tmpRoot, "published-sums"));
-      const publishedSums = parseChecksums(readFileSync(publishedSumsFile, "utf8"));
-      const localSums = parseChecksums(readFileSync(join(o.dir, "SHA256SUMS"), "utf8"));
-      const manifestDigest = await sha256File(join(o.dir, "manifest.json"));
-
-      const unifiedSums: Record<string, string> = { ...publishedSums, ...localSums };
-      unifiedSums["manifest.json"] = manifestDigest.sha256;
-
-      const sumsLines = Object.keys(unifiedSums)
-        .sort()
-        .map((filename) => `${unifiedSums[filename]}  ${filename}\n`)
-        .join("");
-      writeFileSync(join(o.dir, "SHA256SUMS"), sumsLines);
-
-      const sumsDigest = await sha256File(join(o.dir, "SHA256SUMS"));
-      const updatedAssets: ReleaseAsset[] = [
-        ...set.assets.filter((a) => a.name !== "manifest.json" && a.name !== "SHA256SUMS"),
-        { name: "manifest.json", size: manifestDigest.size },
-        { name: "SHA256SUMS", size: sumsDigest.size },
-      ];
-      set = {
-        ...set,
-        manifest: unifiedManifest,
-        manifestSha256: manifestDigest.sha256,
-        assets: updatedAssets,
-      };
-    }
   }
 
   const existing = verdict.state === "absent" ? [] : verdict.view.assets;
   const plan = planUploads(existing, set.assets);
   for (const name of plan.upload) {
     const isOverwriting = existing.some((a) => a.name === name);
-    const args = ["release", "upload", o.tag, join(o.dir, name)];
+    const args = ["release", "upload", o.tag, join(o.dir, name), "--repo", repository(o)];
     if (isOverwriting) args.push("--clobber");
     ghText(o.run, args);
   }
   await reverifyUploaded(o, set);
   
-  if (verdict.state === "published-partial") {
-    const allPlatforms = set.manifest.artifacts.map((a) => a.platform);
-    const updatedTitle = releaseTitle({ cxVersion: o.cxVersion, codexVersion: o.codexVersion, platforms: allPlatforms });
-    const updatedNotes = releaseNotes({
-      cxVersion: o.cxVersion,
-      codexVersion: o.codexVersion,
-      platforms: allPlatforms,
-      sourceCommit: set.manifest.sourceCommit,
-      upstreamTag: set.manifest.upstreamTag,
-      upstreamCommit: set.manifest.upstreamCommit,
-      patchFile: set.manifest.patchFile,
-      patchVersion: set.manifest.patchVersion,
-      patchSha256: set.manifest.patchSha256,
-      runId: o.runId,
-      runUrl: o.runUrl,
-      manifestSha256: set.manifestSha256,
-      identity: buildIdentity(o),
-    });
-    mkdirSync(o.tmpRoot, { recursive: true });
-    const notesFile = join(o.tmpRoot, "release-notes-updated.md");
-    writeFileSync(notesFile, updatedNotes);
-    ghText(o.run, ["release", "edit", o.tag, "--title", updatedTitle, "--notes-file", notesFile]);
-  } else {
-    ghText(o.run, ["release", "edit", o.tag, "--draft=false", "--latest=false", "--prerelease"]);
-  }
+  ghText(o.run, ["release", "edit", o.tag, "--draft=false", "--latest=false", "--prerelease", "--repo", repository(o)]);
   
-  if (url === "") url = inspectRelease(o.run, o.tag).url;
+  if (url === "") url = inspectRelease(o.run, o.tag, repository(o)).url;
 
   o.summary([
     `## Prebuilt ${o.tag}`,

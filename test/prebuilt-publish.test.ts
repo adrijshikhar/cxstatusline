@@ -12,6 +12,8 @@ import { join } from "node:path";
 import {
   blockedIssueTitle,
   BlockedError,
+  archiveFilename,
+  backupPublishedRelease,
   compareIdentity,
   parseProvenance,
   planUploads,
@@ -22,6 +24,7 @@ import {
   selectSourceRelease,
   verifyReleaseDir,
   type NotesInput,
+  type GhRunner,
 } from "../scripts/prebuilt";
 import {
   ARCHIVE,
@@ -72,18 +75,18 @@ describe("selectSourceRelease", () => {
 describe("planUploads", () => {
   const local = [{ name: ARCHIVE, size: 100 }, { name: "manifest.json", size: 20 }, { name: "SHA256SUMS", size: 10 }];
 
-  test("uploads everything when the release has no assets", () => {
-    expect(planUploads([], local).upload).toEqual([ARCHIVE, "manifest.json", "SHA256SUMS"]);
+  test("uploads assets with checksums before the manifest", () => {
+    expect(planUploads([], local).upload).toEqual([ARCHIVE, "SHA256SUMS", "manifest.json"]);
   });
 
-  test("skips assets already attached with the same size and uploads only the rest", () => {
+  test("reuploads same-sized draft assets because size does not prove identity", () => {
     const plan = planUploads([{ name: ARCHIVE, size: 100 }], local);
-    expect(plan.skip).toEqual([ARCHIVE]);
-    expect(plan.upload).toEqual(["manifest.json", "SHA256SUMS"]);
+    expect(plan.skip).toEqual([]);
+    expect(plan.upload).toEqual([ARCHIVE, "SHA256SUMS", "manifest.json"]);
   });
 
-  test("blocks when an attached asset has a different size", () => {
-    expect(() => planUploads([{ name: ARCHIVE, size: 99 }], local)).toThrow(BlockedError);
+  test("replaces differently sized draft assets as part of the complete build set", () => {
+    expect(planUploads([{ name: ARCHIVE, size: 99 }], local).upload).toContain(ARCHIVE);
   });
 });
 
@@ -225,6 +228,7 @@ describe("publishRelease", () => {
     expect(fake.of("release create")[0]).toContain("--draft");
     expect(fake.of("release create")[0]).toContain("--target");
     expect(fake.of("release upload")).toHaveLength(3);
+    expect(fake.of("release upload").map((call) => call[3]!.split("/").pop())).toEqual([ARCHIVE, "SHA256SUMS", "manifest.json"]);
     expect(fake.of("release download")).toHaveLength(3);
     expect(fake.of("release edit")[0]).toContain("--draft=false");
     expect(fake.of("release edit")[0]).toContain("--latest=false");
@@ -256,28 +260,130 @@ describe("publishRelease", () => {
     expect(fake.of("release edit")).toHaveLength(0);
   });
 
-  test("blocks when a published release was built from a different source commit", async () => {
-    const dir = await releaseDir();
-    const other = await releaseDir("d".repeat(40));
+  test("backs up the complete old set before replacing a changed same-tag release", async () => {
+    const oldDir = await releaseDir("d".repeat(40));
+    const dir = await releaseDir(SOURCE, "e".repeat(64));
+    const handles0 = handles();
+    const fake = releaseServer(handles0);
+    await publishRelease({ ...publishArgs(oldDir, fake.run), sourceCommit: "d".repeat(40) });
+    const backupDir = tmp("verified-backup");
+    const backup = await backupPublishedRelease(fake.run, TAG, CODEX, backupDir);
+    expect(backup.state).toBe("published");
+    const lastBackupDownload = fake.calls.reduce((latest, call, index) =>
+      call[0] === "release" && call[1] === "download" ? index : latest, -1);
+    const uploadArgs = {
+      ...publishArgs(dir, fake.run),
+      backupDir,
+    };
+    const outcome = await publishRelease(uploadArgs);
+    expect(outcome.kind).toBe("published");
+    expect(fake.calls.findIndex((call) => call[0] === "release" && call[1] === "delete")).toBeGreaterThan(lastBackupDownload);
+    const replacements = fake.of("release upload").slice(3).map((call) => call[3]!.split("/").pop());
+    expect(replacements).toEqual([ARCHIVE, "SHA256SUMS", "manifest.json"]);
+    expect(handles0.draft.value).toBe(false);
+  });
+
+  test("does not mutate a published set when its complete backup cannot be downloaded", async () => {
     const fake = fakeGh({
-      "release view": () => ok(JSON.stringify({
-        isDraft: false, url: RELEASE_URL, body: "notes",
-        assets: [ARCHIVE, "manifest.json", "SHA256SUMS"].map((name) => ({ name, size: readFileSync(join(other, name)).length })),
-      })),
-      "release download": (a) => {
-        const p = a[a.indexOf("--pattern") + 1]!;
-        const t = a[a.indexOf("--dir") + 1]!;
-        mkdirSync(t, { recursive: true });
-        cpSync(join(other, p), join(t, p));
-        return ok();
-      },
+      "release view": () => ok(JSON.stringify({ isDraft: false, url: RELEASE_URL, body: "old", assets: [ARCHIVE, "manifest.json", "SHA256SUMS"].map((name) => ({ name, size: 10 })) })),
+      "release download": () => ({ status: 1, stdout: "", stderr: "download interrupted" }),
     });
-    const error = await publishRelease(publishArgs(dir, fake.run)).catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(BlockedError);
-    expect((error as BlockedError).title).toBe(blockedIssueTitle(CODEX));
-    expect((error as BlockedError).message).toMatch(/immutab/i);
-    expect((error as BlockedError).message).toMatch(/version bump/i);
+    await expect(backupPublishedRelease(fake.run, TAG, CODEX, tmp("incomplete-backup"))).rejects.toThrow(/release download/);
+    expect(fake.of("release delete")).toHaveLength(0);
     expect(fake.of("release upload")).toHaveLength(0);
+  });
+
+  test("does not retry deletion through rollback when the initial delete fails", async () => {
+    const oldDir = await releaseDir("d".repeat(40));
+    const newDir = await releaseDir(SOURCE, "e".repeat(64));
+    const fake = releaseServer(handles());
+    await publishRelease({ ...publishArgs(oldDir, fake.run), sourceCommit: "d".repeat(40) });
+    const backupDir = tmp("delete-failure-backup");
+    await backupPublishedRelease(fake.run, TAG, CODEX, backupDir);
+    let deletions = 0;
+    const run: GhRunner = (args) => {
+      if (args[0] === "release" && args[1] === "delete") {
+        deletions++;
+        return { status: 1, stdout: "", stderr: "delete rejected" };
+      }
+      return fake.run(args);
+    };
+    await expect(publishRelease({ ...publishArgs(newDir, run), backupDir })).rejects.toThrow(/delete rejected/);
+    expect(deletions).toBe(1);
+    expect(fake.of("release create")).toHaveLength(1);
+    expect(readFileSync(join(backupDir, "backup.json"), "utf8")).toContain("published");
+  });
+
+  test("restores the complete old set after a replacement upload fails", async () => {
+    const oldDir = await releaseDir("d".repeat(40));
+    const newDir = await releaseDir(SOURCE, "e".repeat(64));
+    const h = handles();
+    const fake = releaseServer(h);
+    await publishRelease({ ...publishArgs(oldDir, fake.run), sourceCommit: "d".repeat(40) });
+    const backupDir = tmp("rollback-backup");
+    await backupPublishedRelease(fake.run, TAG, CODEX, backupDir);
+    let failNextUpload = true;
+    const run: GhRunner = (args) => {
+      if (args[0] === "release" && args[1] === "upload" && failNextUpload) {
+        failNextUpload = false;
+        return { status: 1, stdout: "", stderr: "injected upload failure" };
+      }
+      return fake.run(args);
+    };
+    await expect(publishRelease({ ...publishArgs(newDir, run), backupDir })).rejects.toThrow(/previous release was restored/);
+    expect(h.draft.value).toBe(false);
+    expect(h.assets.map((asset) => asset.name).sort()).toEqual([ARCHIVE, "SHA256SUMS", "manifest.json"].sort());
+    const restoredManifest = JSON.parse(readFileSync(join(backupDir, "assets", "manifest.json"), "utf8"));
+    expect(restoredManifest.sourceCommit).toBe("d".repeat(40));
+    expect(fake.of("release upload").at(-1)?.slice(-2)).toEqual(["--repo", "adrijshikhar/cxstatusline"]);
+  });
+
+  test("fails loudly and retains the backup when automatic restoration also fails", async () => {
+    const oldDir = await releaseDir("d".repeat(40));
+    const newDir = await releaseDir(SOURCE, "e".repeat(64));
+    const h = handles();
+    const fake = releaseServer(h);
+    await publishRelease({ ...publishArgs(oldDir, fake.run), sourceCommit: "d".repeat(40) });
+    const backupDir = tmp("failed-restore-backup");
+    await backupPublishedRelease(fake.run, TAG, CODEX, backupDir);
+    const run: GhRunner = (args) => args[0] === "release" && args[1] === "upload"
+      ? { status: 1, stdout: "", stderr: "injected persistent upload failure" }
+      : fake.run(args);
+    await expect(publishRelease({ ...publishArgs(newDir, run), backupDir })).rejects.toThrow(/automatic restoration also failed.*Keep workflow backup artifact/);
+    expect(readFileSync(join(backupDir, "backup.json"), "utf8")).toContain("published");
+  });
+
+  test("refuses a changed published identity that drops a platform", async () => {
+    const oldDir = await multiReleaseDir(["darwin-arm64", "linux-x64"], "d".repeat(40));
+    const newDir = await releaseDir(SOURCE, "e".repeat(64));
+    const fake = releaseServer(handles());
+    await publishRelease({ ...publishArgs(oldDir, fake.run), sourceCommit: "d".repeat(40), platforms: ["darwin-arm64", "linux-x64"] });
+    const backupDir = tmp("missing-platform-backup");
+    await backupPublishedRelease(fake.run, TAG, CODEX, backupDir);
+    await expect(publishRelease({ ...publishArgs(newDir, fake.run), backupDir })).rejects.toThrow(/omits.*linux-x64/);
+    expect(fake.of("release delete")).toHaveLength(0);
+  });
+
+  test("rebuilds every retained platform from the new identity", async () => {
+    const platforms = ["darwin-arm64", "linux-x64"] as const;
+    const oldDir = await multiReleaseDir(platforms, "d".repeat(40));
+    const newDir = await multiReleaseDir(platforms, SOURCE);
+    const h = handles();
+    const fake = releaseServer(h);
+    await publishRelease({ ...publishArgs(oldDir, fake.run), sourceCommit: "d".repeat(40), platforms });
+    const backupDir = tmp("platform-backup");
+    await backupPublishedRelease(fake.run, TAG, CODEX, backupDir);
+    const beforeUploads = fake.of("release upload").length;
+    await publishRelease({ ...publishArgs(newDir, fake.run), platforms, backupDir });
+    const next = JSON.parse(readFileSync(join(newDir, "manifest.json"), "utf8"));
+    expect(next.artifacts.map((a: { platform: string }) => a.platform).sort()).toEqual(["darwin-arm64", "linux-x64"]);
+    expect(next.sourceCommit).toBe(SOURCE);
+    expect(fake.of("release upload").slice(beforeUploads).map((call) => call[3]!.split("/").pop())).toEqual([
+      archiveFilename(CODEX, "darwin-arm64"), archiveFilename(CODEX, "linux-x64"), "SHA256SUMS", "manifest.json",
+    ]);
+    expect(h.assets.map((asset) => asset.name).sort()).toEqual([
+      archiveFilename(CODEX, "darwin-arm64"), archiveFilename(CODEX, "linux-x64"), "SHA256SUMS", "manifest.json",
+    ].sort());
   });
 
   test("resumes a matching draft and uploads only the missing assets", async () => {
@@ -293,7 +399,7 @@ describe("publishRelease", () => {
     const outcome = await publishRelease(publishArgs(dir, fake.run));
     expect(outcome.kind).toBe("published");
     const uploaded = fake.of("release upload").slice(1).map((c) => c[3]!.split("/").pop());
-    expect(uploaded).toEqual(["manifest.json", "SHA256SUMS"]);
+    expect(uploaded).toEqual([ARCHIVE, "SHA256SUMS", "manifest.json"]);
     expect(fake.of("release create")).toHaveLength(0);
     expect(fake.of("release delete")).toHaveLength(0);
   });
@@ -356,7 +462,10 @@ describe("publishRelease", () => {
         const file = a[3]!;
         const name = file.split("/").pop()!;
         cpSync(file, join(server, name));
-        h.assets.push({ name, size: readFileSync(file).length });
+        const old = h.assets.findIndex((asset) => asset.name === name);
+        const value = { name, size: readFileSync(file).length };
+        if (old >= 0) h.assets[old] = value;
+        else h.assets.push(value);
         return ok();
       },
       "release download": (a) => {
@@ -403,10 +512,10 @@ describe("publishRelease", () => {
     });
     expect(outcome2.kind).toBe("published");
     const uploaded = fake2.of("release upload").slice(1).map((c) => c[3]!.split("/").pop());
-    expect(uploaded).toEqual([x64, "manifest.json", "SHA256SUMS"]);
+    expect(uploaded).toEqual([arm64, x64, "SHA256SUMS", "manifest.json"]);
   });
 
-  test("appends a new platform to an existing published release and unifies manifest", async () => {
+  test("rebuilds an existing release with added platforms as one verified set", async () => {
     const dirDarwin = await releaseDir(SOURCE);
     const h = handles();
     const fake = releaseServer(h);
@@ -415,11 +524,14 @@ describe("publishRelease", () => {
     expect(h.draft.value).toBe(false);
 
     const newSource = "c".repeat(40);
-    const dirLinux = await multiReleaseDir(["linux-x64"], newSource);
+    const dirLinux = await multiReleaseDir(["darwin-arm64", "linux-x64"], newSource);
+    const backupDir = tmp("append-platform-backup");
+    await backupPublishedRelease(fake.run, TAG, CODEX, backupDir);
     const outcome2 = await publishRelease({
       ...publishArgs(dirLinux, fake.run),
       sourceCommit: newSource,
-      platforms: ["linux-x64"],
+      platforms: ["darwin-arm64", "linux-x64"],
+      backupDir,
     });
     expect(outcome2.kind).toBe("published");
 

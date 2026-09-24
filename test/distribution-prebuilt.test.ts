@@ -272,7 +272,7 @@ async function installOnce(ctx: Context, baseUrl: string): Promise<string> {
   return dir;
 }
 
-test("a second identical install is a verified no-op that downloads the archive once", async () => {
+test("a second identical install verifies local bytes and avoids another archive download", async () => {
   const server = await releaseServer(routesFor(release()));
   const { ctx } = prebuiltCtx();
   try {

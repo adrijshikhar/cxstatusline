@@ -12,7 +12,7 @@ export {
   UNCOVERED_EXIT_CODE,
   type Detection,
 } from "./detect";
-export { buildMatrix, type MatrixEntry } from "./cli-detect";
+export { buildMatrix, unionReleasePlatforms, type MatrixEntry } from "./cli-detect";
 export { execGh, ghJson, ghText, GhError, type GhResult, type GhRunner } from "./gh";
 export { buildManifest, workflowUrlFromEnv, type ManifestInput } from "./manifest";
 export { mergeManifests } from "./merge";
@@ -36,10 +36,11 @@ export {
   sha256File,
   writeChecksums,
 } from "./pack";
-export { publishRelease, type PublishOptions, type PublishOutcome } from "./publish";
+export { publishRelease, restoreReleaseBackup, type PublishOptions, type PublishOutcome } from "./publish";
 export { errorExcerpt, redact } from "./redact";
 export {
   BlockedError,
+  backupPublishedRelease,
   checkExistingRelease,
   compareIdentity,
   downloadAsset,
@@ -47,8 +48,10 @@ export {
   inspectRelease,
   planUploads,
   verifyReleaseDir,
+  verifyReleaseBackup,
   type ExpectedIdentity,
   type ReleaseAsset,
+  type ReleaseBackup,
   type ReleaseState,
   type ReleaseView,
   type VerifiedSet,
