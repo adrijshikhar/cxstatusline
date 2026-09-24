@@ -272,7 +272,7 @@ async function installOnce(ctx: Context, baseUrl: string): Promise<string> {
   return dir;
 }
 
-test("a second identical install is a verified no-op that downloads the archive once", async () => {
+test("a second identical install verifies the archive before reusing the generation", async () => {
   const server = await releaseServer(routesFor(release()));
   const { ctx } = prebuiltCtx();
   try {
@@ -281,7 +281,7 @@ test("a second identical install is a verified no-op that downloads the archive 
     expect(again.kind).toBe("unchanged");
     expect(again.pair.directory).toBe(generation);
     expect(again.pair.provenance.source).toBe("prebuilt");
-    expect(server.requests.filter((p) => p.endsWith(ARCHIVE))).toHaveLength(1);
+    expect(server.requests.filter((p) => p.endsWith(ARCHIVE))).toHaveLength(2);
     expect(server.requests.filter((p) => p.endsWith("manifest.json"))).toHaveLength(2);
     expect(libexecEntries(ctx)).toEqual(["current", "generations"]);
   } finally {
