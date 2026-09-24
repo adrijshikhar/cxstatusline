@@ -71,6 +71,7 @@ function unchangedPair(ctx: Context, manifest: ReleaseManifest, artifact: Artifa
     record.codexVersion === manifest.codexVersion &&
     record.provenance.cxVersion === manifest.cxVersion &&
     record.provenance.platform === artifact.platform &&
+    record.provenance.patchVersion === manifest.patchVersion &&
     record.provenance.patchSha256 === manifest.patchSha256 &&
     record.provenance.upstreamCommit === manifest.upstreamCommit &&
     installed.cxVersion === manifest.cxVersion &&
@@ -132,6 +133,7 @@ function stagedPair(
       source: "prebuilt",
       cxVersion: manifest.cxVersion ?? VERSION,
       platform: artifact.platform,
+      patchVersion: manifest.patchVersion,
       patchSha256: manifest.patchSha256,
       upstreamCommit: manifest.upstreamCommit,
       sourceCommit: manifest.sourceCommit,

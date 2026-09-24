@@ -158,7 +158,7 @@ export function buildMatrix(platforms: readonly Platform[], selfHosted: boolean)
 async function releaseState(
   run: GhRunner,
   detection: Detection,
-  expected: { readonly sourceCommit: string; readonly patchSha256: string },
+  expected: { readonly sourceCommit: string; readonly patchSha256: string; readonly patchVersion?: number },
   platforms: readonly Platform[],
 ): Promise<{ state: ReleaseState; identical: boolean; detail: string; url: string }> {
   const verdict = await checkExistingRelease({
@@ -280,6 +280,7 @@ function finish(
     tag: detection.tag,
     upstream_tag: detection.upstreamTag,
     patch_file: detection.patchFile,
+    patch_version: detection.patchVersion === undefined ? "" : String(detection.patchVersion),
     patch_sha256: resolved.patchSha256,
     source: resolved.pinned ? "dispatch" : "auto",
     source_commit: source.sourceCommit,
@@ -343,7 +344,7 @@ export async function runDetect(flags: Record<string, string>): Promise<void> {
   const patches = patchTreeFor(source);
   const detection = resolveOrBlock(loadManifest(patches.manifestDir), codexVersion, source, platforms, matrix);
   const patchSha256 = (await sha256File(patches.patchPath(detection.patchFile))).sha256;
-  const expected = { sourceCommit: source.sourceCommit, patchSha256 };
+  const expected = { sourceCommit: source.sourceCommit, patchSha256, patchVersion: detection.patchVersion };
   const existing = await releaseState(execGh, detection, expected, platforms);
   finish(detection, source, existing, { patchSha256, pinned, patchesFrom: patches.describe }, platforms, matrix, publishRequested);
 }

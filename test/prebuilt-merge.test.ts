@@ -34,6 +34,13 @@ describe("mergeManifests", () => {
     expect(() => mergeManifests([arm64, badCommit])).toThrow(/sourceCommit/);
   });
 
+  test("rejects different patch revisions across platforms", () => {
+    expect(() => mergeManifests([
+      { ...arm64, schema: 2, patchVersion: 1 },
+      { ...x64, schema: 2, patchVersion: 2 },
+    ])).toThrow(/patchVersion/);
+  });
+
   test("fails on duplicate platform", () => {
     expect(() => mergeManifests([arm64, arm64])).toThrow(/duplicate platform/);
   });

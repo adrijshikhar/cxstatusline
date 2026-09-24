@@ -6,10 +6,12 @@ export interface PatchRange {
   readonly min: string;
   readonly max: string;
   readonly file: string;
+  /** Required in format 2; absent for legacy manifests. */
+  readonly patchVersion?: number;
 }
 
 export interface Manifest {
-  readonly version: 1;
+  readonly version: 1 | 2;
   readonly tag_prefix: string;
   /**
    * The newest explicitly supported Codex version, named so release CI can say which version it
@@ -53,12 +55,31 @@ export function loadManifest(patchesDir: string): Manifest {
     const raw: unknown = JSON.parse(readFileSync(file, "utf8"));
     const m = raw as Partial<Manifest>;
     const ok = typeof m === "object" && m !== null
-      && m.version === 1
+      && (m.version === 1 || m.version === 2)
       && typeof m.tag_prefix === "string"
       && Array.isArray(m.patches)
       && m.patches.every(isRange)
       && isCandidate(m.candidate);
     if (!ok) throw new ManifestError(`${file}: manifest is malformed`);
+    if (m.version === 1 && m.patches!.some((p) => p.patchVersion !== undefined)) {
+      throw new ManifestError(`${file}: patchVersion requires manifest format 2`);
+    }
+    if (m.version === 2) {
+      for (const [i, p] of m.patches!.entries()) {
+        const min = parseSemver(p.min)!;
+        const max = parseSemver(p.max)!;
+        if (!Number.isSafeInteger(p.patchVersion) || p.patchVersion! < 1
+          || min.pre !== null || max.pre !== null || compareSemver(min, max) > 0
+          || !/^[a-zA-Z0-9][a-zA-Z0-9._-]*\.patch$/.test(p.file)) {
+          throw new ManifestError(`${file}: invalid patch version or range`);
+        }
+        if (m.patches!.slice(0, i).some((other) =>
+          compareSemver(min, parseSemver(other.max)!) <= 0
+          && compareSemver(max, parseSemver(other.min)!) >= 0)) {
+          throw new ManifestError(`${file}: overlapping Codex ranges have ambiguous patch ownership`);
+        }
+      }
+    }
     return m as Manifest;
   } catch (e) {
     if (e instanceof ManifestError) throw e;
@@ -67,14 +88,14 @@ export function loadManifest(patchesDir: string): Manifest {
 }
 
 /** Exact inclusive-range match or null. Prereleases never match. Fails closed on purpose (D3). */
-export function resolvePatch(m: Manifest, v: SemVer): { file: string; tag: string } | null {
+export function resolvePatch(m: Manifest, v: SemVer): { file: string; tag: string; patchVersion?: number } | null {
   if (v.pre !== null) return null;
   const hit = m.patches.find((p) => {
     const min = parseSemver(p.min);
     const max = parseSemver(p.max);
     return min && max && compareSemver(v, min) >= 0 && compareSemver(v, max) <= 0;
   });
-  return hit ? { file: hit.file, tag: `${m.tag_prefix}${v.raw}` } : null;
+  return hit ? { file: hit.file, tag: `${m.tag_prefix}${v.raw}`, ...(hit.patchVersion === undefined ? {} : { patchVersion: hit.patchVersion }) } : null;
 }
 
 /**

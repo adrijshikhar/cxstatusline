@@ -71,6 +71,7 @@ function fakeManifest(codexVersion: string, cxVersion: string, platform: Platfor
 /** A staging directory shaped exactly like the one `preparePrebuilt`/`prepareCompiled` hand to `activatePair`. */
 function stagePair(root: string, opts: {
   version?: string;
+  patchVersion?: number;
   source?: "prebuilt" | "compiled";
   legal?: boolean;
   sourceCommit?: string | null;
@@ -93,6 +94,7 @@ function stagePair(root: string, opts: {
     codexVersion: version,
     provenance: {
       source,
+      patchVersion: opts.patchVersion,
       cxVersion,
       platform: "darwin-arm64",
       patchSha256: "a".repeat(64),
@@ -147,7 +149,7 @@ describe("doctorReport", () => {
   test("the documented key order is exactly what is emitted", async () => {
     const { c } = ctx("0.152.1");
     expect((await doctorReport(c)).map((l) => l.key)).toEqual([
-      "renderer", "settings", "upstream", "state", "patched_from", "policy", "codex_target", "drift", "wrapper",
+      "renderer", "settings", "upstream", "state", "patch_version", "patched_from", "policy", "codex_target", "drift", "wrapper",
       "active", "generation", "platform", "cx_version", "release", "patch", "source_commit",
       "upstream_commit", "codex_digest", "host_digest", "codex_version", "legal",
       "hook", "last_attempt", "toolchain", "lock", "command_cache",
@@ -266,9 +268,10 @@ describe("doctorReport", () => {
     const paths = resolvePaths(env);
     const codexVersion = "0.152.1";
     const c = bareCtx(env, paths, codexVersion);
-    activatePair(stagePair(root, { version: codexVersion, source: "compiled", sourceCommit: "d".repeat(40) }), c);
+    activatePair(stagePair(root, { version: codexVersion, source: "compiled", patchVersion: 1, sourceCommit: "d".repeat(40) }), c);
 
     const lines = await doctorReport(c);
+    expect(get(lines, "patch_version")?.value).toBe("v1");
     expect(get(lines, "active")).toMatchObject({ ok: true, value: `compiled ${codexVersion}` });
     expect(get(lines, "release")).toMatchObject({ ok: null, value: "not a verified release (compiled locally)" });
     expect(get(lines, "legal")).toMatchObject({ ok: null, value: "n/a (compiled build)" });

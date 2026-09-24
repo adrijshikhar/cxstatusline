@@ -10,6 +10,7 @@ const MUST_AGREE = [
   "upstreamTag",
   "upstreamCommit",
   "patchFile",
+  "patchVersion",
   "patchSha256",
   "sourceCommit",
 ] as const;

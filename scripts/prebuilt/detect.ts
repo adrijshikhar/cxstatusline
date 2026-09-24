@@ -30,6 +30,7 @@ export interface Detection {
   readonly tag: string;
   readonly upstreamTag: string;
   readonly patchFile: string;
+  readonly patchVersion?: number;
 }
 
 /** A stable version string, or null for anything we must not build from. */
@@ -95,5 +96,6 @@ export function resolveDetection(m: Manifest, codexVersion: string, cxVersion?: 
     tag: releaseTag(codexVersion),
     upstreamTag: patch.tag,
     patchFile: patch.file,
+    ...(patch.patchVersion === undefined ? {} : { patchVersion: patch.patchVersion }),
   };
 }

@@ -271,16 +271,18 @@ describe("buildManifest", () => {
   test("round-trips through the installer's validateManifest", async () => {
     const dir = staging();
     const archive = await packArchive(dir, join(tmp("pack"), archiveFilename(CODEX, "darwin-arm64")));
-    const manifest = buildManifest(manifestInput(dir, archive));
+    const manifest = buildManifest(manifestInput(dir, archive, { patchVersion: 2, patchFile: "codex-0.152.1.patch" }));
     const parsed = validateManifest(JSON.parse(JSON.stringify(manifest)), {
       cxVersion: CX,
       codexVersion: CODEX,
       platform: "darwin-arm64",
     });
+    expect(parsed.schema).toBe(2);
+    expect(parsed.patchVersion).toBe(2);
     expect(parsed.artifacts).toHaveLength(1);
     expect(parsed.artifacts[0]!.filename).toBe(`cxstatusline-codex-${CODEX}-darwin-arm64.tar.gz`);
     expect(parsed.upstreamTag).toBe(`rust-v${CODEX}`);
-    expect(parsed.patchFile).toBe(`codex-${CODEX}.patch`);
+    expect(parsed.patchFile).toBe("codex-0.152.1.patch");
   });
 });
 

@@ -12,6 +12,8 @@ export interface ManifestInput {
   readonly platform: Platform;
   /** `git rev-parse HEAD` of the patched upstream checkout. */
   readonly upstreamCommit: string;
+  readonly patchVersion?: number;
+  readonly patchFile?: string;
   readonly patchSha256: string;
   /** The frozen commit the build was checked out at - never `GITHUB_SHA`. See `sourceCommit`. */
   readonly sourceCommit: string;
@@ -22,18 +24,18 @@ export interface ManifestInput {
 }
 
 /**
- * Build the manifest for a single-platform release. `upstreamTag`, `patchFile` and the archive
- * filename are derived, never passed in: the installer's validator requires them to agree with
- * `codexVersion`, and deriving them is the only way that cannot be got wrong.
+ * Build a single-platform manifest. Versioned builds carry the resolved patch file;
+ * legacy inputs retain the original per-Codex filename convention.
  */
 export function buildManifest(input: ManifestInput): ReleaseManifest {
   return {
-    schema: 1,
+    schema: input.patchVersion === undefined ? 1 : 2,
+    ...(input.patchVersion === undefined ? {} : { patchVersion: input.patchVersion }),
     cxVersion: input.cxVersion,
     codexVersion: input.codexVersion,
     upstreamTag: `rust-v${input.codexVersion}`,
     upstreamCommit: input.upstreamCommit,
-    patchFile: `codex-${input.codexVersion}.patch`,
+    patchFile: input.patchFile ?? `codex-${input.codexVersion}.patch`,
     patchSha256: input.patchSha256,
     sourceCommit: input.sourceCommit,
     workflowUrl: input.workflowUrl,

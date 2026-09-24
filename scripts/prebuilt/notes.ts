@@ -41,6 +41,7 @@ export interface NotesInput {
   readonly upstreamTag: string;
   readonly upstreamCommit: string;
   readonly patchFile: string;
+  readonly patchVersion?: number;
   readonly patchSha256: string;
   readonly runId: string;
   readonly runUrl: string;
@@ -83,7 +84,7 @@ export function releaseNotes(i: NotesInput): string {
   const platforms = i.platforms ?? (i.platform ? [i.platform] : ["darwin-arm64"]);
   return [
     `Built from cxstatusline commit ${i.sourceCommit}${i.cxVersion ? ` (package version ${i.cxVersion})` : ""} and `
-      + `openai/codex ${i.upstreamTag} (${i.upstreamCommit}) with patch ${i.patchFile} `
+      + `openai/codex ${i.upstreamTag} (${i.upstreamCommit}) with patch ${i.patchVersion === undefined ? "" : `v${i.patchVersion} `}${i.patchFile} `
       + `sha256 ${i.patchSha256}.`,
     "",
     "## Architectures",

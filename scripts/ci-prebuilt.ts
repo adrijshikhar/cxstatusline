@@ -8,7 +8,7 @@ import { parseSemver } from "../src/version";
 
 const root = resolve(import.meta.dir, "..");
 
-export function resolveCiBuild(version: string): { tag: string; file: string } {
+export function resolveCiBuild(version: string): { tag: string; file: string; patchVersion?: number } {
   if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) throw new Error("expected exact stable Codex version");
   const parsed = parseSemver(version)!;
   const patch = resolvePatch(loadManifest(join(root, "patches")), parsed);

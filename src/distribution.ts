@@ -22,7 +22,8 @@ export interface Artifact {
 }
 
 export interface ReleaseManifest {
-  schema: 1;
+  schema: 1 | 2;
+  patchVersion?: number;
   cxVersion?: string;
   codexVersion: string;
   upstreamTag: string;
@@ -48,6 +49,7 @@ export interface PreparedPair {
     source: "prebuilt" | "compiled";
     cxVersion: string;
     platform: string;
+    patchVersion?: number;
     patchSha256: string;
     upstreamCommit: string;
     sourceCommit: string | null;
@@ -132,7 +134,8 @@ const ArtifactSchema = z
 
 const ManifestShapeSchema = z
   .object({
-    schema: z.literal(1),
+    schema: z.union([z.literal(1), z.literal(2)]),
+    patchVersion: z.number().refine(safePositiveInt).optional(),
     cxVersion: z.string().optional(),
     codexVersion: z.string(),
     upstreamTag: z.string(),
@@ -169,6 +172,8 @@ function checkArtifacts(m: ManifestShape, expected: ExpectedRelease): string | n
 }
 
 function checkBusinessRules(m: ManifestShape, expected: ExpectedRelease): string | null {
+  if (m.schema === 2 && m.patchVersion === undefined) return "patchVersion is required for schema 2";
+  if (m.schema === 1 && m.patchVersion !== undefined) return "patchVersion requires schema 2";
   if (m.cxVersion !== undefined && !isStableVersion(m.cxVersion)) {
     return "cxVersion is not a valid semver";
   }
@@ -176,7 +181,8 @@ function checkBusinessRules(m: ManifestShape, expected: ExpectedRelease): string
     return "codexVersion does not match expected release";
   }
   if (m.upstreamTag !== `rust-v${m.codexVersion}`) return "upstreamTag does not match codexVersion";
-  if (m.patchFile !== `codex-${m.codexVersion}.patch`) return "patchFile does not match codexVersion";
+  if (m.schema === 2 && !/^[a-zA-Z0-9][a-zA-Z0-9._-]*\.patch$/.test(m.patchFile)) return "patchFile must be a patch basename";
+  if (m.schema === 1 && m.patchFile !== `codex-${m.codexVersion}.patch`) return "patchFile does not match codexVersion";
   if (Number.isNaN(Date.parse(m.createdAt))) return "createdAt is not a valid timestamp";
   return checkArtifacts(m, expected);
 }

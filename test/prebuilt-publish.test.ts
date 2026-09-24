@@ -1,3 +1,4 @@
+import { releaseFixture } from "./release-fixture";
 /**
  * Publish coverage for `scripts/prebuilt.ts publish`.
  *
@@ -87,6 +88,12 @@ describe("planUploads", () => {
 });
 
 describe("compareIdentity", () => {
+  test("same bytes with a different revision are not the same release", () => {
+    const manifest = releaseFixture({ codexVersion: "0.153.0" }).manifest;
+    const expected = { sourceCommit: manifest.sourceCommit, patchSha256: manifest.patchSha256, patchVersion: 2 };
+    expect(compareIdentity(manifest, expected).identical).toBe(false);
+    expect(compareIdentity({ ...manifest, schema: 2, patchVersion: 2 }, expected).identical).toBe(true);
+  });
   test("accepts a manifest built from the same commit and patch", async () => {
     const manifest = JSON.parse(readFileSync(join(await releaseDir(), "manifest.json"), "utf8"));
     expect(compareIdentity(manifest, { sourceCommit: SOURCE, patchSha256: PATCH_SHA }).identical).toBe(true);

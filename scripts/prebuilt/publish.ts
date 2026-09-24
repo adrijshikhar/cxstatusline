@@ -82,6 +82,7 @@ function createDraft(o: PublishOptions, set: VerifiedSet): string {
     upstreamTag: m.upstreamTag,
     upstreamCommit: m.upstreamCommit,
     patchFile: m.patchFile,
+    patchVersion: m.patchVersion,
     patchSha256: m.patchSha256,
     runId: o.runId,
     runUrl: o.runUrl,
@@ -146,7 +147,7 @@ export async function publishRelease(o: PublishOptions): Promise<PublishOutcome>
         + `${o.sourceCommit}; refusing to publish a mismatched build set`,
     );
   }
-  const expected: ExpectedIdentity = { sourceCommit: o.sourceCommit, patchSha256: set.manifest.patchSha256 };
+  const expected: ExpectedIdentity = { sourceCommit: o.sourceCommit, patchSha256: set.manifest.patchSha256, patchVersion: set.manifest.patchVersion };
   const assetNames = set.assets.map((a) => a.name);
   const verdict = await checkExistingRelease({
     run: o.run,
@@ -243,6 +244,7 @@ export async function publishRelease(o: PublishOptions): Promise<PublishOutcome>
       upstreamTag: set.manifest.upstreamTag,
       upstreamCommit: set.manifest.upstreamCommit,
       patchFile: set.manifest.patchFile,
+      patchVersion: set.manifest.patchVersion,
       patchSha256: set.manifest.patchSha256,
       runId: o.runId,
       runUrl: o.runUrl,
