@@ -1,5 +1,7 @@
 name: Prebuilt release
 
+# M5-only builds: macOS natively, Linux through Docker on the same machine.
+# An offline M5 queues the run; there is no GitHub-hosted fallback.
 # Verified native prebuilts under Codex-only release tags.
 #
 # detect -> validate -> native(arm64) -> publish -> report(always).
@@ -23,10 +25,6 @@ on:
         description: Comma-separated target platforms; defaults to the required darwin-arm64 and linux-arm64 baseline
         type: string
         default: "darwin-arm64,linux-arm64"
-      self_hosted:
-        description: Run on the owner's self-hosted Apple Silicon runner (arm64 only; no hosted minutes)
-        type: boolean
-        default: false
       publish:
         description: Publish the verified artifact as a GitHub release (consumed by the publish job)
         type: boolean
@@ -42,7 +40,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: never
   MACOSX_DEPLOYMENT_TARGET: "14.0"
-  CARGO_BUILD_JOBS: "3"
+  CARGO_BUILD_JOBS: "2"
   CARGO_PROFILE_RELEASE_DEBUG: "0"
 
 jobs:
@@ -51,7 +49,7 @@ jobs:
     # Repository-identity guard: keeps forks from running a release pipeline against their
     # own repository. Guarding `detect` also stops `validate`/`native`, which need it.
     if: github.repository == 'adrijshikhar/cxstatusline'
-    runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64","m5-pro"]') || 'ubuntu-latest' }}
+    runs-on: [self-hosted, macOS, ARM64, m5-pro]
     timeout-minutes: 10
     outputs:
       codex_version: ${{ steps.detect.outputs.codex_version }}
@@ -87,8 +85,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REQUESTED_CODEX_VERSION: ${{ inputs.codex_version || 'auto' }}
-          REQUESTED_PLATFORMS: ${{ inputs.self_hosted && (inputs.platforms == 'all' && 'darwin-arm64,linux-arm64' || inputs.platforms == 'arm64' && 'darwin-arm64,linux-arm64' || inputs.platforms == 'darwin' && 'darwin-arm64' || inputs.platforms == 'linux' && 'linux-arm64' || inputs.platforms) || inputs.platforms || 'darwin-arm64,linux-arm64' }}
-          SELF_HOSTED: ${{ inputs.self_hosted && 'true' || 'false' }}
+          REQUESTED_PLATFORMS: ${{ inputs.platforms || 'darwin-arm64,linux-arm64' }}
           PUBLISH_REQUESTED: ${{ github.event_name == 'schedule' || inputs.publish == true }}
         run: |
           set -o pipefail
@@ -97,7 +94,6 @@ jobs:
             --event "$GITHUB_EVENT_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --platforms "$REQUESTED_PLATFORMS" \
-            --self-hosted "$SELF_HOSTED" \
             --publish-requested "$PUBLISH_REQUESTED" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-detect.log"
       # The evidence `report` excerpts from. `if: always()` so a failed step's log still ships,
       # and one artifact name per job because v4 artifacts are immutable.
@@ -112,7 +108,7 @@ jobs:
   validate:
     needs: detect
     if: needs.detect.outputs.should_build == 'true'
-    runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64","m5-pro"]') || 'macos-15' }}
+    runs-on: [self-hosted, macOS, ARM64, m5-pro]
     timeout-minutes: 20
     steps:
       # The frozen source commit, not the branch head: a scheduled run builds its source release.
@@ -153,9 +149,10 @@ jobs:
     if: needs.detect.outputs.should_build == 'true'
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         include: ${{ fromJSON(needs.detect.outputs.matrix) }}
-    runs-on: ${{ matrix.runner }}
+    runs-on: [self-hosted, macOS, ARM64, m5-pro]
     timeout-minutes: 360
     env:
       CODEX_VERSION: ${{ needs.detect.outputs.codex_version }}
@@ -345,7 +342,7 @@ jobs:
   merge:
     needs: [detect, native]
     if: needs.detect.outputs.should_build == 'true'
-    runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64","m5-pro"]') || 'ubuntu-latest' }}
+    runs-on: [self-hosted, macOS, ARM64, m5-pro]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -393,7 +390,7 @@ jobs:
     if: >-
       github.repository == 'adrijshikhar/cxstatusline' && needs.detect.outputs.should_build == 'true'
       && (github.event_name == 'schedule' || inputs.publish == true)
-    runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64","m5-pro"]') || 'macos-15' }}
+    runs-on: [self-hosted, macOS, ARM64, m5-pro]
     timeout-minutes: 60
     permissions:
       contents: write
@@ -487,7 +484,7 @@ jobs:
   report:
     needs: [detect, validate, native, merge, publish]
     if: always() && github.repository == 'adrijshikhar/cxstatusline'
-    runs-on: ${{ inputs.self_hosted && fromJSON('["self-hosted","macOS","ARM64","m5-pro"]') || 'ubuntu-latest' }}
+    runs-on: [self-hosted, macOS, ARM64, m5-pro]
     timeout-minutes: 10
     permissions:
       contents: read

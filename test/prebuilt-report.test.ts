@@ -98,7 +98,7 @@ describe("reportBody", () => {
     const required = [
       `cxstatusline version: ${CX}`, `Codex version: ${CODEX}`, `rust-v${CODEX}`,
       "Failing stage: native", "Architecture: darwin-arm64", RUN_URL, PATCH_SHA,
-      SOURCE, "workflow_dispatch", "self_hosted=true", "publish=true",
+      SOURCE, "workflow_dispatch", "m5-pro", "publish=true",
     ];
     for (const r of required) expect(body).toContain(r);
   });

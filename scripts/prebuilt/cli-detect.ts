@@ -91,62 +91,17 @@ export interface MatrixEntry {
   readonly platform: Platform;
 }
 
-export function buildMatrix(platforms: readonly Platform[], selfHosted: boolean): readonly MatrixEntry[] {
-  if (selfHosted) {
-    return platforms.map((platform) => {
-      if (platform === "darwin-arm64") {
-        return {
-          runner: ["self-hosted", "macOS", "ARM64", "m5-pro"],
-          arch: "arm64",
-          target: "aarch64-apple-darwin",
-          platform: "darwin-arm64",
-        };
-      }
-      if (platform === "linux-arm64") {
-        return {
-          runner: ["self-hosted", "macOS", "ARM64", "m5-pro"],
-          arch: "arm64",
-          target: "aarch64-unknown-linux-gnu",
-          platform: "linux-arm64",
-        };
-      }
-      throw new Error(`platform ${String(platform)} not supported on self-hosted runner (arm64 only)`);
-    });
-  }
+export function buildMatrix(platforms: readonly Platform[]): readonly MatrixEntry[] {
   return platforms.map((platform) => {
-    if (platform === "darwin-arm64") {
-      return {
-        runner: "macos-15",
-        arch: "arm64",
-        target: "aarch64-apple-darwin",
-        platform: "darwin-arm64",
-      };
+    if (platform !== "darwin-arm64" && platform !== "linux-arm64") {
+      throw new Error(`platform ${platform} not supported on M5 self-hosted runner (arm64 only); hosted fallback is forbidden`);
     }
-    if (platform === "darwin-x64") {
-      return {
-        runner: "macos-15-intel",
-        arch: "x64",
-        target: "x86_64-apple-darwin",
-        platform: "darwin-x64",
-      };
-    }
-    if (platform === "linux-x64") {
-      return {
-        runner: "ubuntu-latest",
-        arch: "x64",
-        target: "x86_64-unknown-linux-gnu",
-        platform: "linux-x64",
-      };
-    }
-    if (platform === "linux-arm64") {
-      return {
-        runner: "ubuntu-24.04-arm",
-        arch: "arm64",
-        target: "aarch64-unknown-linux-gnu",
-        platform: "linux-arm64",
-      };
-    }
-    throw new Error(`unknown platform ${String(platform)}`);
+    return {
+      runner: ["self-hosted", "macOS", "ARM64", "m5-pro"],
+      arch: "arm64",
+      target: platform === "darwin-arm64" ? "aarch64-apple-darwin" : "aarch64-unknown-linux-gnu",
+      platform,
+    };
   });
 }
 
@@ -328,18 +283,20 @@ function finish(
  */
 export async function runDetect(flags: Record<string, string>): Promise<void> {
   const event = flags["event"] ?? process.env.GITHUB_EVENT_NAME ?? "workflow_dispatch";
-  const selfHosted = flags["self-hosted"] === "true";
+  if (flags["self-hosted"] !== undefined && flags["self-hosted"] !== "true") {
+    throw new Error("Codex prebuilt builds require the M5 self-hosted runner; hosted fallback is forbidden");
+  }
   const publishFlag = flags["publish-requested"];
   const publishRequested = publishFlag === "true" || (publishFlag === undefined && event === "schedule");
   let platforms = releasePlatforms(flags);
-  if (selfHosted && (flags["platforms"] === "all" || flags["platforms"] === "arm64")) {
+  if (flags["platforms"] === "all" || flags["platforms"] === "arm64") {
     platforms = ["darwin-arm64", "linux-arm64"];
   }
-  if (selfHosted && platforms.some((p) => !p.endsWith("-arm64"))) {
+  if (platforms.some((p) => !p.endsWith("-arm64"))) {
     throw new Error("self-hosted runner is arm64 only");
   }
   if (publishRequested) platforms = unionReleasePlatforms(platforms, DEFAULT_PREBUILT_PLATFORMS);
-  const matrix = buildMatrix(platforms, selfHosted);
+  const matrix = buildMatrix(platforms);
   const source = resolveSource(flags, execGh, event);
   if (source === null) {
     skipNoSource(platforms, matrix);
@@ -354,7 +311,7 @@ export async function runDetect(flags: Record<string, string>): Promise<void> {
   if (existing.publishedPlatforms.length > 0) {
     platforms = unionReleasePlatforms(platforms, existing.publishedPlatforms);
   }
-  const finalMatrix = buildMatrix(platforms, selfHosted);
+  const finalMatrix = buildMatrix(platforms);
   const finalExisting = await releaseState(execGh, detection, expected, platforms);
   finish(detection, source, finalExisting, { patchSha256, pinned, patchesFrom: patches.describe }, platforms, finalMatrix, publishRequested);
 }

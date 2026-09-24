@@ -21,7 +21,7 @@ export { resetDirectory, sourceCommit } from "./prebuilt/env";
 const USAGE = [
   "usage: bun scripts/prebuilt.ts <command> [flags]",
   "  detect       [--codex-version auto|X.Y.Z] [--event NAME] [--repo OWNER/NAME] [--platforms P]",
-  "               [--self-hosted true|false] [--releases-file FILE] [--source-releases-file FILE]",
+  "               [--releases-file FILE] [--source-releases-file FILE]",
   "  build        --codex-version X.Y.Z --upstream DIR",
   "  rust-notices --upstream DIR --out FILE",
   "  package      --codex-version X.Y.Z [--cx-version X.Y.Z] --source-commit SHA --upstream DIR --staging DIR",
