@@ -102,10 +102,28 @@ describe("upstream release coverage", () => {
       ? [...Array.from({ length: 100 }, (_, i) => ({ tag_name: `rust-v0.${200 - i}.0` })), { tag_name: "rust-v0.153.0" }]
       : [{ tag_name: "rust-v0.153.0" }, { tag_name: "rust-v0.152.1" }]);
     const versions = stableUpstreamVersions(releases, "0.152.1");
-    expect(versions[0]).toBe("0.152.1");
+    expect(versions[0]).toBe("0.153.0");
     expect(versions.at(-1)).toBe("0.200.0");
     expect(versions.filter((v) => v === "0.153.0")).toHaveLength(1);
     expect(versions).not.toContain("0.154.1");
+  });
+
+  test("series rollover retains historical baselines and excludes drafts and prereleases", () => {
+    const releases = ["0.155.0", "0.155.1", "0.156.0", "0.156.1", "0.156.2"]
+      .map((v) => ({ tag_name: `rust-v${v}` }));
+    expect(stableUpstreamVersions(releases, "0.152.1")).toEqual([
+      "0.155.0", "0.156.0", "0.156.1", "0.156.2",
+    ]);
+    expect(stableUpstreamVersions([...releases,
+      { tag_name: "rust-v0.157.0-alpha.1" },
+      { tag_name: "rust-v0.157.0", draft: true },
+      { tag_name: "rust-v0.158.0", prerelease: true },
+    ], "0.152.1")).toEqual(stableUpstreamVersions(releases, "0.152.1"));
+    expect(stableUpstreamVersions([...releases, { tag_name: "rust-v0.157.0" }], "0.152.1"))
+      .toEqual(["0.155.0", "0.156.0", "0.157.0"]);
+    expect(stableUpstreamVersions([...releases, { tag_name: "rust-v1.0.1" }], "0.152.1"))
+      .toEqual(["0.155.0", "0.156.0", "1.0.1"]);
+    expect(stableUpstreamVersions([], "0.152.1")).toEqual([]);
   });
 
   test("a failed later release page invalidates the complete listing", async () => {
@@ -115,11 +133,11 @@ describe("upstream release coverage", () => {
     })).rejects.toThrow("page two unavailable");
   });
 
-  test("keeps all historical gaps visible after the latest version is supported", () => {
+  test("keeps latest-series gaps visible without requiring obsolete historical patch releases", () => {
     const releases = ["0.153.1", "0.153.2", "0.153.3", "0.156.0", "0.156.1"].map((v) => ({ tag_name: `rust-v${v}` }));
     const rows = classifyCoverage(manifest, stableUpstreamVersions(releases, "0.152.1"), [], new Map(), patchesDir);
     expect(rows.filter((r) => r.status === "unsupported").map((r) => r.version)).toEqual([
-      "0.153.1", "0.153.2", "0.153.3", "0.156.0",
+      "0.156.0",
     ]);
     expect(rows.at(-1)?.status).toBe("missing-prebuilt");
   });

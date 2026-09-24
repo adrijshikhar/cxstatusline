@@ -10,6 +10,7 @@
     { "patchVersion": 1, "min": "0.154.0", "max": "0.154.0", "file": "codex-0.154.0.patch" },
     { "patchVersion": 1, "min": "0.155.0", "max": "0.155.0", "file": "codex-0.155.0.patch" },
     { "patchVersion": 1, "min": "0.155.1", "max": "0.155.1", "file": "codex-0.155.1.patch" },
+    { "patchVersion": 2, "min": "0.156.0", "max": "0.156.0", "file": "codex-0.156.1.patch" },
     { "patchVersion": 2, "min": "0.156.1", "max": "0.156.1", "file": "codex-0.156.1.patch" }
   ]
 }

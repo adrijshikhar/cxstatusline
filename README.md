@@ -208,7 +208,7 @@ Rust patch versions are independent of Codex and cxstatusline package versions. 
 | Rust patch | Tested Codex versions |
 | --- | --- |
 | v1 | 0.152.1, 0.153.0, 0.153.1, 0.153.4, 0.154.0, 0.155.0, 0.155.1 |
-| v2 | 0.156.1 |
+| v2 | 0.156.0, 0.156.1 |
 
 Codex 0.153.1 is validated on macOS ARM64; its prebuilt release is pending. Compatibility entries do not imply that a prebuilt has already been published.
 
@@ -222,7 +222,7 @@ Rebuilding an existing Codex tag replaces its complete release asset set. The wo
 
 If your Codex version is not listed, cxstatusline fails closed: it will neither download an unverified prebuilt nor attempt source compilation. New versions require a tested patch file, an entry in `patches/manifest.json`, and a release workflow run.
 
-The daily upstream watcher also audits every stable Codex release at or above the support floor, including older releases that are missing a prebuilt. It updates one `Codex release coverage gaps` issue and uploads a machine-readable report. A separate watchdog fails if no successful scheduled watcher run has completed in the last 36 hours. Enable repository **Settings → Notifications → Actions** and select failed workflow runs (or enable email notifications for Actions) to receive these failures. The watchdog runs inside GitHub Actions, so a GitHub-wide scheduling outage cannot be detected from within GitHub.
+The daily upstream watcher audits every stable release in the newest Codex major.minor series and only the `.0` baseline of older series, at or above the support floor. For example, while 0.156.x is newest, 0.156.0 and 0.156.1 are required alongside 0.155.0; 0.155.1 is not a backfill requirement. Existing published assets and tested compatibility mappings are retained. It updates one `Codex release coverage gaps` issue and uploads a machine-readable report. A separate watchdog fails if no successful scheduled watcher run has completed in the last 36 hours. Enable repository **Settings → Notifications → Actions** and select failed workflow runs (or enable email notifications for Actions) to receive these failures. The watchdog runs inside GitHub Actions, so a GitHub-wide scheduling outage cannot be detected from within GitHub.
  
 ## 🩺 Troubleshooting
  

@@ -20,7 +20,7 @@ Every stable upstream Codex release within our support horizon must be accounted
 
 Branch `feat/patch-versions`, commit `63610c2167131c5cd4784800fe5f7d9a0d6bc3aa`, includes #100 and #103. Baseline: 981 tests passed, one optional upstream-checkout test skipped; typecheck and bundle build passed.
 
-Current ownership: v1 = 0.152.1, 0.153.0, 0.153.4, 0.154.0, 0.155.0, 0.155.1; v2 = 0.156.1. Support floor is the earliest manifest minimum, currently 0.152.1. Audit all stable upstream releases at or above that floor, including releases newer than the candidate. Do not invent intermediate semver versions that upstream never released.
+Current ownership: v1 = 0.152.1, 0.153.0, 0.153.4, 0.154.0, 0.155.0, 0.155.1; v2 = 0.156.1. Support floor is the earliest manifest minimum, currently 0.152.1. Audit every stable release in the latest major.minor series and only .0 baselines in older series at or above that floor, including releases newer than the candidate. Preserve existing published assets and tested compatibility entries. Do not invent intermediate semver versions that upstream never released.
 
 Confirmed gaps: 0.153.1, 0.153.2, 0.153.3 and 0.156.0. `git apply --cached --check` succeeds with the neighboring v1 patch for the three 0.153 releases and the corrected v2 patch for 0.156.0. This is applicability evidence only, not completed build/runtime validation.
 
@@ -90,7 +90,7 @@ Use the existing patched Rust footer tests and an automated terminal smoke harne
 
 CI builds from the exact selected upstream tag and patch, runs focused Rust footer/layout tests, and executes version-specific smoke checks before publication. Do not accept broad unrelated upstream snapshot churn as evidence for the footer fix. Preserve the user's existing source checkout at `~/.local/share/cxstatusline/codex`; use dedicated worktrees. Existing corrected source/binary and AIM smoke scripts are under `/tmp/cx-footer-1561` and `/tmp/cx-aim-*-smoke*`; inspect before reuse.
 
-Fill 0.153.1–0.153.3 with v1 and 0.156.0 with v2 only after build and runtime gates pass. If a toolchain/artifact dependency blocks validation, leave the version in the audit's unsupported table, record the concrete blocker, and provide reproducible CI/manual commands. Never broaden support or claim completion based solely on clean application. Rebuild 0.156.1/v2 as a later production rollout using the new replacement path.
+Ship validated 0.156.0 and 0.156.1 with v2. Retain the validated 0.153.1 v1 mapping; do not backfill obsolete 0.153.2/0.153.3. If a toolchain/artifact dependency blocks validation, leave the version in the audit's unsupported table, record the concrete blocker, and provide reproducible CI/manual commands. Never broaden support or claim completion based solely on clean application. Rebuild 0.156.1/v2 as a later production rollout using the new replacement path.
 
 ## Non-goals
 
@@ -98,7 +98,7 @@ No new tag naming scheme, package registry, database, SaaS monitoring service, u
 
 ## Acceptance
 
-- Complete paginated audit identifies all four known gaps even with 0.156.1 covered and never invents unreleased versions.
+- Complete paginated audit identifies missing latest-series releases and older .0 baselines, excludes obsolete historical patch gaps, handles series rollover, and never invents unreleased versions.
 - Watcher manifest mutation round-trips through `loadManifest` with every revision preserved.
 - Failure injection proves no success is claimed after a failed Git/GitHub call.
 - Replacement tests prove complete backup precedes mutation, no size-only skip, no platform loss, manifest-last upload, post-upload verification and rollback/error handling.
@@ -106,3 +106,5 @@ No new tag naming scheme, package registry, database, SaaS monitoring service, u
 - Footer behavior is exercised by focused Rust and terminal tests; unvalidated gaps remain explicit.
 - `bun test ./test ./src`, `bun run typecheck`, `bun run build` and `git diff --check` pass. Any optional or blocked integration check is recorded accurately.
 - Conventional Commit PR(s), no main push, no production publishing during implementation.
+
+Approved rollout: merge dependencies and this change, ship the metadata-compatible npm installer, then publish 0.156.0 and safely replace 0.156.1 after production platform gates pass.

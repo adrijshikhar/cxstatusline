@@ -178,8 +178,8 @@ Luna implemented Tasks 1–5 in commits `d12c5f3` through `3e5255b`, then reache
 
 - Tasks 1–5: implementation and regression tests pass. Root additionally fixed issue reopening, GraphQL pagination past GitHub's 1,000-release REST cap, platform preservation on every replacement path, repository propagation, and failed-delete recovery. Unchanged verified installations retain their archive-download no-op.
 - Task 6: native and Docker workflows now run the deterministic PTY footer gate; expanded v2 Rust assertions cover actual slash-popup input, resize/cursor geometry, and running-response visibility. Release-mode remote validation is in progress.
-- Task 7: all four neighboring patches apply. No new compatibility entries added until build/tests/runtime gates pass. Remote 0.156.0/0.156.1 builds encountered a `codex-chatgpt` compiler query-depth overflow; clean-upstream reproduction and a minimal recursion-limit experiment are queued on the M5 Pro.
-- Task 8: root review in progress. Current application verification: `bun test ./test ./src` — 1,004 pass, 2 optional skips, 0 fail; typecheck, build, and diff whitespace check pass. The live read-only coverage audit finds unsupported 0.153.1/.2/.3/0.156.0 and stale-patch prebuilt 0.156.1.
+- Task 7: all four neighboring patches apply. Codex 0.153.1 passed release build, 9 Rust tests, direct PTY smoke and AIM smoke; its exact v1 entry is committed in `c222646`. Other missing entries remain pending. The clean-upstream `codex-chatgpt` overflow is reproduced; the v2 recursion-limit fix passed the crate build and is committed in `b25f5d7`. Full corrected v2 validation is running.
+- Task 8: root review in progress. Current application verification: `bun test ./test ./src` — 1,006 pass, 2 optional skips, 0 fail; typecheck, build, and diff whitespace check pass. The live read-only coverage audit finds unsupported 0.153.1/.2/.3/0.156.0 and stale-patch prebuilt 0.156.1.
 
 Ruling: use GraphQL cursor pagination for upstream releases — a live REST audit fails at page 11 with HTTP 422, so ordinary REST page iteration cannot fulfill complete coverage.
 
@@ -196,3 +196,16 @@ is pending. Draft PR: https://github.com/adrijshikhar/cxstatusline/pull/104.
 
 User confirmed the v1/v2 slash-menu difference is intentional (bottom popup versus top popup),
 not a rendering defect. Revision-aware smoke checks preserve that behavior.
+
+The independent reviewer rechecked all three fixes and reported no remaining concrete defect. Current Rust builds stay on the authorized M5 Pro; production publication and global installation remain untouched.
+
+## Approved scope revision and rollout (2026-09-24)
+
+The user authorized production rollout and replaced exhaustive historical backfill
+with latest-series releases plus older .0 baselines. This supersedes the implementation-only
+restriction above. Preserve existing assets and tested compatibility entries.
+Stopped obsolete 0.153.2 compilation and removed the queued 0.153.3 requirement.
+Both v2 releases passed builds, 12 focused Rust tests, direct PTY and AIM checks.
+Add exact 0.156.0 ownership, verify the revised checker, merge #100 → #103 → #104,
+release the compatible npm installer, and publish both v2 prebuilts with required
+platform gates and same-tag backup/recovery for 0.156.1.

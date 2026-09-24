@@ -10,9 +10,10 @@ explicit coverage gap.
 | Upstream tag | Patch / revision | Patch applies | Rust layout tests | Native build, version probe, footer smoke |
 | --- | --- | --- | --- | --- |
 | `rust-v0.153.1` | `codex-0.153.4.patch` / v1 | Pass | 9 passed | Pass (direct + AIM) |
-| `rust-v0.153.2` | `codex-0.153.4.patch` / v1 | Pass | Pending | Pending |
-| `rust-v0.153.3` | `codex-0.153.4.patch` / v1 | Pass | Pending | Pending |
-| `rust-v0.156.0` | `codex-0.156.1.patch` / v2 | Pass | Pending | Pending |
+| `rust-v0.153.2` | `codex-0.153.4.patch` / v1 | Pass | Not required by revised policy | Not run |
+| `rust-v0.153.3` | `codex-0.153.4.patch` / v1 | Pass | Not required by revised policy | Not run |
+| `rust-v0.156.0` | `codex-0.156.1.patch` / v2 | Pass | 12 passed | Pass (direct + AIM) |
+| `rust-v0.156.1` (corrected) | `codex-0.156.1.patch` / v2 | Pass | 12 passed | Pass (direct + AIM) |
 
 All four tags were checked out into separate detached worktrees under `/tmp/cx-coverage-<version>`.
 The exact neighboring patch was applied with `git apply --index`; the same patch also passed
@@ -100,3 +101,24 @@ The synchronized release executable pair built successfully; the version probe r
 filtered out). Direct and AIM PTY smoke checks passed. Verified binaries and provenance are
 retained in `verified/0.153.1/` under the remote root. This establishes macOS ARM64
 compatibility; Linux builds and production publication remain release-pipeline gates.
+
+The corrected 0.156.1 executable pair completed its full release build in 33m14s; the
+version probe returned `codex-cli 0.156.1`. The isolated AIM 0.8.1 session passed all v2
+assertions, including three visible rows while the slash menu was open. Logs:
+`logs/0.156.1-retry.log` and `logs/0.156.1-early-aim-smoke.log`. Focused Rust tests are
+still compiling; these results do not claim that gate passed yet.
+
+## Final v2 validation and release scope
+
+Both 0.156.0 and 0.156.1 passed release executable builds, 12 focused Rust tests,
+and direct plus AIM PTY smoke checks on the M5 Pro. The other 5,409 Rust tests were
+filtered out, not reported as passed. Validated patch SHA-256:
+`a0f6ef8c53c51ede94418c1e43c00ad4e8da903206ab8535e77c1e5cb8abbd84`.
+Upstream commits: 0.156.0 `fe74a774532af67b5a4a3dec03ce9469e17f89af`;
+0.156.1 `b412ff32c417f855c2b2d1581b77058eed87c84b`.
+
+The approved coverage policy requires every stable release in the latest major.minor
+series and only .0 baselines in older series above the support floor. Existing assets
+and tested compatibility entries remain. The 0.153.2 build was stopped and 0.153.3
+was not started; neither version is claimed supported. Production platform CI and
+publication are separate from these macOS ARM64 validation results.
