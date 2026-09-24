@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.9.1](https://github.com/adrijshikhar/cxstatusline/compare/v0.9.0...v0.9.1) (2026-09-24)
+
+
+### Bug Fixes
+
+* restore existing M5 prebuilt environment setup ([#106](https://github.com/adrijshikhar/cxstatusline/issues/106)) ([ca863ed](https://github.com/adrijshikhar/cxstatusline/commit/ca863ed1f08f38cb2e176d8e6d684c3b5607c875))
+* restore original prebuilt compiler parallelism ([#108](https://github.com/adrijshikhar/cxstatusline/issues/108)) ([e54d47d](https://github.com/adrijshikhar/cxstatusline/commit/e54d47d2c8c28665981dfe5c457499f4b8253388))
+
 ## [0.9.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.8.0...v0.9.0) (2026-09-24)
 
 
