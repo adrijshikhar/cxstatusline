@@ -22,6 +22,13 @@ export function resolveClaudeSeoPath(
   if (existsSync(aimPath)) {
     return aimPath;
   }
+  const geminiProfilePath = join(
+    home,
+    ".aim/profiles/rs/.gemini/config/skills/seo/scripts/claude-seo"
+  );
+  if (existsSync(geminiProfilePath)) {
+    return geminiProfilePath;
+  }
   const claudePath = join(
     home,
     ".claude/skills/seo/scripts/claude-seo"

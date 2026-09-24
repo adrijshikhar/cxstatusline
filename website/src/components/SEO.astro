@@ -13,7 +13,7 @@ interface Props {
 
 const {
   title = "cxstatusline | Customizable Statusline & Widgets for OpenAI Codex CLI",
-  description = "Customizable statusline for OpenAI Codex CLI — 34 widgets, themes, powerline glyphs, and token trackers in your terminal footer. macOS & Linux.",
+  description = "Customizable statusline for OpenAI Codex CLI — 36 widgets, themes, powerline glyphs, and token trackers in your terminal footer. macOS & Linux.",
   image = "/og-image.png",
   canonical,
   noindex = false,
@@ -35,12 +35,19 @@ const jsonLd = {
       "name": "cxstatusline",
       "operatingSystem": "macOS, Linux",
       "applicationCategory": "DeveloperApplication",
+      "applicationSubCategory": "Developer Tools, Terminal UI, Statusline",
       "description": description,
       "softwareVersion": softwareVersion,
       "license": "https://opensource.org/licenses/MIT",
       "codeRepository": "https://github.com/adrijshikhar/cxstatusline",
       "downloadUrl": "https://www.npmjs.com/package/cxstatusline",
-      "softwareRequirements": "OpenAI Codex CLI, Node.js >= 18",
+      "sameAs": [
+        "https://github.com/adrijshikhar/cxstatusline",
+        "https://www.npmjs.com/package/cxstatusline"
+      ],
+      "softwareRequirements": "OpenAI Codex CLI, Node.js >= 22, macOS or Linux",
+      "featureList": "Interactive TUI configurator, 36 statusline widgets, real-time token tracking, git branch and diff status, 8 powerline themes, zero-overhead caching, OpenAI Codex CLI integration",
+      "image": ogImageURL,
       "offers": {
         "@type": "Offer",
         "price": "0",
@@ -50,6 +57,9 @@ const jsonLd = {
         "@type": "Person",
         "name": "Adrij Shikhar",
         "url": "https://github.com/adrijshikhar",
+        "sameAs": [
+          "https://github.com/adrijshikhar"
+        ],
       },
     },
     {
@@ -57,6 +67,8 @@ const jsonLd = {
       "name": "cxstatusline",
       "url": canonicalURL,
       "description": "Interactive playground and documentation for cxstatusline",
+      "inLanguage": "en",
+      "image": ogImageURL,
     },
   ],
 };

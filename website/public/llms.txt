@@ -1,19 +1,21 @@
 # cxstatusline
 
-> A highly customizable, low-overhead status line formatter for OpenAI Codex CLI. Renders a configurable terminal status line (model info, git branch/changes, context usage, timers, and custom widgets) via an interactive Ink TUI, with support for Powerline separators and themes.
+> A customizable, low-overhead statusline and widget system for OpenAI Codex CLI. Renders real-time telemetry (model info, Git branch and diff, context token tracking, 5-hour and weekly rate limits, session timers, and custom commands) directly in your terminal footer with Powerline themes and an interactive TUI configurator.
 
-## Getting Started
+## Main sections
 
-- Quick Start: Run with `npx -y cxstatusline@latest` or `bunx -y cxstatusline@latest` — launches the interactive TUI to configure your status line.
-- Native Hook Integration: Modifies Codex CLI statusline hooks to render live telemetry.
+- [Online Playground & Configurator](https://cxstatusline.adrijshikhar.dev): Live browser-based terminal preview to arrange widgets, choose themes, and export configuration JSON.
+- [GitHub Repository](https://github.com/adrijshikhar/cxstatusline): Source code, release binaries, issue tracker, discussions, and developer documentation.
+- [npm Package](https://www.npmjs.com/package/cxstatusline): Official package registry distribution for `npx -y cxstatusline@latest` or `bunx -y cxstatusline@latest`.
+- [Widget Catalog](https://github.com/adrijshikhar/cxstatusline#widgets): Full list of 36 widgets including model, thinking effort, Git status, context usage, and custom shell commands.
+- [Compatibility Matrix](https://github.com/adrijshikhar/cxstatusline#requirements): Support matrix and prebuilt binaries for official OpenAI Codex CLI releases on macOS and Linux.
 
-## Configuration
+## Key facts
 
-- Statusline Settings: Stored at `~/.config/cxstatusline/settings.json` by default. Override using `--config <path>`.
-- CLI Options: Run `cxstatusline --help` for options including `--preview`, `--doctor`, and `--version`.
-
-## Development
-
-- Engine: Built on Node >= 22 and Bun >= 1.4 (runtime supports Node.js >= 18 and Bun >= 1.2).
-- Checks: `bun test ./test ./src`, `bun run typecheck`, `bun run build`, and `bun run check:package`.
-- License: MIT.
+- **Purpose**: Replaces the default fixed Codex CLI footer with a fully customizable, multi-row statusline.
+- **Widgets**: 36 built-in widgets across 1 to 3 rows, including model name, thinking effort, Git branch, Git diff (+/-), context token count, 5-hour usage percentage, 5-hour reset timer, weekly usage percentage, weekly reset timer, session duration, token speeds, memory, and custom shell commands.
+- **ccstatusline Interoperability**: Preset syntax and widget IDs match `ccstatusline` (the Claude Code statusline tool), enabling effortless transition and configuration import between Claude Code and OpenAI Codex CLI.
+- **Performance**: Zero noticeable latency on prompt redraws via cached local telemetry files (`~/.config/cxstatusline/settings.json`) and compiled prebuilt patch binaries.
+- **Platform Support**: Verified on macOS (Apple Silicon darwin-arm64, Intel darwin-x64) and Linux (linux-x64, linux-arm64).
+- **Engine & Runtime**: Built with TypeScript and Node.js >= 22 / Bun >= 1.4; runtime supports Node.js >= 18 and Bun >= 1.2.
+- **License**: MIT open source.
