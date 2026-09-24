@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a Question or Discuss an Idea
+    url: https://github.com/adrijshikhar/cxstatusline/discussions
+    about: Ask usage questions, share layout presets, or propose ideas in GitHub Discussions.
+  - name: Interactive Web Playground
+    url: https://cxstatusline.adrijshikhar.dev
+    about: Preview, test, and configure statusline widgets and themes in your browser.
+  - name: Documentation & Architecture
+    url: https://github.com/adrijshikhar/cxstatusline/blob/main/docs/usage.md
+    about: Read the full widget catalog, formatting reference, and technical architecture guide.

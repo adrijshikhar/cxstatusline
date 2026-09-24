@@ -2,7 +2,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/banner-dark.png">
-  <img alt="cxstatusline" src="docs/banner-light.png" width="720">
+  <img alt="cxstatusline - Customizable statusline & powerline status bar for OpenAI Codex CLI" src="docs/banner-light.png" width="720">
 </picture>
 
 # cxstatusline
@@ -15,20 +15,37 @@
 [![npm version](https://img.shields.io/npm/v/cxstatusline.svg)](https://www.npmjs.com/package/cxstatusline)
 [![Website](https://img.shields.io/badge/website-cxstatusline.adrijshikhar.dev-blue)](https://cxstatusline.adrijshikhar.dev)
 [![Playground](https://img.shields.io/badge/playground-online-purple)](https://cxstatusline.adrijshikhar.dev/#playground)
+[![Discussions](https://img.shields.io/github/discussions/adrijshikhar/cxstatusline)](https://github.com/adrijshikhar/cxstatusline/discussions)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Node.js 22+](https://img.shields.io/badge/node-%E2%89%A522-green)](https://nodejs.org/)
 
-![cxstatusline configurator: adding a widget and changing colors with live sample-data previews](docs/demo.gif)
+![cxstatusline interactive terminal configuration TUI - customize widgets, colors, and powerline themes](docs/demo.gif)
 
 </div>
 
+## 📑 Table of Contents
+
+- [✨ Features](#-features)
+- [🌐 Interactive Web Playground](#-interactive-web-playground)
+- [📋 Requirements](#requirements)
+- [🚀 Install](#-install)
+- [🎛️ Configure](#️-configure)
+- [🧩 Widgets Catalog](#widgets)
+- [🔄 Update & Revert](#update)
+- [🔍 How it Works](#-how-it-works)
+- [🏷️ Supported Versions](#supported-versions)
+- [🩺 Troubleshooting](#-troubleshooting)
+- [🙏 Acknowledgments](#-acknowledgments)
+
 ## ✨ Features
 
-**cxstatusline** is a configurable, one-to-three-row statusline for the [OpenAI Codex CLI](https://github.com/openai/codex) (bringing the rich statusbar experience of [ccstatusline](https://github.com/sirmalloc/ccstatusline) for Anthropic Claude Code to OpenAI Codex).
+**cxstatusline** is a configurable, one-to-three-row statusline & status bar for the [OpenAI Codex CLI](https://github.com/openai/codex) (bringing the rich statusbar experience of [ccstatusline](https://github.com/sirmalloc/ccstatusline) for Anthropic Claude Code to OpenAI Codex).
 
-It features an interactive terminal configuration TUI, live web playground, customizable colors, Powerline themes, and preset import/export.
-See model, context, Git, session duration, usage percentages and reset times without leaving Codex.
-Available data depends on your session and account.
+- **⚡ Live Codex Telemetry**: Monitor active model, reasoning effort, context token window usage (`k/200k`), session duration, and rate limit reset countdowns in real time.
+- **🌿 Git Status & Branch**: Always see current branch and unstaged/staged change counters (`+42, -10`) right in your Codex prompt.
+- **🎨 Powerline Themes & ANSI Colors**: Choose from built-in Powerline separators (arrows, angled, curved, flame), 16/256/TrueColor palettes, or design custom rows.
+- **🖥️ Interactive Terminal TUI**: Configure your layout visually inside your terminal (`cxstatusline`) or in the web playground.
+- **🔄 ccstatusline Compatibility**: Preset syntax and widget IDs match ccstatusline, making transition from Claude Code seamless.
 
 Independent project; not an official OpenAI product.
 
@@ -40,7 +57,7 @@ Try out themes, arrange widgets, and preview your custom OpenAI Codex statusline
 <details>
 <summary>See the footer inside Codex</summary>
 
-![cxstatusline footer inside Codex](docs/statusline.png)
+![cxstatusline footer status bar inside OpenAI Codex CLI terminal session](docs/statusline.png)
 
 </details>
 
@@ -201,5 +218,7 @@ cxstatusline is [MIT licensed](LICENSE). See [SECURITY.md](SECURITY.md) for secu
 
 ---
 
-📦 **npm:** [https://www.npmjs.com/package/cxstatusline](https://www.npmjs.com/package/cxstatusline)
+- 🌐 **Web Playground:** [cxstatusline.adrijshikhar.dev](https://cxstatusline.adrijshikhar.dev)
+- 💬 **Discussions & Ideas:** [github.com/adrijshikhar/cxstatusline/discussions](https://github.com/adrijshikhar/cxstatusline/discussions)
+- 📦 **npm Package:** [npmjs.com/package/cxstatusline](https://www.npmjs.com/package/cxstatusline)
 
