@@ -69,6 +69,9 @@ export const PLATFORMS: readonly Platform[] = [
   "linux-arm64",
 ];
 
+/** Platforms every new scheduled prebuilt release must publish. */
+export const DEFAULT_PREBUILT_PLATFORMS: readonly Platform[] = ["darwin-arm64", "linux-arm64"];
+
 /** Spec archive name: `cxstatusline-codex-<codexVersion>-<platform>.tar.gz`. */
 const ARCHIVE_PREFIX = "cxstatusline-codex";
 
