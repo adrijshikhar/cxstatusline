@@ -20,6 +20,7 @@
 - Never push main, merge PRs, publish/delete production releases or globally install binaries during implementation.
 - Do not reset the user's `~/.local/share/cxstatusline/codex` checkout.
 - Run `bun test ./test ./src` before submitting a PR.
+- Run heavy Rust builds only on the authorized M5 Pro (`192.168.1.65`), in isolated checkouts, with at most two Cargo jobs and sequential versions. Do not change installed binaries on either machine.
 
 ## Workspace and dependencies
 
@@ -170,3 +171,18 @@ export interface CoverageRow { version: string; status: CoverageStatus; detail: 
 ## Plan self-review
 
 R1 maps to Task 1; R2 to Task 2; R3 to Task 3; R4 to Task 4; R5 to Task 5; R6 to Tasks 6–7. Task 8 owns repository checks, PR and truthful rollout status. All five review-focus conditions have assigned regression checks. Runtime dependency failures remain explicit coverage gaps, not compatibility claims. No implementation step requires modifying the picker branch or the user's installed binary.
+
+## Execution record (2026-09-24)
+
+Luna implemented Tasks 1–5 in commits `d12c5f3` through `3e5255b`, then reached its account usage limit. Root continued implementation and review. Historical checkboxes above remain unchecked where the precise red/green sequence has not been independently established.
+
+- Tasks 1–5: implementation and regression tests pass. Root additionally fixed issue reopening, GraphQL pagination past GitHub's 1,000-release REST cap, platform preservation on every replacement path, repository propagation, and failed-delete recovery. Unchanged verified installations retain their archive-download no-op.
+- Task 6: native and Docker workflows now run the deterministic PTY footer gate; expanded v2 Rust assertions cover actual slash-popup input, resize/cursor geometry, and running-response visibility. Release-mode remote validation is in progress.
+- Task 7: all four neighboring patches apply. No new compatibility entries added until build/tests/runtime gates pass. Remote 0.156.0/0.156.1 builds encountered a `codex-chatgpt` compiler query-depth overflow; clean-upstream reproduction and a minimal recursion-limit experiment are queued on the M5 Pro.
+- Task 8: root review in progress. Current application verification: `bun test ./test ./src` — 1,004 pass, 2 optional skips, 0 fail; typecheck, build, and diff whitespace check pass. The live read-only coverage audit finds unsupported 0.153.1/.2/.3/0.156.0 and stale-patch prebuilt 0.156.1.
+
+Ruling: use GraphQL cursor pagination for upstream releases — a live REST audit fails at page 11 with HTTP 422, so ordinary REST page iteration cannot fulfill complete coverage.
+
+Rollout after review: merge dependencies #100/#103 and this PR; ship the updated npm installer before schema-2 prebuilts; audit coverage; build validated gaps for the required platforms; back up and replace 0.156.1 under its existing tag. Production publication remains a separately requested operation.
+
+Ruling: footer runtime expectations follow the declared patch revision. V1 intentionally hides its footer under the slash popup and must restore it afterward; v2 must retain the footer during the popup. Keep v1 code unchanged, as explicitly required by the no-backport policy.
