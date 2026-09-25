@@ -69,12 +69,12 @@ function unchangedPair(ctx: Context, manifest: ReleaseManifest, artifact: Artifa
   const installed = release.manifest;
   const identical =
     record.codexVersion === manifest.codexVersion &&
-    record.provenance.cxVersion === manifest.cxVersion &&
+    (manifest.cxVersion === undefined || record.provenance.cxVersion === manifest.cxVersion) &&
     record.provenance.platform === artifact.platform &&
     record.provenance.patchVersion === manifest.patchVersion &&
     record.provenance.patchSha256 === manifest.patchSha256 &&
     record.provenance.upstreamCommit === manifest.upstreamCommit &&
-    installed.cxVersion === manifest.cxVersion &&
+    (manifest.cxVersion === undefined || installed.cxVersion === manifest.cxVersion) &&
     installed.codexVersion === manifest.codexVersion &&
     installed.patchSha256 === manifest.patchSha256 &&
     installed.upstreamCommit === manifest.upstreamCommit;

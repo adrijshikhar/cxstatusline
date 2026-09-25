@@ -431,6 +431,34 @@ describe("command dispatch", () => {
       });
     }
   }
+
+  test("upgrade does not prompt when installed codex is already up to date on TTY", async () => {
+    const updateIO = io("");
+    const update = dispatchDeps();
+    const paths = resolvePaths(update.env);
+    mkdirSync(paths.stateDir, { recursive: true });
+    writeFileSync(paths.stateFile, JSON.stringify({
+      version: 1,
+      patched_from: "0.152.1",
+      upstream_bin: null,
+      launcher_restore: { kind: "none" },
+      policy: "stable-minors",
+      last_attempt: null,
+    }));
+
+    let updatePrompted = false;
+    await main(["upgrade"], {
+      ...updateIO.io,
+      env: update.env,
+      isTTY: true,
+    }, {
+      ...update.deps,
+      fetchPrebuilts: async () => ["0.152.1"],
+      promptUpdate: async () => { updatePrompted = true; return "cancel"; },
+    });
+    expect(updatePrompted).toBe(false);
+  });
+
   test("--internal-refresh-command is dispatched without reading stdin, produces no stdout, and is absent from USAGE", async () => {
     const t = io("");
     const throwingIo = {
