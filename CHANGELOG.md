@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.10.1](https://github.com/adrijshikhar/cxstatusline/compare/v0.10.0...v0.10.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* detect when installed Codex is already up to date on upgrade ([#114](https://github.com/adrijshikhar/cxstatusline/issues/114)) ([55130c1](https://github.com/adrijshikhar/cxstatusline/commit/55130c17791a6ad56391845436aa729e170fa83c))
+
 ## [0.10.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.9.1...v0.10.0) (2026-09-25)
 
 
