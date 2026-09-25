@@ -40,7 +40,7 @@ describe("wrapper", () => {
     // sq(sq("/bin/cx statusline") + " render") - the inner quotes are what shlex::split sees.
     expect(s).toContain(`CXSTATUSLINE_COMMAND=''"'"'/bin/cx statusline'"'"' render'`);
     expect(s).toContain(`exec '/lib/codex' "$@"`);
-    expect(s).toContain(`exec '/bin/cx statusline' update`);
+    expect(s).toContain(`exec '/bin/cx statusline' upgrade`);
   });
   test("the script actually runs: update is routed, everything else reaches the binary with the env var", () => {
     const { root } = tmpEnv();
@@ -54,7 +54,7 @@ describe("wrapper", () => {
     writeFileSync(w, wrapperScript(fakeCodex, fakeCx));
     chmodSync(w, 0o755);
     expect(spawnSync(w, ["--version"], { encoding: "utf8" }).stdout.trim()).toBe(`codex:--version:'${fakeCx}' render`);
-    expect(spawnSync(w, ["update"], { encoding: "utf8" }).stdout.trim()).toBe("cx:update");
+    expect(spawnSync(w, ["update"], { encoding: "utf8" }).stdout.trim()).toBe("cx:upgrade");
   });
   test("isOurWrapper recognises the marker and nothing else", () => {
     const { root } = tmpEnv();
@@ -248,7 +248,7 @@ describe("generation activation", () => {
     expect(s).toContain(`generation=$(CDPATH= cd -P -- '/h/.local/libexec/cx statusline/current' && pwd -P) || exit 1`);
     expect(s).toContain(`exec "$generation/codex" "$@"`);
     expect(s).toContain(`CXSTATUSLINE_COMMAND=''"'"'/bin/cx statusline'"'"' render'`);
-    expect(s).toContain(`exec '/bin/cx statusline' update`);
+    expect(s).toContain(`exec '/bin/cx statusline' upgrade`);
   });
 
   test("isOurWrapper still recognises a v1 wrapper an owner already has installed", () => {
@@ -350,7 +350,7 @@ describe("generation activation", () => {
     chmodSync(join(root, "cx bin"), 0o755);
     const r = spawnSync(paths.wrapperPath, ["--version"], { encoding: "utf8" });
     expect(r.stdout.trim()).toBe(`gen:--version:'${join(root, "cx bin")}' render`);
-    expect(spawnSync(paths.wrapperPath, ["update"], { encoding: "utf8" }).stdout.trim()).toBe("cx:update");
+    expect(spawnSync(paths.wrapperPath, ["update"], { encoding: "utf8" }).stdout.trim()).toBe("cx:upgrade");
   });
 
   test("REFUSES a foreign regular launcher before creating any generation", () => {

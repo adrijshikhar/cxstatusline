@@ -20,6 +20,8 @@ import { revert } from "./commands/revert";
 import { getTerminalWidth } from "./utils/terminal";
 import { runTUI as runTUIFromApp } from "./tui/App";
 import { readMemoryUsage } from "./utils/memory";
+import { runUpdateTool, defaultFetchLatestVersion, type UpdateToolDeps } from "./commands/update-tool";
+import { compareSemver, parseSemver } from "./version";
 
 import type { UpdateOptions } from "./patch/run";
 import type { FetchLike, TransportOptions } from "./distribution/transport";
@@ -47,6 +49,8 @@ export interface MainDeps {
   ) => Promise<PromptVersionSelection | string | null>;
   readonly promptUpdate?: UpdateOptions["promptUpdate"];
   readonly fetchPrebuilts?: (fetchFn?: FetchLike, repo?: string) => Promise<string[]>;
+  readonly updateTool?: (flags: readonly string[], io: MainIo, deps?: UpdateToolDeps) => Promise<number>;
+  readonly fetchLatestToolVersion?: () => Promise<string | null>;
 }
 
 export const USAGE = `usage: cxstatusline [command]
@@ -57,7 +61,8 @@ export const USAGE = `usage: cxstatusline [command]
                               install the published Codex pair (--compile builds it from source)
   patch [--force]             build and install the patched Codex from source
   patch --simulate-drift <v>  record <v> as the installed version so the next session sees drift
-  update [--compile|--force]  install the latest supported patched Codex pair
+  update [--check]            update cxstatusline tool to the latest version
+  upgrade [--compile|--force] upgrade the patched Codex pair to the latest supported version
   hook [install|uninstall]    manage the SessionStart entry; bare 'hook' is what Codex runs
   doctor                      report toolchain, drift, hook and wrapper state
   policy [get|set <policy>]   view or update policy (every, stable-minors, manual)
@@ -216,14 +221,48 @@ async function installCommand(argv: readonly string[], io: MainIo, deps: MainDep
 }
 
 /**
- * `update`, `update --compile`, and `update --force`.
+ * `update` updates cxstatusline itself to the latest version.
+ * If flags like `--compile` or `--force` or `--codex-version` are passed,
+ * it alerts the user and forwards to `upgradeCommand` for backward compatibility.
  */
 async function updateCommand(argv: readonly string[], io: MainIo, deps: MainDeps): Promise<number> {
+  const flags = argv.slice(1);
+  const codexFlags = new Set(["--compile", "--force", "-y", "--yes"]);
+  if (flags.some((f) => codexFlags.has(f) || f.startsWith("--codex-version"))) {
+    io.stdout("Notice: 'cxstatusline upgrade' is now used to upgrade the patched Codex pair.\nForwarding to 'upgrade'...\n\n");
+    return upgradeCommand(argv, io, deps);
+  }
+  const allowed = new Set(["--check", "-h", "--help"]);
+  if (flags.some((f) => !allowed.has(f))) {
+    io.stderr(USAGE);
+    return 2;
+  }
+  const updater = deps.updateTool ?? runUpdateTool;
+  return updater(flags, io, { fetchLatestVersion: deps.fetchLatestToolVersion });
+}
+
+/**
+ * `upgrade`, `upgrade --compile`, and `upgrade --force`.
+ * Upgrades the patched Codex binary pair.
+ */
+async function upgradeCommand(argv: readonly string[], io: MainIo, deps: MainDeps): Promise<number> {
   const flags = argv.slice(1);
   const allowed = new Set(["--compile", "--force", "-y", "--yes"]);
   if (flags.some((f) => !allowed.has(f))) {
     io.stderr(USAGE);
     return 2;
+  }
+  try {
+    const latest = await (deps.fetchLatestToolVersion ?? defaultFetchLatestVersion)();
+    if (latest) {
+      const parsedLatest = parseSemver(latest);
+      const parsedCurrent = parseSemver(VERSION);
+      if (parsedLatest && parsedCurrent && compareSemver(parsedLatest, parsedCurrent) === 1) {
+        io.stdout(`\n💡 Note: A newer version of cxstatusline is available (${VERSION} → ${latest}).\n   Run 'cxstatusline update' to update the tool for the newest Codex patches.\n\n`);
+      }
+    }
+  } catch {
+    // Non-blocking
   }
   return runUpdate(
     contextFor(io, deps),
@@ -297,6 +336,7 @@ export async function main(argv: readonly string[], io: MainIo, deps: MainDeps =
   if (cmd === "hook" && argv[1] === "acquire" && argv.length === 2) return hookAcquireCommand(io, deps);
   if (cmd === "patch") return patchCommand(argv, io, deps);
   if (cmd === "update") return updateCommand(argv, io, deps);
+  if (cmd === "upgrade") return upgradeCommand(argv, io, deps);
   if (cmd === "install") return installCommand(argv, io, deps);
   if (cmd === "hook" && (argv[1] === "install" || argv[1] === "uninstall")) {
     return hookAdminCommand(argv[1], io, deps);

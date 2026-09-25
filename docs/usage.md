@@ -190,7 +190,7 @@ cxstatusline policy set manual          # Never update automatically via hook
 |---|---|
 | `every` (default) | Immediately triggers a background prebuilt acquisition on any Codex version bump (e.g. `0.155.0` → `0.155.1`). |
 | `stable-minors` | Updates only across minor releases (e.g. `0.154.x` → `0.155.x`), holding patch updates unless forced. |
-| `manual` | Disables automated background updates from the `SessionStart` hook. Updates must be triggered manually via `cxstatusline update` or `cxstatusline install`. |
+| `manual` | Disables automated background updates from the `SessionStart` hook. Updates must be triggered manually via `cxstatusline upgrade` or `cxstatusline install`. |
 
 ### How the SessionStart Hook Works
 
@@ -198,7 +198,7 @@ cxstatusline policy set manual          # Never update automatically via hook
 2. **Live GitHub Probe**: When Codex moves to a new version whose prebuilt was previously pending in CI (`release-unavailable`), the hook makes a fast live probe to GitHub (with a 5-second timeout and silent fallback) to see if prebuilts have published. If published, it immediately clears the 24-hour backoff timer and begins background acquisition.
 3. **Fail-Closed & Silent**: Network errors, timeouts, or unhandled exceptions never interrupt Codex startup or print raw stack traces. The hook returns in milliseconds and all downloads and builds run detached in the background.
 
-## Installing & Updating Versions
+## Installing & Upgrading Versions
 
 ### Interactive Version Selection
 
@@ -215,9 +215,9 @@ Select Codex version to install:
 - Published releases are marked `[prebuilt available]`. The highest published prebuilt version is automatically selected as the default.
 - Versions pending CI prebuilt publication are labeled `[compile from source - prebuilt pending]`. Selecting a pending version prompts for confirmation before attempting to compile from source.
 
-### Smart Update Fallback
+### Smart Upgrade Fallback
 
-When upstream Codex releases a new version that is still building in CI, running `cxstatusline update` checks for intermediate published prebuilts:
+When upstream Codex releases a new version that is still building in CI, running `cxstatusline upgrade` checks for intermediate published prebuilts:
 
 ```text
 Warning: Upstream Codex update available: 0.154.0 -> 0.156.1.

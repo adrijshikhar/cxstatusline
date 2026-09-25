@@ -175,6 +175,9 @@ describe("command dispatch", () => {
     { argv: ["install", "--compile"], code: 1, expect: /rustup is not on PATH/ },
     { argv: ["patch"], code: 1, expect: /rustup is not on PATH/ },
     { argv: ["patch", "--force"], code: 1, expect: /rustup is not on PATH/ },
+    { argv: ["upgrade"], code: 1, expect: /staging a prebuilt Codex pair needs 2 GiB/ },
+    { argv: ["upgrade", "--compile"], code: 1, expect: /rustup is not on PATH/ },
+    { argv: ["upgrade", "--force"], code: 1, expect: /staging a prebuilt Codex pair needs 2 GiB/ },
   ];
   for (const c of cases) {
     test(`\`${c.argv.join(" ")}\` reaches its own preflight`, async () => {
@@ -185,6 +188,48 @@ describe("command dispatch", () => {
       expect(d.calls.some((k) => k.cmd === "cargo" || k.cmd === "rustup")).toBe(false);
     });
   }
+  test("`update` delegates to updateTool", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    let toolUpdateCalled = false;
+    let toolUpdateFlags: readonly string[] = [];
+    const updateTool = async (flags: readonly string[]) => {
+      toolUpdateCalled = true;
+      toolUpdateFlags = flags;
+      return 0;
+    };
+    expect(await main(["update", "--check"], { ...t.io, env: d.env }, { ...d.deps, updateTool })).toBe(0);
+    expect(toolUpdateCalled).toBe(true);
+    expect(toolUpdateFlags).toEqual(["--check"]);
+  });
+  test("`update` with codex flags prints notice and forwards to upgrade", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    expect(await main(["update", "--compile"], { ...t.io, env: d.env }, d.deps)).toBe(1);
+    expect(t.out.join("")).toMatch(/Notice: 'cxstatusline upgrade' is now used to upgrade the patched Codex pair/);
+    expect(t.out.join("")).toMatch(/rustup is not on PATH/);
+  });
+  test("`update` with unknown flags exits 2 with usage", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    expect(await main(["update", "--invalid-flag"], { ...t.io, env: d.env }, d.deps)).toBe(2);
+    expect(t.err.join("")).toMatch(/usage:/i);
+  });
+  test("`upgrade` with unknown flags exits 2 with usage", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    expect(await main(["upgrade", "--invalid-flag"], { ...t.io, env: d.env }, d.deps)).toBe(2);
+    expect(t.err.join("")).toMatch(/usage:/i);
+  });
+  test("`upgrade` notifies when a newer tool version is available", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    expect(await main(["upgrade"], { ...t.io, env: d.env }, {
+      ...d.deps,
+      fetchLatestToolVersion: async () => "99.0.0",
+    })).toBe(1);
+    expect(t.out.join("")).toMatch(/Note: A newer version of cxstatusline is available/);
+  });
   test("`update --force` uses the verified prebuilt path", async () => {
     const t = io("");
     const d = dispatchDeps();
@@ -192,7 +237,7 @@ describe("command dispatch", () => {
     expect(d.calls.filter((k) => k.args[0] === "update")).toHaveLength(0);
     expect(t.out.join("")).toMatch(/staging a prebuilt Codex pair needs 2 GiB/);
   });
-  test("`update` fails closed when release discovery fails", async () => {
+  test("`upgrade` fails closed when release discovery fails", async () => {
     const t = io("");
     const d = dispatchDeps();
     const mockFetch = async (url: string | URL | Request) => {
@@ -202,7 +247,7 @@ describe("command dispatch", () => {
       }
       return new Response("not found", { status: 404 });
     };
-    expect(await main(["update"], { ...t.io, env: d.env }, { ...d.deps, transport: { fetch: mockFetch } })).toBe(1);
+    expect(await main(["upgrade"], { ...t.io, env: d.env }, { ...d.deps, transport: { fetch: mockFetch } })).toBe(1);
     expect(d.calls.filter((k) => k.args[0] === "update")).toHaveLength(0);
     expect(t.out.join("")).toMatch(/No supported prebuilt release/);
   });
@@ -343,7 +388,7 @@ describe("command dispatch", () => {
   });
   for (const stdinTTY of [false, true]) {
     for (const stdoutTTY of [false, true]) {
-      test(`install/update prompt dispatch uses both TTYs (stdin=${stdinTTY}, stdout=${stdoutTTY})`, async () => {
+      test(`install/upgrade prompt dispatch uses both TTYs (stdin=${stdinTTY}, stdout=${stdoutTTY})`, async () => {
         const shouldPrompt = stdinTTY && stdoutTTY;
         const installIO = io("");
         const install = dispatchDeps();
@@ -370,7 +415,7 @@ describe("command dispatch", () => {
             ? new Response(JSON.stringify({ tag_name: "rust-v0.156.1" }), { status: 200 })
             : new Response("not found", { status: 404 });
         };
-        const updateResult = await main(["update"], {
+        const updateResult = await main(["upgrade"], {
           ...updateIO.io,
           env: update.env,
           isTTY: canPrompt({ isTTY: stdinTTY }, { isTTY: stdoutTTY }),
