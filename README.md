@@ -31,7 +31,7 @@
 - [🚀 Install](#-install)
 - [🎛️ Configure](#️-configure)
 - [🧩 Widgets Catalog](#widgets)
-- [🔄 Update & Revert](#update)
+- [🔄 Update, Upgrade & Revert](#update)
 - [🔍 How it Works](#-how-it-works)
 - [🏷️ Supported Versions](#supported-versions)
 - [🩺 Troubleshooting](#-troubleshooting)
@@ -81,7 +81,7 @@ cxstatusline doctor
 
 `cxstatusline install` downloads the verified prebuilt binary matching your Codex version, verifies checksums against `manifest.json`, and activates it.
 - **Interactive selection**: Running `cxstatusline install` opens a keyboard-driven version picker. Use ↑/↓ and Enter to select, or Escape/Ctrl+C to cancel. Prebuilt availability is shown per version; source-only choices require confirmation (unless you already passed `--compile`).
-- **Update choices**: `cxstatusline update` uses the same keyboard controls to choose the latest supported prebuilt, a supported source build, or cancellation. It does not update upstream Codex first.
+- **Upgrade choices**: `cxstatusline upgrade` uses the same keyboard controls to choose the latest supported prebuilt, a supported source build, or cancellation. It does not update upstream Codex first.
 - **Live progress**: Ink renders download progress in terminals while completed stages remain in the transcript. Source builds report their phases; redirected output retains plain milestone logs.
 - **Target a specific version**: `cxstatusline install --codex-version <version>` (e.g. `cxstatusline install --codex-version 0.154.0`).
 - **Non-interactive / CI**: Pass `-y` or `--yes` to accept the default without prompting.
@@ -147,19 +147,35 @@ Type IDs match ccstatusline's, so a ccstatusline preset imports without translat
 👉 The full catalog, and how Custom Command handles timeouts, colours and background caching, are in
 the **[Usage guide](docs/usage.md)**.
 
-## Update
+## Update & Upgrade
+
+cxstatusline follows the Homebrew paradigm for managing updates:
+- **`cxstatusline update`**: Updates the **cxstatusline CLI tool itself** to the latest release (via npm, bun, or git).
+- **`cxstatusline upgrade`**: Upgrades the **patched Codex binary pair** to the latest supported release.
+
+### Updating cxstatusline (The Tool)
 
 ```sh
-cxstatusline update
+cxstatusline update          # Updates cxstatusline to the latest version
+cxstatusline update --check  # Checks for available tool updates without installing
 ```
 
-`cxstatusline update` downloads and verifies the latest published prebuilt supported by your cxstatusline package, then activates the complete patched Codex pair. It does not run Codex's self-updater or modify your original Codex installation. Open a new Codex session afterward.
+`cxstatusline update` automatically detects your install method (`npm`, `bun`, or `git checkout`) and updates the CLI tool.
 
-The same Codex version is checked for rebuilt patch assets; a newer installed version is never downgraded. If discovery or verification fails, the active pair stays in place. Update the cxstatusline npm package to pick up support for newer Codex versions.
+### Upgrading Patched Codex
+
+```sh
+cxstatusline upgrade
+```
+
+`cxstatusline upgrade` downloads and verifies the latest published prebuilt supported by your cxstatusline package, then activates the complete patched Codex pair. It does not run Codex's self-updater or modify your original Codex installation. Open a new Codex session afterward.
+
+The same Codex version is checked for rebuilt patch assets; a newer installed version is never downgraded. If discovery or verification fails, the active pair stays in place. When running `upgrade`, if a newer version of `cxstatusline` is available, it will display a friendly reminder to run `cxstatusline update` first.
 
 Options:
-- `cxstatusline update --compile`: builds the latest locally supported Codex patch from source instead.
+- `cxstatusline upgrade --compile`: builds the latest locally supported Codex patch from source instead.
 - `--force`, `-y`, and `--yes` remain accepted for compatibility; updates already run without a prompt and always verify the pair.
+- Note: Running `cxstatusline update --compile` or `--force` will automatically forward to `cxstatusline upgrade` with a notice.
 
 Session-start updates also leave a newer patched pair in place when the original Codex installation is older, including under the `every` policy.
 
