@@ -627,6 +627,30 @@ describe("runUpdate", () => {
     });
   });
 
+  test("detects when installed Codex is already up to date and skips prompting even on TTY", async () => {
+    const f = fixture();
+    const { c, paths, said } = ctx({ upstreamVersion: CODEX, noRust: true });
+    let prompted = false;
+    await withServer(routesFor(f), async (baseUrl) => {
+      expect(await runUpdate(c, { fetchPrebuilts: async () => [CODEX] }, { baseUrl })).toBe(0);
+      said.length = 0;
+
+      const code = await runUpdate(c, {
+        isTTY: true,
+        fetchPrebuilts: async () => [CODEX],
+        promptUpdate: async () => {
+          prompted = true;
+          return "cancel";
+        },
+      }, { baseUrl });
+
+      expect(code).toBe(0);
+      expect(prompted).toBe(false);
+      expect(said.join("\n")).toContain(`Codex is already up to date (${CODEX}).`);
+    });
+  });
+
+
   test("does not downgrade an installed pair to an older published prebuilt", async () => {
     const { c, paths, said } = ctx();
     writeState(paths.stateFile, { ...DEFAULT_STATE, patched_from: "0.154.0" });
@@ -689,4 +713,13 @@ describe("runUpdate", () => {
     expect(readInstallation(paths)?.codexVersion).toBe("0.153.0");
     expect(calls.some((call) => call.args[0] === "update")).toBe(false);
   });
+
+  test("--compile detects when installed compiled Codex is already up to date", async () => {
+    const { c, paths, said } = ctx({ stagedVersion: "0.153.0" });
+    expect(await runUpdate(c, { compile: true })).toBe(0);
+    said.length = 0;
+    expect(await runUpdate(c, { compile: true })).toBe(0);
+    expect(said.join("\n")).toContain("Codex is already up to date (0.153.0).");
+  });
 });
+

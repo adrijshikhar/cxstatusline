@@ -392,3 +392,24 @@ test("patch revision survives download and activation; conflicting metadata is r
     await server.close();
   }
 });
+
+test("unchanged pair is detected with schema 2 manifests where cxVersion is omitted", async () => {
+  const fixture = release();
+  fixture.manifest.schema = 2;
+  fixture.manifest.patchVersion = 1;
+  delete fixture.manifest.cxVersion;
+  const server = await releaseServer(routesFor(fixture));
+  const { ctx } = prebuiltCtx();
+  try {
+    const first = await preparePrebuilt(ctx, EXPECTED, { baseUrl: server.baseUrl });
+    const generation = createGeneration(first.pair, ctx.paths);
+    swapPointer(ctx.paths, generation);
+    expect(readInstallation(ctx.paths)?.codexVersion).toBe(EXPECTED.codexVersion);
+    const second = await preparePrebuilt(ctx, EXPECTED, { baseUrl: server.baseUrl });
+    expect(second.kind).toBe("unchanged");
+    expect(second.pair.directory).toBe(generation);
+  } finally {
+    await server.close();
+  }
+});
+

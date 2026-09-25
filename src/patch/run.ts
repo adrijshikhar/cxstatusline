@@ -1,14 +1,14 @@
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { Context } from "../context";
 import { acquireLock } from "../lock";
 import type { FetchLike, TransportOptions } from "../distribution/transport";
-import { releaseTag } from "../distribution";
+import { platformFor, releaseTag, type ExpectedRelease } from "../distribution";
 import { installHook } from "../hook/install";
 import { writeState } from "../state";
 import { readInstallation } from "./generation";
 import { compareSemver, parseSemver } from "../version";
-import { fetchPublishedPrebuiltVersions } from "../distribution/prebuilt";
+import { fetchPublishedPrebuiltVersions, preparePrebuilt } from "../distribution/prebuilt";
 import { promptUpdate, type UpdateAction, type UpdatePickerOptions } from "../ui/UpdatePicker";
 import { loadState, runAcquisition, type PatchOutcome } from "./acquire";
 import { ManifestError, loadManifest, resolvePatch, supportedCodexVersions, isCodexVersionSupported } from "./manifest";
@@ -240,11 +240,42 @@ export async function runUpdate(
 
   const installed = readInstallation(ctx.paths)?.codexVersion ?? loadState(ctx).patched_from;
   const current = installed ? parseSemver(installed) : null;
-  if (current && compareSemver(current, parseSemver(target)!) > 0) {
+  const targetSemver = parseSemver(target)!;
+
+  if (current && compareSemver(current, targetSemver) > 0) {
     ctx.say(`Installed Codex ${installed} is newer than the latest supported ${opts.compile ? "patch" : "prebuilt"} (${target}); leaving it unchanged.`);
     return 0;
   }
-  if (opts.isTTY && !opts.force && !opts.compile) {
+
+  if (current && compareSemver(current, targetSemver) === 0 && !opts.force) {
+    const record = readInstallation(ctx.paths);
+    if (!opts.compile && record && record.provenance.source === "prebuilt") {
+      try {
+        const expected: ExpectedRelease = {
+          codexVersion: target,
+          platform: platformFor(process.platform, process.arch),
+        };
+        const prepared = await preparePrebuilt(ctx, expected, transport);
+        if (prepared.kind === "unchanged") {
+          ctx.say(`Codex is already up to date (${installed}).`);
+          return 0;
+        }
+        rmSync(prepared.pair.directory, { recursive: true, force: true });
+      } catch {
+        // Fall through to runInstall to let standard failure handling report errors.
+      }
+    } else if (opts.compile && record && record.provenance.source === "compiled") {
+      const patchRef = resolvePatch(manifest, targetSemver);
+      const currentPatch = record.provenance.patchVersion ?? 1;
+      const targetPatch = patchRef?.patchVersion ?? 1;
+      if (currentPatch >= targetPatch) {
+        ctx.say(`Codex is already up to date (${installed}).`);
+        return 0;
+      }
+    }
+  }
+
+  if (opts.isTTY && !opts.force && !opts.compile && (!current || compareSemver(current, targetSemver) < 0)) {
     const action = await (opts.promptUpdate ?? promptUpdate)({ latest: target, highestAvailable: target });
     if (action === "cancel") {
       ctx.say("Update cancelled.");
