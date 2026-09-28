@@ -1,5 +1,5 @@
 diff --git a/codex-rs/chatgpt/src/lib.rs b/codex-rs/chatgpt/src/lib.rs
-index 057478d..5589621 100644
+index 057478db18..5589621149 100644
 --- a/codex-rs/chatgpt/src/lib.rs
 +++ b/codex-rs/chatgpt/src/lib.rs
 @@ -1,3 +1,5 @@
@@ -9,7 +9,7 @@ index 057478d..5589621 100644
  mod chatgpt_client;
  pub mod connectors;
 diff --git a/codex-rs/tui/src/app/background_requests.rs b/codex-rs/tui/src/app/background_requests.rs
-index 4cdde21..23e1b62 100644
+index bfa33203da..6bac009cb9 100644
 --- a/codex-rs/tui/src/app/background_requests.rs
 +++ b/codex-rs/tui/src/app/background_requests.rs
 @@ -102,7 +102,8 @@ impl App {
@@ -22,7 +22,7 @@ index 4cdde21..23e1b62 100644
                      tokio::time::timeout(RATE_LIMIT_RESET_REQUEST_TIMEOUT, request)
                          .await
                          .map_err(|_| "account/rateLimits/read timed out in TUI".to_string())
-@@ -1341,7 +1342,75 @@ mod tests {
+@@ -1341,7 +1342,92 @@ mod tests {
      use codex_config::types::AuthCredentialsStoreMode;
      use codex_protocol::mcp::Tool;
      use codex_utils_absolute_path::AbsolutePathBuf;
@@ -42,8 +42,17 @@ index 4cdde21..23e1b62 100644
 +        let home = tempdir()?;
 +        app.config.codex_home = home.path().to_path_buf().abs();
 +        app.config.chatgpt_base_url = server.uri();
++        app.cli_kv_overrides = vec![(
++            "chatgpt_base_url".to_string(),
++            toml::Value::String(server.uri()),
++        )];
 +        app.config.cli_auth_credentials_store_mode = AuthCredentialsStoreMode::File;
 +        app.config.sqlite = codex_state::SqliteConfig::new_for_testing(home.path().abs());
++        Mock::given(method("GET"))
++            .and(path("/api/codex/config/bundle"))
++            .respond_with(ResponseTemplate::new(/*status_code*/ 200).set_body_string("{}"))
++            .mount(&server)
++            .await;
 +        write_chatgpt_auth(
 +            home.path(),
 +            ChatGptAuthFixture::new("chatgpt-token").account_id("account-123"),
@@ -58,7 +67,15 @@ index 4cdde21..23e1b62 100644
 +            .expect(/*requests*/ 1)
 +            .mount(&server)
 +            .await;
-+        let app_server = crate::start_embedded_app_server_for_picker(&app.config).await?;
++        let app_server = crate::start_app_server_for_picker(
++            &app.config,
++            &crate::AppServerTarget::Embedded,
++            app.cli_kv_overrides.clone(),
++            app.loader_overrides.clone(),
++            /*state_db*/ None,
++            app.environment_manager.clone(),
++        )
++        .await?;
 +        let (app_event_tx, mut app_events) = tokio::sync::mpsc::unbounded_channel();
 +        app.app_event_tx = AppEventSender::new(app_event_tx);
 +
@@ -99,10 +116,10 @@ index 4cdde21..23e1b62 100644
      #[tokio::test]
      async fn fetch_thread_usage_uses_app_server_auth_after_persisted_account_changes() {
 diff --git a/codex-rs/tui/src/app/event_dispatch.rs b/codex-rs/tui/src/app/event_dispatch.rs
-index 62266f8..adfcd96 100644
+index 7fc9161a24..dc7ce39f16 100644
 --- a/codex-rs/tui/src/app/event_dispatch.rs
 +++ b/codex-rs/tui/src/app/event_dispatch.rs
-@@ -1645,6 +1645,13 @@ impl App {
+@@ -1691,6 +1691,13 @@ impl App {
                                  }),
                              );
                          }
@@ -116,7 +133,7 @@ index 62266f8..adfcd96 100644
                      }
                  }
                  Err(err) => {
-@@ -1690,6 +1697,10 @@ impl App {
+@@ -1736,6 +1743,10 @@ impl App {
                                  Err(err),
                              );
                          }
@@ -128,7 +145,7 @@ index 62266f8..adfcd96 100644
                  }
                  }
 diff --git a/codex-rs/tui/src/app/tests/rate_limits.rs b/codex-rs/tui/src/app/tests/rate_limits.rs
-index 28b62e1..955474d 100644
+index 460b977b3c..6df58809ce 100644
 --- a/codex-rs/tui/src/app/tests/rate_limits.rs
 +++ b/codex-rs/tui/src/app/tests/rate_limits.rs
 @@ -216,6 +216,7 @@ async fn stale_rate_limit_reads_preserve_newer_workspace_hard_stop_for_every_ori
@@ -255,10 +272,10 @@ index 28b62e1..955474d 100644
  async fn backend_banner_reads_ignore_older_completions() -> Result<()> {
      let (mut app, _events, _ops) = make_test_app_with_channels().await;
 diff --git a/codex-rs/tui/src/app_event.rs b/codex-rs/tui/src/app_event.rs
-index 1129bbe..dfd794e 100644
+index 4dbdc87bf5..32e4abeb3c 100644
 --- a/codex-rs/tui/src/app_event.rs
 +++ b/codex-rs/tui/src/app_event.rs
-@@ -204,6 +204,8 @@ pub(crate) struct PluginRemoteSectionError {
+@@ -212,6 +212,8 @@ pub(crate) struct PluginRemoteSectionError {
  /// zero reset count so the disabled menu entry can become available without a
  /// restart. A `ResetPicker` refreshes the rate limits and detailed reset-credit
  /// rows before showing redemption choices.
@@ -267,7 +284,7 @@ index 1129bbe..dfd794e 100644
  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
  pub(crate) enum RateLimitRefreshOrigin {
      /// Eagerly fetched after bootstrap for `/status` data and reset availability.
-@@ -221,6 +223,8 @@ pub(crate) enum RateLimitRefreshOrigin {
+@@ -229,6 +231,8 @@ pub(crate) enum RateLimitRefreshOrigin {
      Recovery,
      /// Background account usage read, scheduled more frequently near exhaustion.
      Periodic,
@@ -277,10 +294,10 @@ index 1129bbe..dfd794e 100644
  
  #[derive(Debug, Clone, PartialEq, Eq)]
 diff --git a/codex-rs/tui/src/bottom_pane/chat_composer.rs b/codex-rs/tui/src/bottom_pane/chat_composer.rs
-index 42937b1..bcbbe5b 100644
+index 158c39f1c7..6c8515c554 100644
 --- a/codex-rs/tui/src/bottom_pane/chat_composer.rs
 +++ b/codex-rs/tui/src/bottom_pane/chat_composer.rs
-@@ -319,6 +319,7 @@ use super::footer::inset_footer_hint_area;
+@@ -328,6 +328,7 @@ use super::footer::inset_footer_hint_area;
  use super::footer::max_left_width_for_right;
  use super::footer::passive_footer_status_line;
  use super::footer::render_context_right;
@@ -288,7 +305,7 @@ index 42937b1..bcbbe5b 100644
  use super::footer::render_footer_from_props;
  use super::footer::render_footer_hint_items;
  use super::footer::render_footer_line;
-@@ -736,6 +737,7 @@ impl ChatComposer {
+@@ -745,6 +746,7 @@ impl ChatComposer {
                  status_line_value: None,
                  status_line_hyperlink_url: None,
                  status_line_enabled: false,
@@ -296,7 +313,7 @@ index 42937b1..bcbbe5b 100644
                  side_conversation_context_label: None,
                  active_agent_label: None,
                  external_editor_key: default_keymap
-@@ -3851,6 +3853,7 @@ impl ChatComposer {
+@@ -3856,6 +3858,7 @@ impl ChatComposer {
              is_wsl,
              status_line_value: self.footer.status_line_value.clone(),
              status_line_enabled: self.footer.status_line_enabled,
@@ -304,7 +321,7 @@ index 42937b1..bcbbe5b 100644
              key_hints: FooterKeyHints {
                  agents: self
                      .agents_navigation_available()
-@@ -4408,6 +4411,14 @@ impl ChatComposer {
+@@ -4418,6 +4421,14 @@ impl ChatComposer {
          true
      }
  
@@ -319,7 +336,7 @@ index 42937b1..bcbbe5b 100644
      pub(crate) fn set_side_conversation_context_label(&mut self, label: Option<String>) -> bool {
          if self.footer.side_conversation_context_label == label {
              return false;
-@@ -4597,6 +4608,7 @@ impl ChatComposer {
+@@ -4607,6 +4618,7 @@ impl ChatComposer {
              remote_images: remote_images_rect,
              textarea: textarea_rect,
              popup: popup_rect,
@@ -327,7 +344,7 @@ index 42937b1..bcbbe5b 100644
              footer: footer_rect,
          } = self.layout_with_options(area, options);
          self.render_status_surface(status, buf);
-@@ -4640,6 +4652,7 @@ impl ChatComposer {
+@@ -4650,6 +4662,7 @@ impl ChatComposer {
                  }
              }
          }
@@ -336,7 +353,7 @@ index 42937b1..bcbbe5b 100644
          let warning_notice = self.warning_notice_layout(transcript_hint_area, options);
          let warning_area = warning_notice.as_ref().map(|(area, _)| *area);
 diff --git a/codex-rs/tui/src/bottom_pane/chat_composer/composer_layout.rs b/codex-rs/tui/src/bottom_pane/chat_composer/composer_layout.rs
-index b79c28b..c62c4a6 100644
+index b79c28b98a..c62c4a620a 100644
 --- a/codex-rs/tui/src/bottom_pane/chat_composer/composer_layout.rs
 +++ b/codex-rs/tui/src/bottom_pane/chat_composer/composer_layout.rs
 @@ -102,6 +102,12 @@ impl ChatComposer {
@@ -361,7 +378,7 @@ index b79c28b..c62c4a6 100644
          }
      }
 diff --git a/codex-rs/tui/src/bottom_pane/chat_composer/footer_state.rs b/codex-rs/tui/src/bottom_pane/chat_composer/footer_state.rs
-index f13aaa7..2ace588 100644
+index fe4a6dc186..bca54691d0 100644
 --- a/codex-rs/tui/src/bottom_pane/chat_composer/footer_state.rs
 +++ b/codex-rs/tui/src/bottom_pane/chat_composer/footer_state.rs
 @@ -1,6 +1,7 @@
@@ -379,9 +396,9 @@ index f13aaa7..2ace588 100644
 +    pub(super) cxstatusline: Rect,
      pub(super) footer: Rect,
  }
-
-@@ -129,16 +131,22 @@ impl super::ChatComposer {
-
+ 
+@@ -131,16 +133,22 @@ impl super::ChatComposer {
+ 
      pub(super) fn footer_hint_height(&self, width: u16, options: ComposerRenderOptions<'_>) -> u16 {
          if self.show_warning_notice(options) || self.shortcuts_above_composer(options) {
 -            return 1;
@@ -405,7 +422,7 @@ index f13aaa7..2ace588 100644
              )
              .max(u16::from(options.separate_status_line))
      }
-@@ -213,6 +221,7 @@ pub(super) struct FooterState {
+@@ -215,6 +223,7 @@ pub(super) struct FooterState {
      pub(super) status_line_value: Option<Line<'static>>,
      pub(super) status_line_hyperlink_url: Option<String>,
      pub(super) status_line_enabled: bool,
@@ -415,7 +432,7 @@ index f13aaa7..2ace588 100644
      pub(super) external_editor_key: Option<ShortcutHint>,
 diff --git a/codex-rs/tui/src/bottom_pane/chat_composer/snapshots/codex_tui__bottom_pane__chat_composer__warning_notice__tests__cxstatusline_three_rows_with_warnings.snap b/codex-rs/tui/src/bottom_pane/chat_composer/snapshots/codex_tui__bottom_pane__chat_composer__warning_notice__tests__cxstatusline_three_rows_with_warnings.snap
 new file mode 100644
-index 0000000..64a85de
+index 0000000000..64a85de8e3
 --- /dev/null
 +++ b/codex-rs/tui/src/bottom_pane/chat_composer/snapshots/codex_tui__bottom_pane__chat_composer__warning_notice__tests__cxstatusline_three_rows_with_warnings.snap
 @@ -0,0 +1,12 @@
@@ -432,7 +449,7 @@ index 0000000..64a85de
 +  CX row three
 +  ? for shortcuts                                                         ⚠ 3 warnings · f2 to view
 diff --git a/codex-rs/tui/src/bottom_pane/chat_composer/warning_notice_tests.rs b/codex-rs/tui/src/bottom_pane/chat_composer/warning_notice_tests.rs
-index 2e11e17..6fe9fab 100644
+index 2e11e17236..6fe9fab4a0 100644
 --- a/codex-rs/tui/src/bottom_pane/chat_composer/warning_notice_tests.rs
 +++ b/codex-rs/tui/src/bottom_pane/chat_composer/warning_notice_tests.rs
 @@ -163,3 +163,161 @@ fn warnings_yield_to_queue_controls_and_complete_navigation_hints() {
@@ -598,7 +615,7 @@ index 2e11e17..6fe9fab 100644
 +    assert!(text(&render(&composer, 80, 0)).contains("/mx"));
 +}
 diff --git a/codex-rs/tui/src/bottom_pane/footer.rs b/codex-rs/tui/src/bottom_pane/footer.rs
-index 76a13b7..8479e1e 100644
+index b81f2c3151..92de7cd887 100644
 --- a/codex-rs/tui/src/bottom_pane/footer.rs
 +++ b/codex-rs/tui/src/bottom_pane/footer.rs
 @@ -83,6 +83,9 @@ pub(crate) struct FooterProps {
@@ -611,7 +628,7 @@ index 76a13b7..8479e1e 100644
      pub(crate) key_hints: FooterKeyHints,
      /// Active thread label shown when the footer is rendering contextual information instead of an
      /// instructional hint.
-@@ -251,14 +254,15 @@ pub(crate) fn footer_height(props: &FooterProps, width: u16) -> u16 {
+@@ -255,14 +258,15 @@ pub(crate) fn footer_height(props: &FooterProps, width: u16) -> u16 {
          | FooterMode::ShortcutOverlay
          | FooterMode::EscHint => false,
      };
@@ -635,7 +652,7 @@ index 76a13b7..8479e1e 100644
  }
  
  /// Render a single precomputed footer line.
-@@ -271,6 +275,16 @@ pub(crate) fn render_footer_line(area: Rect, buf: &mut Buffer, line: Line<'stati
+@@ -275,6 +279,16 @@ pub(crate) fn render_footer_line(area: Rect, buf: &mut Buffer, line: Line<'stati
      .render(area, buf);
  }
  
@@ -652,7 +669,7 @@ index 76a13b7..8479e1e 100644
  /// Render footer content directly from `FooterProps`.
  ///
  /// This is intentionally not part of the width-based collapse/fallback logic.
-@@ -1013,12 +1027,49 @@ mod tests {
+@@ -1017,12 +1031,49 @@ mod tests {
          );
      }
  
@@ -702,7 +719,7 @@ index 76a13b7..8479e1e 100644
      fn snapshot_footer_with_context(
          name: &str,
          props: FooterProps,
-@@ -1045,6 +1096,26 @@ mod tests {
+@@ -1049,6 +1100,26 @@ mod tests {
          terminal
              .draw(|f| {
                  let area = Rect::new(0, 0, f.area().width, height);
@@ -729,7 +746,7 @@ index 76a13b7..8479e1e 100644
                  let show_cycle_hint = !props.is_task_running;
                  let show_shortcuts_hint = match props.mode {
                      FooterMode::ComposerEmpty => true,
-@@ -1293,6 +1364,7 @@ mod tests {
+@@ -1297,6 +1368,7 @@ mod tests {
                  quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
                  status_line_value: None,
                  status_line_enabled: false,
@@ -737,7 +754,7 @@ index 76a13b7..8479e1e 100644
                  key_hints: FooterKeyHints::default_bindings(),
                  active_agent_label: None,
              },
-@@ -1310,6 +1382,7 @@ mod tests {
+@@ -1314,6 +1386,7 @@ mod tests {
                  quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
                  status_line_value: None,
                  status_line_enabled: false,
@@ -745,7 +762,7 @@ index 76a13b7..8479e1e 100644
                  key_hints: FooterKeyHints {
                      insert_newline: Some(key_hint::shift(KeyCode::Enter).into()),
                      ..FooterKeyHints::default_bindings()
-@@ -1330,6 +1403,7 @@ mod tests {
+@@ -1334,6 +1407,7 @@ mod tests {
                  quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
                  status_line_value: None,
                  status_line_enabled: false,
@@ -753,7 +770,7 @@ index 76a13b7..8479e1e 100644
                  key_hints: FooterKeyHints::default_bindings(),
                  active_agent_label: None,
              },
-@@ -1347,6 +1421,7 @@ mod tests {
+@@ -1351,6 +1425,7 @@ mod tests {
                  quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
                  status_line_value: None,
                  status_line_enabled: false,
@@ -761,7 +778,7 @@ index 76a13b7..8479e1e 100644
                  key_hints: FooterKeyHints::default_bindings(),
                  active_agent_label: None,
              },
-@@ -1364,6 +1439,7 @@ mod tests {
+@@ -1368,6 +1443,7 @@ mod tests {
                  quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
                  status_line_value: None,
                  status_line_enabled: false,
@@ -769,7 +786,7 @@ index 76a13b7..8479e1e 100644
                  key_hints: FooterKeyHints::default_bindings(),
                  active_agent_label: None,
              },
-@@ -1381,6 +1457,7 @@ mod tests {
+@@ -1385,6 +1461,7 @@ mod tests {
                  quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
                  status_line_value: None,
                  status_line_enabled: false,
@@ -777,7 +794,7 @@ index 76a13b7..8479e1e 100644
                  key_hints: FooterKeyHints::default_bindings(),
                  active_agent_label: None,
              },
-@@ -1398,6 +1475,7 @@ mod tests {
+@@ -1402,6 +1479,7 @@ mod tests {
                  quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
                  status_line_value: None,
                  status_line_enabled: false,
@@ -785,7 +802,7 @@ index 76a13b7..8479e1e 100644
                  key_hints: FooterKeyHints::default_bindings(),
                  active_agent_label: None,
              },
-@@ -1415,6 +1493,7 @@ mod tests {
+@@ -1419,6 +1497,7 @@ mod tests {
                  quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
                  status_line_value: None,
                  status_line_enabled: false,
@@ -793,7 +810,7 @@ index 76a13b7..8479e1e 100644
                  key_hints: FooterKeyHints::default_bindings(),
                  active_agent_label: None,
              },
-@@ -1432,6 +1511,7 @@ mod tests {
+@@ -1436,6 +1515,7 @@ mod tests {
                  quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
                  status_line_value: None,
                  status_line_enabled: false,
@@ -801,7 +818,7 @@ index 76a13b7..8479e1e 100644
                  key_hints: FooterKeyHints::default_bindings(),
                  active_agent_label: None,
              },
-@@ -1451,6 +1531,7 @@ mod tests {
+@@ -1455,6 +1535,7 @@ mod tests {
                  quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
                  status_line_value: None,
                  status_line_enabled: false,
@@ -809,7 +826,7 @@ index 76a13b7..8479e1e 100644
                  key_hints: FooterKeyHints::default_bindings(),
                  active_agent_label: None,
              },
-@@ -1470,6 +1551,7 @@ mod tests {
+@@ -1474,6 +1555,7 @@ mod tests {
                  quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
                  status_line_value: None,
                  status_line_enabled: false,
@@ -817,7 +834,7 @@ index 76a13b7..8479e1e 100644
                  key_hints: FooterKeyHints::default_bindings(),
                  active_agent_label: None,
              },
-@@ -1485,6 +1567,7 @@ mod tests {
+@@ -1489,6 +1571,7 @@ mod tests {
              quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
              status_line_value: None,
              status_line_enabled: false,
@@ -825,7 +842,7 @@ index 76a13b7..8479e1e 100644
              key_hints: FooterKeyHints::default_bindings(),
              active_agent_label: None,
          };
-@@ -1513,6 +1596,7 @@ mod tests {
+@@ -1517,6 +1600,7 @@ mod tests {
              quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
              status_line_value: None,
              status_line_enabled: false,
@@ -833,7 +850,7 @@ index 76a13b7..8479e1e 100644
              key_hints: FooterKeyHints::default_bindings(),
              active_agent_label: None,
          };
-@@ -1534,6 +1618,7 @@ mod tests {
+@@ -1538,6 +1622,7 @@ mod tests {
              quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
              status_line_value: Some(Line::from("Status line content".to_string())),
              status_line_enabled: true,
@@ -841,7 +858,7 @@ index 76a13b7..8479e1e 100644
              key_hints: FooterKeyHints::default_bindings(),
              active_agent_label: None,
          };
-@@ -1550,6 +1635,7 @@ mod tests {
+@@ -1554,6 +1639,7 @@ mod tests {
              quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
              status_line_value: Some(Line::from("Status line content".to_string())),
              status_line_enabled: true,
@@ -849,7 +866,7 @@ index 76a13b7..8479e1e 100644
              key_hints: FooterKeyHints::default_bindings(),
              active_agent_label: None,
          };
-@@ -1566,6 +1652,7 @@ mod tests {
+@@ -1570,6 +1656,7 @@ mod tests {
              quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
              status_line_value: Some(Line::from("Status line content".to_string())),
              status_line_enabled: true,
@@ -857,7 +874,7 @@ index 76a13b7..8479e1e 100644
              key_hints: FooterKeyHints::default_bindings(),
              active_agent_label: None,
          };
-@@ -1582,6 +1669,7 @@ mod tests {
+@@ -1586,6 +1673,7 @@ mod tests {
              quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
              status_line_value: None, // command timed out / empty
              status_line_enabled: true,
@@ -865,7 +882,7 @@ index 76a13b7..8479e1e 100644
              key_hints: FooterKeyHints::default_bindings(),
              active_agent_label: None,
          };
-@@ -1612,6 +1700,7 @@ mod tests {
+@@ -1616,6 +1704,7 @@ mod tests {
              quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
              status_line_value: None,
              status_line_enabled: false,
@@ -873,7 +890,7 @@ index 76a13b7..8479e1e 100644
              key_hints: FooterKeyHints::default_bindings(),
              active_agent_label: None,
          };
-@@ -1634,6 +1723,7 @@ mod tests {
+@@ -1638,6 +1727,7 @@ mod tests {
              quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
              status_line_value: None,
              status_line_enabled: true,
@@ -881,7 +898,7 @@ index 76a13b7..8479e1e 100644
              key_hints: FooterKeyHints::default_bindings(),
              active_agent_label: None,
          };
-@@ -1659,6 +1749,7 @@ mod tests {
+@@ -1663,6 +1753,7 @@ mod tests {
                  "Status line content that should truncate before the mode indicator".to_string(),
              )),
              status_line_enabled: true,
@@ -889,7 +906,7 @@ index 76a13b7..8479e1e 100644
              key_hints: FooterKeyHints::default_bindings(),
              active_agent_label: None,
          };
-@@ -1681,6 +1772,7 @@ mod tests {
+@@ -1685,6 +1776,7 @@ mod tests {
              quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
              status_line_value: None,
              status_line_enabled: false,
@@ -897,7 +914,7 @@ index 76a13b7..8479e1e 100644
              key_hints: FooterKeyHints::default_bindings(),
              active_agent_label: Some("Robie [explorer]".to_string()),
          };
-@@ -1697,6 +1789,7 @@ mod tests {
+@@ -1701,6 +1793,7 @@ mod tests {
              quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
              status_line_value: Some(Line::from("Status line content".to_string())),
              status_line_enabled: true,
@@ -905,7 +922,7 @@ index 76a13b7..8479e1e 100644
              key_hints: FooterKeyHints::default_bindings(),
              active_agent_label: Some("Robie [explorer]".to_string()),
          };
-@@ -1719,6 +1812,7 @@ mod tests {
+@@ -1723,6 +1816,7 @@ mod tests {
                      .to_string(),
              )),
              status_line_enabled: true,
@@ -914,10 +931,10 @@ index 76a13b7..8479e1e 100644
              active_agent_label: None,
          };
 diff --git a/codex-rs/tui/src/bottom_pane/mod.rs b/codex-rs/tui/src/bottom_pane/mod.rs
-index 8e9680a..b070b8c 100644
+index 3f16d118e1..47884dfbbd 100644
 --- a/codex-rs/tui/src/bottom_pane/mod.rs
 +++ b/codex-rs/tui/src/bottom_pane/mod.rs
-@@ -2267,6 +2267,12 @@ impl BottomPane {
+@@ -2289,6 +2289,12 @@ impl BottomPane {
          }
      }
  
@@ -931,7 +948,7 @@ index 8e9680a..b070b8c 100644
      ///
      /// This keeps the footer plumbing cheap during thread transitions where `App` may recompute
 diff --git a/codex-rs/tui/src/bottom_pane/shortcut_overlay_tests.rs b/codex-rs/tui/src/bottom_pane/shortcut_overlay_tests.rs
-index fe6ebef..b6f3451 100644
+index fe6ebef45a..b6f34517e4 100644
 --- a/codex-rs/tui/src/bottom_pane/shortcut_overlay_tests.rs
 +++ b/codex-rs/tui/src/bottom_pane/shortcut_overlay_tests.rs
 @@ -23,6 +23,7 @@ fn props() -> FooterProps {
@@ -944,7 +961,7 @@ index fe6ebef..b6f3451 100644
              ..FooterKeyHints::default_bindings()
 diff --git a/codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__footer__tests__cxstatusline_block_preserves_instruction_footer.snap b/codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__footer__tests__cxstatusline_block_preserves_instruction_footer.snap
 new file mode 100644
-index 0000000..abf66c5
+index 0000000000..abf66c5ec2
 --- /dev/null
 +++ b/codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__footer__tests__cxstatusline_block_preserves_instruction_footer.snap
 @@ -0,0 +1,8 @@
@@ -957,10 +974,10 @@ index 0000000..abf66c5
 +"  status-2                                                                      "
 +"  esc esc to edit previous message                                              "
 diff --git a/codex-rs/tui/src/chatwidget.rs b/codex-rs/tui/src/chatwidget.rs
-index 57591c4..eb77f2c 100644
+index 984a9582cc..6789879cf5 100644
 --- a/codex-rs/tui/src/chatwidget.rs
 +++ b/codex-rs/tui/src/chatwidget.rs
-@@ -818,6 +818,24 @@ pub(crate) struct ChatWidget {
+@@ -821,6 +821,24 @@ pub(crate) struct ChatWidget {
      status_line_workspace_headline_last_requested_at: Option<Instant>,
      // Set after the backend reports the workspace-message feature gate is disabled.
      status_line_workspace_messages_disabled: bool,
@@ -985,7 +1002,7 @@ index 57591c4..eb77f2c 100644
      // Cached backend-estimated cost and bounded refresh state for the current thread.
      thread_usage: thread_usage::ThreadUsageState,
      // Current thread-goal status shown in the status line when plan mode is inactive.
-@@ -1227,6 +1245,7 @@ impl ChatWidget {
+@@ -1231,6 +1249,7 @@ impl ChatWidget {
              self.refresh_terminal_title();
          }
          self.refresh_status_line_if_workspace_headline_due();
@@ -994,10 +1011,10 @@ index 57591c4..eb77f2c 100644
      }
  
 diff --git a/codex-rs/tui/src/chatwidget/constructor.rs b/codex-rs/tui/src/chatwidget/constructor.rs
-index 00d6329..7ef06fa 100644
+index 1c8c63ec78..f72463cbc0 100644
 --- a/codex-rs/tui/src/chatwidget/constructor.rs
 +++ b/codex-rs/tui/src/chatwidget/constructor.rs
-@@ -273,6 +273,19 @@ impl ChatWidget {
+@@ -277,6 +277,19 @@ impl ChatWidget {
              next_status_line_workspace_headline_request_id: 0,
              status_line_workspace_headline_last_requested_at: None,
              status_line_workspace_messages_disabled: false,
@@ -1018,7 +1035,7 @@ index 00d6329..7ef06fa 100644
              current_goal_status_indicator: None,
              current_goal_status: None,
 diff --git a/codex-rs/tui/src/chatwidget/status_surfaces.rs b/codex-rs/tui/src/chatwidget/status_surfaces.rs
-index f84f875..420025d 100644
+index 616dd6df1e..ff3bf1a672 100644
 --- a/codex-rs/tui/src/chatwidget/status_surfaces.rs
 +++ b/codex-rs/tui/src/chatwidget/status_surfaces.rs
 @@ -42,6 +42,16 @@ const TERMINAL_TITLE_ACTION_REQUIRED_INTERVAL: Duration = Duration::from_secs(1)
@@ -1069,7 +1086,7 @@ index f84f875..420025d 100644
          let enabled = !selections.status_line_items.is_empty();
          self.bottom_pane.set_status_line_enabled(enabled);
          if !enabled {
-@@ -429,7 +445,7 @@ impl ChatWidget {
+@@ -432,7 +448,7 @@ impl ChatWidget {
  
      pub(super) fn request_status_line_branch_refresh(&mut self) {
          let selections = self.status_surface_selections();
@@ -1078,7 +1095,7 @@ index f84f875..420025d 100644
              return;
          }
          let cwd = self.status_line_cwd().to_path_buf();
-@@ -439,7 +455,7 @@ impl ChatWidget {
+@@ -442,7 +458,7 @@ impl ChatWidget {
  
      pub(super) fn request_status_line_git_summary_refresh(&mut self) {
          let selections = self.status_surface_selections();
@@ -1087,7 +1104,7 @@ index f84f875..420025d 100644
              return;
          }
          let cwd = self.status_line_cwd().to_path_buf();
-@@ -590,6 +606,189 @@ impl ChatWidget {
+@@ -593,6 +609,189 @@ impl ChatWidget {
      ///
      /// The resulting `StatusLineBranchUpdated` event carries the lookup cwd so callers can reject
      /// stale completions after directory changes.
@@ -1277,7 +1294,7 @@ index f84f875..420025d 100644
      fn request_status_line_branch(&mut self, cwd: PathBuf) {
          if self.status_line_branch_pending {
              return;
-@@ -1260,3 +1459,48 @@ where
+@@ -1263,3 +1462,48 @@ where
      }
      (items, invalid)
  }
@@ -1327,7 +1344,7 @@ index f84f875..420025d 100644
 +    })
 +}
 diff --git a/codex-rs/tui/src/chatwidget/tests/status_and_layout.rs b/codex-rs/tui/src/chatwidget/tests/status_and_layout.rs
-index 1c2308a..07e5843 100644
+index 1c2308a4d1..07e5843f18 100644
 --- a/codex-rs/tui/src/chatwidget/tests/status_and_layout.rs
 +++ b/codex-rs/tui/src/chatwidget/tests/status_and_layout.rs
 @@ -1,5 +1,9 @@
@@ -1587,7 +1604,7 @@ index 1c2308a..07e5843 100644
      chat.set_pet_image_support_for_tests(crate::pets::PetImageSupport::Supported(
          crate::pets::ImageProtocol::Kitty,
 diff --git a/codex-rs/tui/src/main.rs b/codex-rs/tui/src/main.rs
-index 5a196d6..2a1e758 100644
+index 5a196d614a..2a1e758644 100644
 --- a/codex-rs/tui/src/main.rs
 +++ b/codex-rs/tui/src/main.rs
 @@ -1,3 +1,4 @@
@@ -1596,10 +1613,10 @@ index 5a196d6..2a1e758 100644
  use codex_arg0::Arg0DispatchPaths;
  use codex_arg0::arg0_dispatch_or_else;
 diff --git a/codex-rs/tui/src/status/rate_limits.rs b/codex-rs/tui/src/status/rate_limits.rs
-index 2099647..a2eeb92 100644
+index c22868b621..df65a54aa7 100644
 --- a/codex-rs/tui/src/status/rate_limits.rs
 +++ b/codex-rs/tui/src/status/rate_limits.rs
-@@ -71,6 +71,8 @@ pub(crate) struct RateLimitWindowDisplay {
+@@ -72,6 +72,8 @@ pub(crate) struct RateLimitWindowDisplay {
      pub used_percent: f64,
      /// Human-readable local reset time.
      pub resets_at: Option<String>,
@@ -1608,7 +1625,7 @@ index 2099647..a2eeb92 100644
      /// Window length in minutes when provided by the server.
      pub window_minutes: Option<i64>,
  }
-@@ -86,6 +88,7 @@ impl RateLimitWindowDisplay {
+@@ -92,6 +94,7 @@ impl RateLimitWindowDisplay {
          Self {
              used_percent: f64::from(window.used_percent),
              resets_at,
@@ -1616,7 +1633,7 @@ index 2099647..a2eeb92 100644
              window_minutes: window.window_duration_mins,
          }
      }
-@@ -447,6 +450,7 @@ mod tests {
+@@ -460,6 +463,7 @@ mod tests {
          RateLimitWindowDisplay {
              used_percent,
              resets_at: Some("soon".to_string()),
@@ -1624,7 +1641,7 @@ index 2099647..a2eeb92 100644
              window_minutes: Some(300),
          }
      }
-@@ -509,11 +513,13 @@ mod tests {
+@@ -522,11 +526,13 @@ mod tests {
              primary: Some(RateLimitWindowDisplay {
                  used_percent: 20.0,
                  resets_at: Some("soon".to_string()),
@@ -1639,10 +1656,10 @@ index 2099647..a2eeb92 100644
              }),
              credits: None,
 diff --git a/codex-rs/tui/src/status/tests.rs b/codex-rs/tui/src/status/tests.rs
-index 8c75176..0c63fcc 100644
+index bb65053072..24b18ce7a0 100644
 --- a/codex-rs/tui/src/status/tests.rs
 +++ b/codex-rs/tui/src/status/tests.rs
-@@ -70,6 +70,7 @@ fn stale_monthly_limit_marks_fresh_rolling_snapshot_stale() {
+@@ -71,6 +71,7 @@ fn stale_monthly_limit_marks_fresh_rolling_snapshot_stale() {
          primary: Some(RateLimitWindowDisplay {
              used_percent: 20.0,
              resets_at: Some("soon".to_string()),
@@ -1650,7 +1667,7 @@ index 8c75176..0c63fcc 100644
              window_minutes: Some(300),
          }),
          secondary: None,
-@@ -1803,11 +1804,13 @@ async fn transcript_overlay_remeasures_status_after_rate_limit_refresh() {
+@@ -1832,11 +1833,13 @@ async fn transcript_overlay_remeasures_status_after_rate_limit_refresh() {
              primary: Some(RateLimitWindowDisplay {
                  used_percent: 45.0,
                  resets_at: Some("soon".to_string()),
