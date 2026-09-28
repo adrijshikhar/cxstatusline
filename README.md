@@ -83,7 +83,7 @@ cxstatusline doctor
 - **Interactive selection**: Running `cxstatusline install` opens a keyboard-driven version picker. Use ↑/↓ and Enter to select, or Escape/Ctrl+C to cancel. Prebuilt availability is shown per version; source-only choices require confirmation (unless you already passed `--compile`).
 - **Upgrade choices**: `cxstatusline upgrade` uses the same keyboard controls to choose the latest supported prebuilt, a supported source build, or cancellation. It does not update upstream Codex first.
 - **Live progress**: Ink renders download progress in terminals while completed stages remain in the transcript. Source builds report their phases; redirected output retains plain milestone logs.
-- **Target a specific version**: `cxstatusline install --codex-version <version>` (e.g. `cxstatusline install --codex-version 0.154.0`).
+- **Target a specific version**: `cxstatusline install --codex-version <version>` (e.g. `cxstatusline install --codex-version 0.158.0`).
 - **Non-interactive / CI**: Pass `-y` or `--yes` to accept the default without prompting.
 
 Start Codex, accept its cxstatusline hook trust prompt, and open a new session after installation. An already-running process does not switch binaries when installation finishes.
@@ -202,7 +202,7 @@ cxstatusline matches exact stable releases of OpenAI Codex.
 ### Latest Supported Version
 | Codex Target | Prebuilt Release | Supported Architecture | Status |
 |---|---|---|---|
-| **0.155.0** | [`codex-v0.155.0`](https://github.com/adrijshikhar/cxstatusline/releases/tag/codex-v0.155.0) | Apple Silicon (`darwin-arm64`) | ✅ Verified Prebuilt |
+| **0.158.0** | [`codex-v0.158.0`](https://github.com/adrijshikhar/cxstatusline/releases/tag/codex-v0.158.0) | Apple Silicon (`darwin-arm64`), Linux ARM64 (`linux-arm64`) | ✅ Verified Prebuilt |
 
 <details>
 <summary><b>Previous Supported Versions</b></summary>
@@ -210,6 +210,11 @@ cxstatusline matches exact stable releases of OpenAI Codex.
 
 | Codex Target | Prebuilt Release | Supported Architecture | Status |
 |---|---|---|---|
+| **0.157.0** | [`codex-v0.157.0`](https://github.com/adrijshikhar/cxstatusline/releases/tag/codex-v0.157.0) | Apple Silicon (`darwin-arm64`), Linux ARM64 (`linux-arm64`) | ✅ Verified Prebuilt |
+| **0.156.1** | [`codex-v0.156.1`](https://github.com/adrijshikhar/cxstatusline/releases/tag/codex-v0.156.1) | Apple Silicon (`darwin-arm64`), Linux ARM64 (`linux-arm64`) | ✅ Verified Prebuilt |
+| **0.156.0** | [`codex-v0.156.0`](https://github.com/adrijshikhar/cxstatusline/releases/tag/codex-v0.156.0) | Apple Silicon (`darwin-arm64`), Linux ARM64 (`linux-arm64`) | ✅ Verified Prebuilt |
+| **0.155.1** | [`codex-v0.155.1`](https://github.com/adrijshikhar/cxstatusline/releases/tag/codex-v0.155.1) | Apple Silicon (`darwin-arm64`), Linux ARM64 (`linux-arm64`) | ✅ Verified Prebuilt |
+| **0.155.0** | [`codex-v0.155.0`](https://github.com/adrijshikhar/cxstatusline/releases/tag/codex-v0.155.0) | Apple Silicon (`darwin-arm64`), Linux ARM64 (`linux-arm64`), Linux x64 (`linux-x64`) | ✅ Verified Prebuilt |
 | **0.154.0** | [`codex-v0.154.0`](https://github.com/adrijshikhar/cxstatusline/releases/tag/codex-v0.154.0) | Apple Silicon (`darwin-arm64`) | ✅ Verified Prebuilt |
 | **0.153.4** | [`codex-v0.153.4`](https://github.com/adrijshikhar/cxstatusline/releases/tag/codex-v0.153.4) | Apple Silicon (`darwin-arm64`) | ✅ Verified Prebuilt |
 | **0.153.0** | [`codex-v0.153.0`](https://github.com/adrijshikhar/cxstatusline/releases/tag/codex-v0.153.0) | Apple Silicon (`darwin-arm64`) | ✅ Verified Prebuilt |
@@ -217,7 +222,7 @@ cxstatusline matches exact stable releases of OpenAI Codex.
 
 To install a specific version:
 ```sh
-cxstatusline install --codex-version 0.154.0
+cxstatusline install --codex-version 0.157.0
 ```
 </details>
 
@@ -228,7 +233,7 @@ Rust patch versions are independent of Codex and cxstatusline package versions. 
 | v1 | 0.152.1, 0.153.0, 0.153.1, 0.153.4, 0.154.0, 0.155.0, 0.155.1 |
 | v2 | 0.156.0, 0.156.1, 0.157.0, 0.157.1, 0.158.0 |
 
-Codex 0.153.1 is validated on macOS ARM64; its prebuilt release is pending. Compatibility entries do not imply that a prebuilt has already been published.
+Codex 0.153.1 and 0.157.1 are validated on macOS ARM64; prebuilt releases are pending. Compatibility entries do not imply that a prebuilt has already been published.
 
 `patches/manifest.json` records that ownership with `patchVersion` on each compatibility entry. Its `version: 2` is the manifest format, not the Rust patch version. Entries can describe inclusive ranges, but we currently list only the exact tested versions. Version-specific patch files remain separate because upstream source layouts differ.
 
@@ -240,7 +245,7 @@ Rebuilding an existing Codex tag replaces its complete release asset set. The wo
 
 If your Codex version is not listed, cxstatusline fails closed: it will neither download an unverified prebuilt nor attempt source compilation. New versions require a tested patch file, an entry in `patches/manifest.json`, and a release workflow run.
 
-The daily upstream watcher audits every stable release in the newest Codex major.minor series and only the `.0` baseline of older series, at or above the support floor. For example, while 0.156.x is newest, 0.156.0 and 0.156.1 are required alongside 0.155.0; 0.155.1 is not a backfill requirement. Existing published assets and tested compatibility mappings are retained. It updates one `Codex release coverage gaps` issue and uploads a machine-readable report. A separate watchdog fails if no successful scheduled watcher run has completed in the last 36 hours. Enable repository **Settings → Notifications → Actions** and select failed workflow runs (or enable email notifications for Actions) to receive these failures. The watchdog runs inside GitHub Actions, so a GitHub-wide scheduling outage cannot be detected from within GitHub.
+The daily upstream watcher audits every stable release in the newest Codex major.minor series and only the `.0` baseline of older series, at or above the support floor. For example, while 0.158.x is newest, 0.158.0 is required alongside 0.157.0, 0.156.0, and 0.155.0; 0.155.1 and 0.157.1 are not backfill requirements. Existing published assets and tested compatibility mappings are retained. It updates one `Codex release coverage gaps` issue and uploads a machine-readable report. A separate watchdog fails if no successful scheduled watcher run has completed in the last 36 hours. Enable repository **Settings → Notifications → Actions** and select failed workflow runs (or enable email notifications for Actions) to receive these failures. The watchdog runs inside GitHub Actions, so a GitHub-wide scheduling outage cannot be detected from within GitHub.
  
 ## 🩺 Troubleshooting
  
