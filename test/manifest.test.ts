@@ -74,8 +74,8 @@ describe("loadManifest", () => {
 describe("candidate metadata", () => {
   test("the shipped manifest names the newest explicitly supported version and covers it", () => {
     const shipped = loadManifest(join(import.meta.dir, "..", "patches"));
-    expect(shipped.candidate).toBe("0.156.1");
-    expect(resolvePatch(shipped, v(shipped.candidate!))?.file).toBe("codex-0.156.1.patch");
+    expect(shipped.candidate).toBe("0.158.0");
+    expect(resolvePatch(shipped, v(shipped.candidate!))?.file).toBe("codex-0.158.0.patch");
   });
   test("the field is optional and never widens resolution", () => {
     const dir = manifestDir('{"version":1,"tag_prefix":"rust-v","patches":[{"min":"0.153.0","max":"0.153.0","file":"f.patch"}]}');
@@ -126,10 +126,10 @@ describe("patch versions", () => {
     for (const version of ["0.152.1", "0.153.0", "0.153.1", "0.153.4", "0.154.0", "0.155.0", "0.155.1"]) {
       expect(resolvePatch(shipped, v(version))?.patchVersion).toBe(1);
     }
-    for (const version of ["0.156.0", "0.156.1"]) {
+    for (const version of ["0.156.0", "0.156.1", "0.157.0", "0.157.1", "0.158.0"]) {
       expect(resolvePatch(shipped, v(version))?.patchVersion).toBe(2);
     }
-    for (const version of ["0.152.2", "0.153.2", "0.153.3", "0.157.0"]) {
+    for (const version of ["0.152.2", "0.153.2", "0.153.3", "0.159.0"]) {
       expect(resolvePatch(shipped, v(version))).toBeNull();
     }
   });
