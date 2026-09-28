@@ -226,7 +226,7 @@ Rust patch versions are independent of Codex and cxstatusline package versions. 
 | Rust patch | Tested Codex versions |
 | --- | --- |
 | v1 | 0.152.1, 0.153.0, 0.153.1, 0.153.4, 0.154.0, 0.155.0, 0.155.1 |
-| v2 | 0.156.0, 0.156.1 |
+| v2 | 0.156.0, 0.156.1, 0.157.0, 0.157.1, 0.158.0 |
 
 Codex 0.153.1 is validated on macOS ARM64; its prebuilt release is pending. Compatibility entries do not imply that a prebuilt has already been published.
 
