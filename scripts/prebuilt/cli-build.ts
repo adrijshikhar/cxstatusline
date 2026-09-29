@@ -97,7 +97,8 @@ export async function runPackage(flags: Record<string, string>): Promise<void> {
     codexVersion: detection.codexVersion,
     platform,
     upstreamCommit: upstreamCommit(upstream),
-    patchVersion: detection.patchVersion,
+    // A package release is always a versioned patch; `detect` refuses legacy (unversioned) entries.
+    patchVersion: detection.patchVersion ?? 1,
     patchFile: detection.patchFile,
     patchSha256: (await sha256File(join(patchesDir(), detection.patchFile))).sha256,
     sourceCommit: frozenCommit,
@@ -105,7 +106,6 @@ export async function runPackage(flags: Record<string, string>): Promise<void> {
     createdAt: new Date().toISOString(),
     archive,
     files: fileDigests(stagingDir),
-    schema: 3,
   });
   validateManifest(JSON.parse(JSON.stringify(manifest)), {
     codexVersion: detection.codexVersion,

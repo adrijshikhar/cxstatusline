@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import type { Context } from "../src/context";
-import type { ArtifactFile, FileDigest, PreparedPair, ReleaseManifest } from "../src/distribution";
+import { packageRequiredFiles, type PreparedPair, type ReleaseManifest } from "../src/distribution";
 import { resolveUpstream } from "../src/codex/upstream";
 import { resolvePaths } from "../src/paths";
 import { insideGenerationsRoot } from "../src/patch/generation";
@@ -434,12 +434,10 @@ describe("generation activation", () => {
     activatePair(stagePair(root), ctxFor(env));
     const metadata = join(activeGeneration(paths) as string, "installation.json");
     const whole = JSON.parse(readFileSync(metadata, "utf8")) as Record<string, unknown>;
-    const files = Object.fromEntries(
-      ["codex", "codex-code-mode-host", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"]
-        .map((f) => [f, { sha256: "f".repeat(64), size: 10 }]),
-    ) as Record<ArtifactFile, FileDigest>;
+    const files = Object.fromEntries(packageRequiredFiles("darwin-arm64").map((f) => [f, { sha256: "f".repeat(64), size: 10 }]));
     const manifest: ReleaseManifest = {
-      schema: 1,
+      schema: 3,
+      patchVersion: 2,
       cxVersion: "2.0.0",
       codexVersion: "0.152.1",
       upstreamTag: "rust-v0.152.1",
@@ -452,7 +450,7 @@ describe("generation activation", () => {
       artifacts: [{ platform: "darwin-arm64" as const, filename: "cxstatusline-codex-0.152.1-darwin-arm64.tar.gz", sha256: "a".repeat(64), size: 100, files }],
     };
     const release = { tag: "cxstatusline-v2.0.0-codex-v0.152.1", archiveSha256: "a".repeat(64), manifest };
-    writeFileSync(metadata, JSON.stringify(withProvenance(whole, { release })));
+    writeFileSync(metadata, JSON.stringify(withProvenance(whole, { release, patchVersion: 2 })));
 
     expect(readInstallation(paths)?.provenance.release).toEqual(release);
   });

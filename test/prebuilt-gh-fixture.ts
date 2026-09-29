@@ -85,7 +85,6 @@ export async function releaseDir(sourceCommit = SOURCE, patchSha256 = PATCH_SHA)
     files: digests(stage),
     patchVersion: 2,
     patchFile: `codex-${CODEX}.patch`,
-    schema: 3,
   });
   writeFileSync(join(out, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   await writeChecksums(out, [ARCHIVE, "manifest.json"]);
@@ -119,8 +118,7 @@ export async function multiReleaseDir(
         files: digests(stage),
         patchVersion: 2,
         patchFile: `codex-${CODEX}.patch`,
-        schema: 3,
-      }),
+          }),
     );
   }
   const merged = mergeManifests(manifests);

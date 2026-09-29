@@ -423,7 +423,7 @@ test("a release published before cxstatusline 0.11 (schema 2, flat archive) is r
     { name: "THIRD_PARTY_NOTICES.md", mode: 0o644, data: "# Third party" },
   ];
   const fixture = releaseFixture({ cxVersion: CX, codexVersion: CODEX, entries: flat });
-  fixture.manifest.schema = 2;
+  (fixture.manifest as { schema: number }).schema = 2;
   const server = await releaseServer(routesFor(fixture));
   const { ctx } = prebuiltCtx();
   try {

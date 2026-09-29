@@ -84,7 +84,6 @@ test("verifyOutput rejects archive whose THIRD_PARTY_NOTICES lacks the Rust noti
     files,
     patchVersion: 2,
     patchFile: "codex-0.153.4.patch",
-    schema: 3,
   });
   writeFileSync(join(out, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   await writeChecksums(out, [filename, "manifest.json"]);

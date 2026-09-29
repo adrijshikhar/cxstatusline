@@ -4,16 +4,17 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import { digestOf, type FileDigest } from "../digest";
 import { modeFor, type Platform, type PreparedPair, validateManifest } from "../distribution";
-import { GENERATION_EXECUTABLES, GENERATION_LEGAL_FILES } from "../distribution/files";
 import type { Paths } from "../paths";
 import { parseSemver } from "../version";
 
 /** The metadata file that makes a generation self-describing - and authoritative over state.json. */
 export const INSTALLATION_FILE = "installation.json";
 
-// The allowlist itself lives in the leaf module `src/distribution/files.ts` (no imports, so no
-// cycle); re-exported here because a generation's layout *is* that allowlist.
-export { GENERATION_EXECUTABLES, GENERATION_LEGAL_FILES };
+/** The two executables we build; they live under `bin/` in the package layout. */
+export const GENERATION_EXECUTABLES = ["codex", "codex-code-mode-host"] as const;
+
+/** Shipped at the package root of prebuilt pairs; absent from locally compiled ones. */
+export const GENERATION_LEGAL_FILES = ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"] as const;
 
 /**
  * A `PreparedPair` without its temporary staging directory - exactly what a generation records.

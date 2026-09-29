@@ -94,7 +94,6 @@ function manifestInput(stagingDir: string, archive: FileDigest, over: Partial<Ma
     files: digests(stagingDir),
     patchVersion: 2,
     patchFile: `codex-${CODEX}.patch`,
-    schema: 3,
     ...over,
   };
 }

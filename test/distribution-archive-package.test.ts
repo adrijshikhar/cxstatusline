@@ -118,16 +118,4 @@ describe("extractArchive with a manifest file map", () => {
     });
   }
 
-  test("the legacy five-file contract still applies when no map is given", async () => {
-    const { root, staging } = scratch();
-    const flat: TarEntry[] = [
-      { name: "codex", mode: 0o755, data: "CODEX-BINARY" },
-      { name: "codex-code-mode-host", mode: 0o755, data: "HOST-BINARY" },
-      { name: "LICENSE", mode: 0o644, data: "MIT" },
-      { name: "NOTICE", mode: 0o644, data: "NOTICE TEXT" },
-      { name: "THIRD_PARTY_NOTICES.md", mode: 0o644, data: "# Third party" },
-    ];
-    await extractArchive(archiveOf(flat, root), staging);
-    expect(readFileSync(join(staging, "codex"), "utf8")).toBe("CODEX-BINARY");
-  });
 });

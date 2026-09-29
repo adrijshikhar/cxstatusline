@@ -1,13 +1,11 @@
 import { z } from "zod";
 import type { FileDigest } from "./digest";
-import { ARTIFACT_FILES, type ArtifactFile } from "./distribution/files";
 import { parseSemver } from "./version";
 
 // ---- Shared types (plan-defined; used verbatim by later tasks) ----
 
 export type Platform = "darwin-arm64" | "darwin-x64" | "linux-x64" | "linux-arm64";
 
-export type { ArtifactFile };
 export type { FileDigest } from "./digest";
 
 /** One archive member: its digest. Modes are a function of the path (`modeFor`), never stored. */
@@ -18,16 +16,13 @@ export interface Artifact {
   filename: string;
   sha256: string;
   size: number;
-  /**
-   * Schema 3: every member path, relative to the package root (`bin/codex`, `codex-path/rg`, ...).
-   * Schema 1/2: exactly the five flat basenames.
-   */
-  files: Record<ArtifactFile, ArchiveEntry> & Record<string, ArchiveEntry>;
+  /** Every member path, relative to the package root (`bin/codex`, `codex-path/rg`, ...). */
+  files: Record<string, ArchiveEntry>;
 }
 
 export interface ReleaseManifest {
-  schema: 1 | 2 | 3;
-  patchVersion?: number;
+  schema: 3;
+  patchVersion: number;
   cxVersion?: string;
   codexVersion: string;
   upstreamTag: string;
@@ -115,13 +110,10 @@ export function packageRequiredFiles(platform: Platform): readonly string[] {
 
 /**
  * The only mode rule anywhere: executables live under the three package directories (upstream sets
- * +x on every file it puts there); everything at the root is text. The two flat basenames are the
- * pre-package layout's executables.
+ * +x on every file it puts there); everything at the root is text.
  */
 export function modeFor(path: string): 0o755 | 0o644 {
-  if (/^(bin|codex-path|codex-resources)\//.test(path)) return 0o755;
-  if (path === "codex" || path === "codex-code-mode-host") return 0o755;
-  return 0o644;
+  return /^(bin|codex-path|codex-resources)\//.test(path) ? 0o755 : 0o644;
 }
 
 const HEX40 = /^[0-9a-f]{40}$/;
@@ -182,8 +174,8 @@ const ArtifactSchema = z
 
 const ManifestShapeSchema = z
   .object({
-    schema: z.union([z.literal(1), z.literal(2), z.literal(3)]),
-    patchVersion: z.number().refine(safePositiveInt).optional(),
+    schema: z.literal(3),
+    patchVersion: z.number().refine(safePositiveInt),
     cxVersion: z.string().optional(),
     codexVersion: z.string(),
     upstreamTag: z.string(),
@@ -202,14 +194,6 @@ type ManifestShape = z.infer<typeof ManifestShapeSchema>;
 // ---- Cross-field business rules ----
 // Zod validates structure; these rules require `expected` and cross-field agreement
 // (release identity), which is not expressible as static per-field schema alone.
-
-/** Schema 1/2: exactly the five flat basenames. */
-function checkFlatFiles(files: Record<string, unknown>): string | null {
-  const keys = Object.keys(files);
-  for (const name of ARTIFACT_FILES) if (!(name in files)) return `files is missing ${name}`;
-  for (const key of keys) if (!(ARTIFACT_FILES as readonly string[]).includes(key)) return `files has unexpected member ${key}`;
-  return null;
-}
 
 /**
  * Schema 3: every key is a package path, the required set for the artifact's own platform is
@@ -238,7 +222,7 @@ function checkArtifacts(m: ManifestShape, expected: ExpectedRelease): string | n
   for (const artifact of m.artifacts) {
     if (seen.has(artifact.platform)) return "duplicate platform in artifacts";
     seen.add(artifact.platform);
-    const files = m.schema === 3 ? checkPackageFiles(artifact.platform, artifact.files) : checkFlatFiles(artifact.files);
+    const files = checkPackageFiles(artifact.platform, artifact.files);
     if (files) return files;
 
     if (artifact.filename.includes("/") || artifact.filename.includes("\\") || artifact.filename.includes("..")) {
@@ -252,8 +236,6 @@ function checkArtifacts(m: ManifestShape, expected: ExpectedRelease): string | n
 }
 
 function checkBusinessRules(m: ManifestShape, expected: ExpectedRelease): string | null {
-  if (m.schema >= 2 && m.patchVersion === undefined) return `patchVersion is required for schema ${m.schema}`;
-  if (m.schema === 1 && m.patchVersion !== undefined) return "patchVersion requires schema 2 or later";
   if (m.cxVersion !== undefined && !isStableVersion(m.cxVersion)) {
     return "cxVersion is not a valid semver";
   }
@@ -261,8 +243,7 @@ function checkBusinessRules(m: ManifestShape, expected: ExpectedRelease): string
     return "codexVersion does not match expected release";
   }
   if (m.upstreamTag !== `rust-v${m.codexVersion}`) return "upstreamTag does not match codexVersion";
-  if (m.schema >= 2 && !/^[a-zA-Z0-9][a-zA-Z0-9._-]*\.patch$/.test(m.patchFile)) return "patchFile must be a patch basename";
-  if (m.schema === 1 && m.patchFile !== `codex-${m.codexVersion}.patch`) return "patchFile does not match codexVersion";
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*\.patch$/.test(m.patchFile)) return "patchFile must be a patch basename";
   if (Number.isNaN(Date.parse(m.createdAt))) return "createdAt is not a valid timestamp";
   return checkArtifacts(m, expected);
 }
@@ -284,6 +265,9 @@ export function validateManifest(raw: unknown, expected: ExpectedRelease): Relea
   const rawSchema = typeof raw === "object" && raw !== null ? (raw as { schema?: unknown }).schema : undefined;
   if (typeof rawSchema === "number" && rawSchema > 3) {
     throw new Error(`this release needs a newer cxstatusline (manifest schema ${rawSchema}); run npm i -g cxstatusline`);
+  }
+  if (typeof rawSchema === "number" && rawSchema < 3) {
+    throw new Error(`release ${releaseTag(expected.codexVersion)} predates cxstatusline 0.11 and has not been republished yet; use --compile or wait`);
   }
 
   const structural = ManifestShapeSchema.safeParse(raw);

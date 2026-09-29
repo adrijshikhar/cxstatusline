@@ -4,7 +4,6 @@ import { createGunzip } from "node:zlib";
 import { Parser, type ReadEntry } from "tar";
 import type { ArchiveEntry } from "../distribution";
 import { modeFor } from "../distribution";
-import { ARTIFACT_FILES, GENERATION_EXECUTABLES } from "./files";
 
 /**
  * Parse-only tar handling: `tar.Parser` hands us type, name, size and mode of every entry *before*
@@ -12,14 +11,8 @@ import { ARTIFACT_FILES, GENERATION_EXECUTABLES } from "./files";
  * `tar.x`/`extract` would write first and ask later, so it is never used here.
  */
 
-/** The legacy (schema 1/2) contract: exactly these five basenames, regular files only. */
-const ALLOWED = ARTIFACT_FILES;
-
-/**
- * What the caller expects to find: the manifest's `files` map for a package archive (schema 3,
- * nested paths, declared sizes), or null for the legacy five-file contract.
- */
-type Expected = Readonly<Record<string, ArchiveEntry>> | null;
+/** What the caller expects to find: the manifest's `files` map (exact paths, declared sizes). */
+type Expected = Readonly<Record<string, ArchiveEntry>>;
 
 /** Untrusted archive metadata is only ever compared against these; it never sets them. */
 export const EXTRACTED_TOTAL_LIMIT = 2 * 1024 * 1024 * 1024;
@@ -28,9 +21,8 @@ export const LEGAL_TOTAL_LIMIT = 16 * 1024 * 1024;
 const EXECUTABLE_MODE = 0o755;
 const LEGAL_MODE = 0o644;
 
-function isExecutable(name: string, expected: Expected): boolean {
-  if (expected !== null) return modeFor(name) === 0o755;
-  return (GENERATION_EXECUTABLES as readonly string[]).includes(name);
+function isExecutable(name: string): boolean {
+  return modeFor(name) === 0o755;
 }
 
 /** Archive-controlled text must never reach a message unbounded or with control characters. */
@@ -59,21 +51,18 @@ function rejectionReason(entry: ReadEntry, seen: Set<string>, budget: Budget, ex
   }
   // `entry.path` only normalises Windows separators, so the header name is compared verbatim:
   // "../evil", "/etc/passwd", "./" and any path the manifest did not list all fail this test.
-  const allowed = expected === null ? (ALLOWED as readonly string[]).includes(name) : Object.hasOwn(expected, name);
-  if (!allowed || entry.header.path !== name) {
-    return expected === null
-      ? `archive entry ${quoteName(name)} is not one of the five expected files`
-      : `archive entry ${quoteName(name)} is not listed in the release manifest`;
+  if (!Object.hasOwn(expected, name) || entry.header.path !== name) {
+    return `archive entry ${quoteName(name)} is not listed in the release manifest`;
   }
   if (seen.has(name)) return `archive contains ${quoteName(name)} more than once`;
   if (entry.linkpath) return `archive entry ${quoteName(name)} carries a link target`;
 
   const size = entry.size;
   if (!Number.isSafeInteger(size) || size < 0) return `archive entry ${quoteName(name)} declares an unusable size`;
-  if (expected !== null && size !== expected[name]!.size) {
+  if (size !== expected[name]!.size) {
     return `archive entry ${quoteName(name)} declares ${size} bytes but the manifest records ${expected[name]!.size}`;
   }
-  const executable = isExecutable(name, expected);
+  const executable = isExecutable(name);
   if (executable && size === 0) return `archive entry ${quoteName(name)} is an empty executable`;
   const mode = entry.mode ?? entry.header.mode ?? 0;
   if (executable && (mode & 0o111) === 0) return `archive entry ${quoteName(name)} has no executable mode bit`;
@@ -97,7 +86,7 @@ interface Write {
 
 function writeEntry(entry: ReadEntry, staging: string, expected: Expected): Write {
   const name = entry.path;
-  const mode = isExecutable(name, expected) ? EXECUTABLE_MODE : LEGAL_MODE;
+  const mode = isExecutable(name) ? EXECUTABLE_MODE : LEGAL_MODE;
   // Nested members (`bin/codex`) need their directory; the name already passed the manifest's
   // path rules, so this can only create directories inside `staging`.
   const target = join(staging, name);
@@ -165,8 +154,7 @@ function parseArchive(archivePath: string, staging: string, writes: Write[], exp
     parser.on("end", () => {
       if (settled) return;
       settled = true;
-      const required = expected === null ? (ALLOWED as readonly string[]) : Object.keys(expected);
-      const missing = required.filter((name) => !seen.has(name));
+      const missing = Object.keys(expected).filter((name) => !seen.has(name));
       if (missing.length > 0) {
         reject(new Error(`archive is missing ${missing.join(", ")}`));
         return;
@@ -179,12 +167,12 @@ function parseArchive(archivePath: string, staging: string, writes: Write[], exp
 
 /**
  * Gunzip `archivePath` with node:zlib, validate every tar entry against `files` (the release
- * manifest's member map: exact paths, declared sizes, executable bit iff `modeFor` says so) or,
- * when `files` is omitted, against the legacy five-basename allowlist, and write the accepted files
- * into `staging`. Rejects on the first violation; the caller owns removing `staging` afterwards.
+ * manifest's member map: exact paths, declared sizes, executable bit iff `modeFor` says so), and
+ * write the accepted files into `staging`. Rejects on the first violation; the caller owns removing
+ * `staging` afterwards.
  */
-export async function extractArchive(archivePath: string, staging: string, files?: Readonly<Record<string, ArchiveEntry>>): Promise<void> {
-  const expected: Expected = files ?? null;
+export async function extractArchive(archivePath: string, staging: string, files: Readonly<Record<string, ArchiveEntry>>): Promise<void> {
+  const expected: Expected = files;
   const writes: Write[] = [];
   try {
     await parseArchive(archivePath, staging, writes, expected);

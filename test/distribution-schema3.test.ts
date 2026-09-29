@@ -40,9 +40,6 @@ describe("codexTarget / modeFor / packageRequiredFiles", () => {
     expect(modeFor("codex-resources/zsh/bin/zsh")).toBe(0o755);
     expect(modeFor("codex-package.json")).toBe(0o644);
     expect(modeFor("THIRD_PARTY_NOTICES.md")).toBe(0o644);
-    // The pre-package flat layout's two executables.
-    expect(modeFor("codex")).toBe(0o755);
-    expect(modeFor("codex-code-mode-host")).toBe(0o755);
   });
 
   test("bwrap is required on Linux only", () => {
@@ -59,7 +56,7 @@ describe("validateManifest schema 3", () => {
   });
 
   const rejects: Array<{ name: string; mutate: (m: ReleaseManifest) => void; message: RegExp }> = [
-    { name: "schema 3 without patchVersion", mutate: (m) => { delete m.patchVersion; }, message: /patchVersion is required for schema 3/ },
+    { name: "schema 3 without patchVersion", mutate: (m) => { delete (m as { patchVersion?: number }).patchVersion; }, message: /patchVersion/ },
     { name: "a member outside the package directories", mutate: (m) => { m.artifacts[0]!.files["README.md"] = digest(); }, message: /unexpected member README.md/ },
     { name: "a member with a traversal segment", mutate: (m) => { m.artifacts[0]!.files["bin/../codex"] = digest(); }, message: /unexpected member/ },
     { name: "a member nested deeper than four levels", mutate: (m) => { m.artifacts[0]!.files["bin/a/b/c/d/e"] = digest(); }, message: /unexpected member/ },
