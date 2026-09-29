@@ -29,11 +29,14 @@ Platform selection follows Node's own `process.arch`, not the physical CPU. An x
 Node running under Rosetta on Apple Silicon reports `x64` and therefore selects the
 Intel asset - deliberately, because the pair has to match the runtime that executes it.
 
-The archive must contain exactly five regular files as plain basenames: `codex`,
-`codex-code-mode-host`, `LICENSE`, `NOTICE` and `THIRD_PARTY_NOTICES.md`. Anything
-else - a leading `./` directory entry from `tar -C staging .`, a link, a device, a
-duplicate or an extra file - is rejected on the entry header, before any byte is
-written. Pack with explicit file arguments, never with `.`.
+The archive is upstream's package directory - `bin/codex`, `bin/codex-code-mode-host`,
+`codex-path/rg`, `codex-resources/...`, `codex-package.json`, built by upstream's own
+`scripts/build_codex_package.py` from our two patched binaries (`assemble`) - plus our
+`LICENSE`, `NOTICE` and `THIRD_PARTY_NOTICES.md`. The release manifest (schema 3) lists every
+member path with its digest, and the installer extracts exactly those paths: a leading `./`
+entry, a link, a device, a duplicate, a size that differs from the manifest or any unlisted
+file is rejected on the entry header, before any byte is written. Pack with explicit file
+arguments, never with `.`.
 
 ## Pipeline architecture
 
@@ -93,12 +96,20 @@ build steps holds release-write or issue-write credentials.
   runs the focused patched Rust tests, builds the executable pair, then packages and verifies. The
   upstream checkout itself is still reset and re-cloned every run - only compiled artifacts and
   downloaded crates are cached.
-  Packaging is deterministic: an explicit five-file list in fixed order (never `.`, which
-  would add the `./` entry the installer rejects), `portable` tar headers with no uid/gid, a
-  fixed archive mtime, modes forced to 0755/0644, and gzip whose header carries no timestamp.
+  `assemble` runs upstream's packager (Python >= 3.10 on the runner, `libcap-dev` in the Docker
+  image so `bwrap` builds on Linux); `sccache` (`RUSTC_WRAPPER`) caches compiled objects across
+  Codex versions on both builders, with one Docker volume shared by both Linux architectures and
+  a per-architecture rustup volume.
+  Packaging is deterministic: an explicit sorted file list (never `.`, which would add the
+  `./` entry the installer rejects), `portable` tar headers with no uid/gid, a fixed archive
+  mtime, modes by path (0755 under `bin/`, `codex-path/`, `codex-resources/`; 0644 at the root),
+  and gzip whose header carries no timestamp.
   Identical staged inputs therefore produce identical archive bytes - which is *not* a claim
   that the Rust build itself is bit-reproducible.
   Each native job uploads `release-<tag>-<platform>` and `provenance-<tag>-<platform>`.
+- **Verification** also starts the app-server daemon from the staged package in a throwaway
+  `/tmp` home with the updater disabled and stops it again: the only check that reaches
+  upstream's package validation (`checkDaemonStart`; `--skip-daemon` exists for unit tests only).
 - **Verification** re-derives every published claim from the bytes on disk using the
   installer's own code: `validateManifest` from `src/distribution.ts` for the manifest,
   `extractArchive` from `src/distribution/archive.ts` for the archive, then `SHA256SUMS`
@@ -150,8 +161,9 @@ In order:
    with generated notes listing all architectures. An existing draft → its hidden provenance marker
    `<!-- cxstatusline-prebuilt-build run=<id> manifest_sha=<sha> -->` must record *this* build's
    manifest digest; if it does not, the run reports **blocked** and touches nothing.
-4. **Upload only what is missing.** An asset already attached with the same size is skipped; a
-   different size is blocked, never overwritten. `--clobber` appears nowhere in this pipeline.
+4. **Upload only what is missing** to a draft. An asset already attached with the same size is
+   skipped; a different size is blocked. A *published* release is replaced only through the
+   backup-and-replace path below.
 5. **Download all assets back and re-verify** their sha256 against the manifest and `SHA256SUMS`.
    A mismatch fails the run and leaves the release a **draft**: nothing is published.
 6. **`gh release edit --draft=false --latest=false`**, then the release URL to the step summary.
@@ -169,9 +181,11 @@ Repository visibility is never read or changed, and no draft is ever deleted aut
   build publishes under a new tag.
 - **Already published, identical** (same `sourceCommit` and `patchSha256`). Success, skipped, with
   nothing uploaded. `detect` catches this first and skips the build entirely.
-- **Already published, different.** **Blocked**, exit 3. Published releases
-  are immutable: their assets are never replaced. Only a cxstatusline version bump - a new
-  tag - can publish different bytes.
+- **Already published, different** (a republish). With a verified `--backup-dir` the release is
+  backed up, deleted, recreated as a draft with the complete platform set, uploaded, re-verified
+  and un-drafted (`replacePublished`). A replacement that omits a platform the release already
+  carried is blocked. While the release is deleted, installers back off for 24 h - republish
+  newest first.
 
 Retry URLs live in the run log and the tracking issue. Original build provenance is never
 rewritten.

@@ -40,13 +40,21 @@ def main() -> int:
     if version != f"codex-cli {args.expected_version}":
         raise AssertionError(f"wrong Codex executable: expected codex-cli {args.expected_version}, got {version!r}")
 
-    with tempfile.TemporaryDirectory(prefix="cx-footer-smoke-") as temp:
+    # Under /tmp, not the platform temp dir: the app-server daemon's control socket lives under
+    # CODEX_HOME and must fit a 104-byte sun_path on macOS.
+    with tempfile.TemporaryDirectory(prefix="cx-smoke-", dir="/tmp") as temp:
         root = pathlib.Path(temp)
         root = root.resolve()
         home = root / "home"
-        codex_home = root / "codex-home"
+        codex_home = root / "c"
         home.mkdir()
         codex_home.mkdir()
+        socket_path = codex_home / "app-server-control" / "app-server-control.sock"
+        if len(str(socket_path).encode()) > 104:
+            raise SystemExit(f"CODEX_HOME too long for the daemon socket: {socket_path}")
+        # Without this the daemon spawns a detached updater that fetches upstream's installer.
+        (codex_home / "app-server-daemon").mkdir()
+        (codex_home / "app-server-daemon" / "settings.json").write_text('{"updater":{"autoUpdateEnabled":false}}\n', encoding="utf-8")
         config = (
             'openai_base_url = "http://127.0.0.1:9/v1"\n'
             '[tui]\nstatus_line = ["model"]\nshow_tooltips = false\n\n'
@@ -91,8 +99,9 @@ def main() -> int:
             for credential in ("OPENAI_API_KEY", "CODEX_API_KEY", "CODEX_ACCESS_TOKEN"):
                 env.pop(credential, None)
             os.chdir(root)
-            trust_override = f"projects.{json.dumps(str(root))}.trust_level=\"trusted\""
-            os.execve(str(codex), [str(codex), "--no-alt-screen", "-c", trust_override], env)
+            # No `-c` override: trust is already in config.toml, and any override outside
+            # Codex's allowlist would exclude the app-server daemon from this run.
+            os.execve(str(codex), [str(codex), "--no-alt-screen"], env)
 
         width, height = 100, 28
         fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", height, width, 0, 0))
