@@ -507,6 +507,7 @@ describe("verifyOutput", () => {
       codexVersion: CODEX,
       platform: "darwin-arm64",
       skipMacho: true,
+      skipDaemon: true,
     });
     expect(report.machoSkipped).toBe(true);
     expect(report.manifest.cxVersion).toBe(CX);
@@ -523,6 +524,7 @@ describe("verifyOutput", () => {
       codexVersion: CODEX,
       platform: "linux-x64",
       skipMacho: true,
+      skipDaemon: true,
     });
     expect(report.machoSkipped).toBe(true);
     expect(report.manifest.cxVersion).toBe(CX);
@@ -538,14 +540,14 @@ describe("verifyOutput", () => {
     bytes[bytes.length - 1] = (bytes.at(-1)! ^ 0xff) & 0xff;
     writeFileSync(archivePath, bytes);
     await expect(
-      verifyOutput({ outDir: out, cxVersion: CX, codexVersion: CODEX, platform: "darwin-arm64", skipMacho: true }),
+      verifyOutput({ outDir: out, cxVersion: CX, codexVersion: CODEX, platform: "darwin-arm64", skipMacho: true, skipDaemon: true }),
     ).rejects.toThrow(/sha256|SHA256SUMS/);
   });
 
   test("rejects a staged codex whose --version disagrees with the release", async () => {
     const out = await releaseDir(smokeStaging("0.152.1"));
     await expect(
-      verifyOutput({ outDir: out, cxVersion: CX, codexVersion: CODEX, platform: "darwin-arm64", skipMacho: true }),
+      verifyOutput({ outDir: out, cxVersion: CX, codexVersion: CODEX, platform: "darwin-arm64", skipMacho: true, skipDaemon: true }),
     ).rejects.toThrow(/version/);
   });
 
@@ -553,7 +555,7 @@ describe("verifyOutput", () => {
     const out = tmp("empty");
     mkdirSync(out, { recursive: true });
     await expect(
-      verifyOutput({ outDir: out, cxVersion: CX, codexVersion: CODEX, platform: "darwin-arm64", skipMacho: true }),
+      verifyOutput({ outDir: out, cxVersion: CX, codexVersion: CODEX, platform: "darwin-arm64", skipMacho: true, skipDaemon: true }),
     ).rejects.toThrow(/manifest\.json/);
   });
 });

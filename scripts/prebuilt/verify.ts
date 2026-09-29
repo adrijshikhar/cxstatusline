@@ -3,8 +3,8 @@
  * disk, using the installer's own archive validator and manifest schema rather than a second
  * implementation. A verify failure means the release must not be published.
  */
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { codexTarget, validateManifest, type Artifact, type Platform, type ReleaseManifest } from "../../src/distribution";
@@ -35,6 +35,8 @@ export interface VerifyOptions {
   readonly platform: Platform;
   /** Skip the `lipo`/`otool`/`vtool` probes. Only ever true for unit tests and non-macOS hosts. */
   readonly skipMacho: boolean;
+  /** Skip the real `codex app-server daemon start` probe. Only ever true for unit tests (stub executables). */
+  readonly skipDaemon?: boolean;
 }
 
 export interface VerifyReport {
@@ -177,6 +179,84 @@ function checkRustNotices(staged: string, checks: string[]): void {
   checks.push("Rust dependency notices and bundled tool licences present");
 }
 
+/** `<CODEX_HOME>/app-server-control/app-server-control.sock`, which must fit a 104-byte `sun_path`. */
+const SOCKET_SUFFIX_BYTES = "/app-server-control/app-server-control.sock".length;
+const SUN_PATH_MAX = 104;
+
+function readPid(file: string): number | null {
+  try {
+    const raw = JSON.parse(readFileSync(file, "utf8")) as { pid?: unknown };
+    return typeof raw.pid === "number" && Number.isInteger(raw.pid) && raw.pid > 1 ? raw.pid : null;
+  } catch {
+    return null;
+  }
+}
+
+function killGroup(pid: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(-pid, signal); // both daemon processes are setsid leaders
+  } catch {
+    try {
+      process.kill(pid, signal);
+    } catch {
+      /* already gone */
+    }
+  }
+}
+
+/**
+ * The only check that reaches upstream's `prepare_from_package`: start the app-server daemon from
+ * the staged package in a throwaway, short `/tmp` home and stop it again.
+ *
+ * Why `/tmp` and not `tmpdir()`: on macOS `tmpdir()` is under `/var/folders/...`, and the daemon's
+ * control socket path must fit a 104-byte `sun_path`. Why `TMPDIR` is set rather than unset: with
+ * it unset Codex's shared socket directory is `/tmp/codex-daemon-<uid>`, shared with any real
+ * session of the same user on the builder. Why `settings.json` first: on a stable version the daemon
+ * otherwise spawns a detached updater that fetches upstream's installer after five minutes, and
+ * `daemon stop` never stops it.
+ */
+function checkDaemonStart(staged: string, o: VerifyOptions, checks: string[]): void {
+  const root = mkdtempSync("/tmp/cxsl-");
+  const home = join(root, "h");
+  const codexHome = join(root, "c");
+  const tmp = join(root, "t");
+  const stateDir = join(codexHome, "app-server-daemon");
+  const codex = join(staged, "bin", "codex");
+  const env = { HOME: home, CODEX_HOME: codexHome, TMPDIR: tmp, PATH: "/usr/bin:/bin" };
+  const daemon = (args: string[], timeout: number) =>
+    spawnSync(codex, ["app-server", "daemon", ...args], { env, encoding: "utf8", timeout, maxBuffer: 4 * 1024 * 1024 });
+  try {
+    for (const dir of [home, stateDir, tmp]) mkdirSync(dir, { recursive: true });
+    if (Buffer.byteLength(realpathSync(codexHome)) + SOCKET_SUFFIX_BYTES > SUN_PATH_MAX) {
+      throw new Error(`probe home ${codexHome} is too long for the daemon's Unix socket path`);
+    }
+    writeFileSync(join(codexHome, "config.toml"), 'openai_base_url = "http://127.0.0.1:9/v1"\n');
+    writeFileSync(join(stateDir, "settings.json"), '{"updater":{"autoUpdateEnabled":false}}\n');
+    const start = daemon(["start"], 60_000);
+    const output = `${start.stdout}\n${start.stderr}`;
+    if (start.status !== 0) throw new Error(`codex app-server daemon start exited ${String(start.status)}: ${output.trim().slice(-600)}`);
+    if (output.includes("no complete local package")) throw new Error(`the daemon rejected the staged package: ${output.trim().slice(-600)}`);
+    let status = "";
+    try {
+      status = String((JSON.parse(start.stdout.trim().split("\n").at(-1) ?? "{}") as { status?: unknown }).status ?? "");
+    } catch {
+      /* reported below */
+    }
+    if (status !== "started") throw new Error(`expected daemon status "started", got ${JSON.stringify(status)}: ${output.trim().slice(-300)}`);
+    if (!existsSync(join(codexHome, "packages", "app-server-daemon", "current", "bin", "codex"))) {
+      throw new Error("the daemon started but did not copy the package into its store");
+    }
+    checks.push("codex app-server daemon start accepted the staged package and copied it");
+  } finally {
+    daemon(["stop"], 30_000);
+    const pids = [readPid(join(stateDir, "daemon.pid")), readPid(join(stateDir, "daemon-updater.pid"))].filter((p): p is number => p !== null);
+    for (const pid of pids) killGroup(pid, "SIGTERM");
+    if (pids.length > 0) spawnSync("sleep", ["5"]);
+    for (const pid of pids) killGroup(pid, "SIGKILL");
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 function checkPackage(staged: string, artifact: Artifact, o: VerifyOptions, checks: string[]): void {
   const problem = verifyPackage(staged, artifact.files, { target: codexTarget(o.platform), codexVersion: o.codexVersion });
   if (problem !== null) throw new Error(`staged package is not the package the manifest describes: ${problem}`);
@@ -223,6 +303,8 @@ export async function verifyOutput(o: VerifyOptions): Promise<VerifyReport> {
     }
     checkSmoke(staged, o, checks);
     checkTools(staged, checks);
+    if (o.skipDaemon) checks.push("daemon start probe SKIPPED");
+    else checkDaemonStart(staged, o, checks);
   } finally {
     rmSync(staged, { recursive: true, force: true });
   }

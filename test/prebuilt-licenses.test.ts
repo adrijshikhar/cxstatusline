@@ -90,6 +90,6 @@ test("verifyOutput rejects archive whose THIRD_PARTY_NOTICES lacks the Rust noti
   await writeChecksums(out, [filename, "manifest.json"]);
 
   await expect(
-    verifyOutput({ outDir: out, cxVersion: "0.1.0", codexVersion: "0.153.4", platform: "darwin-arm64", skipMacho: true }),
+    verifyOutput({ outDir: out, cxVersion: "0.1.0", codexVersion: "0.153.4", platform: "darwin-arm64", skipMacho: true, skipDaemon: true }),
   ).rejects.toThrow(/Rust dependency notices/);
 });

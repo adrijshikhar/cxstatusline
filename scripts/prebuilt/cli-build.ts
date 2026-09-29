@@ -123,6 +123,7 @@ export async function runVerify(flags: Record<string, string>): Promise<void> {
     codexVersion: required(flags, "codex-version"),
     platform: flags["platform"] ? releasePlatform(flags) : platformFor(process.platform, process.arch),
     skipMacho: flags["skip-macho"] === "true",
+    skipDaemon: flags["skip-daemon"] === "true",
   });
   summary([
     `## Prebuilt verification: ${report.archive}`,
