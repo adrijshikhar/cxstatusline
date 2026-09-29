@@ -221,7 +221,8 @@ describe("generation activation", () => {
     expect(s.startsWith("#!/bin/sh\n")).toBe(true);
     expect(s).toContain(WRAPPER_MARKER_V2);
     expect(s).toContain(`generation=$(CDPATH= cd -P -- '/h/.local/libexec/cx statusline/current' && pwd -P) || exit 1`);
-    expect(s).toContain(`exec "$generation/codex" "$@"`);
+    // The package layout's executable first; the flat fallback keeps an older generation launchable.
+    expect(s).toContain(`if [ -x "$generation/bin/codex" ]; then\n  exec "$generation/bin/codex" "$@"\nfi\nexec "$generation/codex" "$@"`);
     expect(s).toContain(`CXSTATUSLINE_COMMAND=''"'"'/bin/cx statusline'"'"' render'`);
     expect(s).toContain(`exec '/bin/cx statusline' upgrade`);
   });
@@ -331,6 +332,18 @@ describe("generation activation", () => {
     const r = spawnSync(paths.wrapperPath, ["--version"], { encoding: "utf8" });
     expect(r.stdout.trim()).toBe(`gen:--version:'${join(root, "cx bin")}' render`);
     expect(spawnSync(paths.wrapperPath, ["update"], { encoding: "utf8" }).stdout.trim()).toBe("cx:upgrade");
+  });
+
+  test("the wrapper falls back to a flat generation left by an older cxstatusline", () => {
+    const { env, root, paths } = spacedHome();
+    activatePair(stagePair(root), ctxFor(env, join(root, "cx bin")));
+    // Replace the active generation with the pre-package shape: a bare `codex` file, no bin/.
+    const active = activeGeneration(paths) as string;
+    rmSync(join(active, "bin"), { recursive: true, force: true });
+    rmSync(join(active, "codex"), { force: true });
+    writeFileSync(join(active, "codex"), '#!/bin/sh\necho "flat:$*"\n');
+    chmodSync(join(active, "codex"), 0o755);
+    expect(spawnSync(paths.wrapperPath, ["--version"], { encoding: "utf8" }).stdout.trim()).toBe("flat:--version");
   });
 
   test("REFUSES a foreign regular launcher before creating any generation", () => {

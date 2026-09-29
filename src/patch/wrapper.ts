@@ -50,6 +50,9 @@ export function wrapperScript(patchedBin: string, cxBin: string): string {
  * The `~/.local/bin/codex` wrapper for the generation layout.
  * The executable path is pinned once, by resolving `current` to a real directory and exec'ing out
  * of it: a generation switched in mid-session cannot move this process's binary out from under it.
+ * A generation is upstream's package directory, so the executable is `bin/codex`; the bare
+ * `codex` fallback keeps a flat generation from an older cxstatusline launchable until `upgrade`
+ * replaces it.
  */
 export function generationWrapperScript(currentGeneration: string, cxBin: string): string {
   return [
@@ -62,6 +65,9 @@ export function generationWrapperScript(currentGeneration: string, cxBin: string
     `CXSTATUSLINE_COMMAND=${sq(`${sq(cxBin)} render`)}`,
     "export CXSTATUSLINE_COMMAND",
     `generation=$(CDPATH= cd -P -- ${sq(currentGeneration)} && pwd -P) || exit 1`,
+    `if [ -x "$generation/bin/codex" ]; then`,
+    `  exec "$generation/bin/codex" "$@"`,
+    "fi",
     `exec "$generation/codex" "$@"`,
     "",
   ].join("\n");
