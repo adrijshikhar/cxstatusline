@@ -150,7 +150,7 @@ describe("buildMatrix", () => {
     expect(workflow).not.toContain("inputs.self_hosted");
     expect(workflow).toContain("max-parallel: 1");
     expect(workflow).toContain('CARGO_BUILD_JOBS: "3"');
-    expect(readFileSync(join(root, "scripts/build-prebuilt-docker.sh"), "utf8")).toContain("CARGO_BUILD_JOBS:-8");
+    expect(readFileSync(join(root, "scripts/build-prebuilt-docker.sh"), "utf8")).toContain("CARGO_BUILD_JOBS:-4");
     expect(workflow).not.toContain("actions/setup-python");
     expect(workflow).not.toContain("pip install");
     expect(readFileSync(join(root, "scripts/build-prebuilt-docker.sh"), "utf8")).not.toContain("pip install");

@@ -163,6 +163,7 @@ echo "==> Running build inside container..."
   -e PLATFORM="$PLATFORM" \
   -e TARGET="$TARGET" \
   -e SKIP_TESTS="$SKIP_TESTS" \
+  -e CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-4}" \
   -e WORKFLOW_URL="${WORKFLOW_URL:-https://github.com/adrijshikhar/cxstatusline/actions/runs/local-docker}" \
   "$IMAGE_NAME" \
   bash -c '
@@ -170,7 +171,7 @@ echo "==> Running build inside container..."
     export RUNNER_TEMP=/tmp
     export GITHUB_WORKSPACE=/workspace
     export GITHUB_ENV=/tmp/cx-env.sh
-    export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-8}"
+    export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-4}"
     export CARGO_TERM_COLOR=never
     export CARGO_PROFILE_RELEASE_DEBUG=0
     # Compiled objects are cached across Codex versions and both Linux architectures (keys include
