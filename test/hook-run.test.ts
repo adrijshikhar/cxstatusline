@@ -43,10 +43,42 @@ function installGeneration(paths: ReturnType<typeof resolvePaths>): string {
   return dir;
 }
 
+function digest(text: string): { sha256: string; size: number } {
+  return { sha256: createHash("sha256").update(text).digest("hex"), size: Buffer.byteLength(text) };
+}
+
+/** A flat generation exactly as cxstatusline <= 0.10.x left it, with a record that still validates. */
+function installFlatGeneration(paths: ReturnType<typeof resolvePaths>): string {
+  const dir = join(paths.generationsDir, "0.152.1-20260902T120000-a63712");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "codex"), "GEN-CODEX");
+  writeFileSync(join(dir, "codex-code-mode-host"), "GEN-HOST");
+  writeFileSync(join(dir, "installation.json"), JSON.stringify({
+    codexVersion: "0.152.1",
+    provenance: {
+      source: "prebuilt", cxVersion: "0.10.1", platform: "darwin-arm64", patchSha256: "a".repeat(64),
+      upstreamCommit: "b".repeat(40), sourceCommit: null, sourceDirty: false, installedAt: "2026-09-02T12:00:00.000Z",
+      executables: { codex: digest("GEN-CODEX"), "codex-code-mode-host": digest("GEN-HOST") },
+    },
+  }));
+  swapPointer(paths, dir);
+  return dir;
+}
+
 const startup = JSON.stringify({ session_id: "s", cwd: "/", hook_event_name: "SessionStart", source: "startup" });
 const msg = (stdout: string): string => (stdout ? (JSON.parse(stdout) as { systemMessage: string }).systemMessage : "");
 
 describe("runHook", () => {
+  test("a flat generation from an older cxstatusline is rebuilt once in the background, with no false 'unpatched' warning", async () => {
+    const { ctx, deps, paths, spawned } = setup({});
+    rmSync(paths.patchedBin, { force: true });
+    installFlatGeneration(paths); // same version as upstream: no version drift
+    const { stdout } = await runHook(ctx, startup, deps);
+    expect(msg(stdout)).toMatch(/installed by an older cxstatusline; rebuilding it in the background/);
+    expect(msg(stdout)).not.toMatch(/running unpatched/);
+    expect(spawned).toEqual([["/cx", "hook", "acquire"]]);
+  });
+
   test("a newer launcher wins while the saved old release still exists", async () => {
     const { ctx, deps, paths, spawned, root, upstream } = setup({});
     const newer = join(root, "new-codex");

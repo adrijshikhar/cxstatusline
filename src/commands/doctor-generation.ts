@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, readlinkSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { Context } from "../context";
 import { platformFor } from "../distribution";
@@ -6,14 +6,18 @@ import type { Paths } from "../paths";
 import { digestOf } from "../digest";
 import {
   GENERATION_LEGAL_FILES,
+  INSTALLATION_FILE,
   activeGeneration,
   executablePath,
   insideGenerationsRoot,
   isGenerationDir,
+  isPackageLayout,
   readInstallation,
   readPointer,
+  verifyPackage,
   type InstallationRecord,
 } from "../patch/generation";
+import { compareSemver, parseSemver } from "../version";
 import { REQUIRED_TOOLCHAIN, preflight } from "../patch/preflight";
 import type { State } from "../state";
 import { VERSION } from "../version-info";
@@ -44,7 +48,9 @@ function resolvePointerTarget(paths: Paths, raw: string): string {
 function computeGenerationLine(paths: Paths, pointer: string | null): { readonly line: DoctorLine; readonly dir: string | null } {
   const dir = activeGeneration(paths);
   if (dir !== null) {
-    if (!isGenerationDir(dir)) return { line: line("generation", "foreign", false), dir: null };
+    // A flat generation from an older cxstatusline still carries our record; it is reported and
+    // `package_layout` says what is wrong with it. Only a directory without a record is foreign.
+    if (!isGenerationDir(dir) && !existsSync(join(dir, INSTALLATION_FILE))) return { line: line("generation", "foreign", false), dir: null };
     return { line: line("generation", dir, true), dir };
   }
   if (pointer === null) return { line: line("generation", "none", null), dir: null };
@@ -155,7 +161,53 @@ function legalLine(record: InstallationRecord | null, dir: string | null): Docto
   return missing.length === 0 ? line("legal", "present", true) : line("legal", `missing: ${missing.join(", ")}`, false);
 }
 
-/** platform, cx_version, release, patch, source_commit, upstream_commit, codex_digest, host_digest, codex_version, legal - in report order. */
+/** The daemon needs the package layout from Codex 0.156.0 on (opt-in) and by default from 0.157.0. */
+const DAEMON_SINCE = parseSemver("0.156.0")!;
+
+/**
+ * Is the active generation the package upstream's daemon will accept? Every recorded file hashes,
+ * and `codex-package.json` names this version and target. A flat generation from an older
+ * cxstatusline is the one thing `upgrade` fixes and nothing else does, so it is spelled out.
+ */
+function packageLayoutLine(record: InstallationRecord | null, dir: string | null): DoctorLine {
+  if (!record || !dir) return line("package_layout", NO_GENERATION, null);
+  if (!isPackageLayout(dir) || record.provenance.files === undefined || record.provenance.target === undefined) {
+    const parsed = parseSemver(record.codexVersion);
+    const needed = parsed !== null && compareSemver(parsed, DAEMON_SINCE) >= 0;
+    return line("package_layout", "flat layout from an older cxstatusline: run cxstatusline upgrade", needed ? false : null);
+  }
+  const problem = verifyPackage(dir, record.provenance.files, { target: record.provenance.target, codexVersion: record.codexVersion });
+  return problem === null ? line("package_layout", `ok (${record.provenance.target})`, true) : line("package_layout", problem, false);
+}
+
+/**
+ * The copy of Codex the app-server daemon runs, if it has one: upstream copies the package it
+ * was started from into `<CODEX_HOME>/packages/app-server-daemon` and updates it on its own.
+ * A version different from the active generation's is how a daemon/TUI mismatch shows up.
+ */
+function daemonPackageLine(paths: Paths, record: InstallationRecord | null): DoctorLine {
+  const current = join(paths.codexHome, "packages", "app-server-daemon", "current");
+  let target: string;
+  try {
+    target = readlinkSync(current);
+  } catch {
+    return line("daemon_package", "none", null);
+  }
+  const dir = isAbsolute(target) ? target : resolve(dirname(current), target);
+  let version = "unknown";
+  try {
+    const meta = JSON.parse(readFileSync(join(dir, "codex-package.json"), "utf8")) as { version?: unknown };
+    if (typeof meta.version === "string") version = meta.version;
+  } catch {
+    /* an unreadable copy is still worth naming */
+  }
+  if (record && version !== "unknown" && version !== record.codexVersion) {
+    return line("daemon_package", `daemon ${version} differs from active ${record.codexVersion} (${dir}); run codex app-server daemon restart`, false);
+  }
+  return line("daemon_package", `${version} (${dir})`, null);
+}
+
+/** platform, cx_version, release, patch, source_commit, upstream_commit, codex_digest, host_digest, codex_version, legal, package_layout, daemon_package - in report order. */
 export function generationDetailLines(ctx: Context, status: GenerationStatus): DoctorLine[] {
   const { record, dir } = status;
   return [
@@ -169,6 +221,8 @@ export function generationDetailLines(ctx: Context, status: GenerationStatus): D
     digestLine("codex-code-mode-host", "host_digest", record, dir),
     codexVersionLine(ctx, record, dir),
     legalLine(record, dir),
+    packageLayoutLine(record, dir),
+    daemonPackageLine(ctx.paths, record),
   ];
 }
 

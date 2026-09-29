@@ -1,9 +1,9 @@
-import { existsSync, lstatSync, readdirSync, rmSync, symlinkSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, lstatSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type { Context } from "../context";
 import { uninstallHook } from "../hook/install";
 import { acquireLock, lockHolder } from "../lock";
-import { isGenerationDir, listGenerations } from "../patch/generation";
+import { GENERATION_NAME, INSTALLATION_FILE, listGenerations } from "../patch/generation";
 import { isOurWrapper } from "../patch/wrapper";
 import { readState, writeState } from "../state";
 
@@ -39,8 +39,11 @@ export function revert(ctx: Context): RevertResult {
 
 /**
  * Drop the pointer and every generation we can prove is ours, leaving anything else alone.
- * Retention is deliberate: generations accumulate until this runs, because a live Codex session
- * may still be executing out of an older one. Run `revert` after closing your CX sessions.
+ * "Ours" is the directory name `createGeneration` chooses (`<version>-<stamp>-<hex>`): that covers
+ * package generations, flat generations left by an older cxstatusline and a directory whose build
+ * was interrupted before `installation.json` - all of them created by us, none of them by anyone
+ * else. Retention is deliberate: generations accumulate until this runs, because a live Codex
+ * session may still be executing out of an older one. Run `revert` after closing your CX sessions.
  */
 function removeGenerations(ctx: Context, actions: string[]): void {
   const { currentGeneration, generationsDir } = ctx.paths;
@@ -51,7 +54,7 @@ function removeGenerations(ctx: Context, actions: string[]): void {
   if (!existsSync(generationsDir)) return;
   let removed = 0;
   for (const dir of listGenerations(ctx.paths)) {
-    if (!isGenerationDir(dir)) {
+    if (!GENERATION_NAME.test(basename(dir)) || safeIsSymlink(dir)) {
       actions.push(`${dir} is not a cxstatusline generation; left in place`);
       continue;
     }
@@ -85,6 +88,33 @@ function removeStagingDebris(ctx: Context, actions: string[]): void {
   }
 }
 
+/**
+ * Upstream's app-server daemon copies the package it was first started from into
+ * `<CODEX_HOME>/packages/app-server-daemon` and keeps running it. If that copy is one of ours it
+ * carries our `installation.json`; say so and give the two commands, never delete it: it is
+ * upstream's store and a daemon may be serving a live session from it.
+ */
+function daemonCopyNotice(ctx: Context, actions: string[]): void {
+  const root = join(ctx.paths.codexHome, "packages", "app-server-daemon");
+  const current = join(root, "current");
+  let target: string;
+  try {
+    target = readlinkSync(current);
+  } catch {
+    return;
+  }
+  const dir = isAbsolute(target) ? target : resolve(dirname(current), target);
+  let ours = false;
+  try {
+    const record = JSON.parse(readFileSync(join(dir, INSTALLATION_FILE), "utf8")) as { provenance?: { cxVersion?: unknown } };
+    ours = typeof record?.provenance?.cxVersion === "string";
+  } catch {
+    return;
+  }
+  if (!ours) return;
+  actions.push(`the Codex daemon still runs a copy of the removed generation (${dir}); stop it and remove the copy: codex app-server daemon stop && rm -rf ${root}`);
+}
+
 function revertLocked(ctx: Context): RevertResult {
   const actions: string[] = [];
   let code: 0 | 1 = 0;
@@ -107,6 +137,7 @@ function revertLocked(ctx: Context): RevertResult {
     }
   }
   removeGenerations(ctx, actions);
+  daemonCopyNotice(ctx, actions);
   removeStagingDebris(ctx, actions);
   // The owner's pre-generations flat layout. The release notes call the transition an explicit
   // revert/reinstall, so `revert` still has to be able to clean up what that layout left behind.
