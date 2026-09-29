@@ -99,7 +99,7 @@ describe("compareIdentity", () => {
   });
   test("accepts a manifest built from the same commit and patch", async () => {
     const manifest = JSON.parse(readFileSync(join(await releaseDir(), "manifest.json"), "utf8"));
-    expect(compareIdentity(manifest, { sourceCommit: SOURCE, patchSha256: PATCH_SHA }).identical).toBe(true);
+    expect(compareIdentity(manifest, { sourceCommit: SOURCE, patchSha256: PATCH_SHA, patchVersion: 2 }).identical).toBe(true);
   });
 
   test("reports a differing sourceCommit and names both values", async () => {

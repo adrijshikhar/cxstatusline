@@ -3,7 +3,7 @@
  * installer's own `validateManifest`; this module only assembles the values, so there is never a
  * second copy of the schema to drift.
  */
-import type { ArtifactFile, FileDigest, Platform, ReleaseManifest } from "../../src/distribution";
+import type { FileDigest, Platform, ReleaseManifest } from "../../src/distribution";
 import { archiveFilename } from "./pack";
 
 export interface ManifestInput {
@@ -20,7 +20,10 @@ export interface ManifestInput {
   readonly workflowUrl: string;
   readonly createdAt: string;
   readonly archive: FileDigest;
-  readonly files: Record<ArtifactFile, FileDigest>;
+  /** Every archive member path with its digest (schema 3), or the five flat basenames (schema 1/2). */
+  readonly files: Record<string, FileDigest>;
+  /** 3 for a package archive. Omitted: 2 with a patchVersion, else 1 (legacy). */
+  readonly schema?: 1 | 2 | 3;
 }
 
 /**
@@ -29,7 +32,7 @@ export interface ManifestInput {
  */
 export function buildManifest(input: ManifestInput): ReleaseManifest {
   return {
-    schema: input.patchVersion === undefined ? 1 : 2,
+    schema: input.schema ?? (input.patchVersion === undefined ? 1 : 2),
     ...(input.patchVersion === undefined ? {} : { patchVersion: input.patchVersion }),
     cxVersion: input.cxVersion,
     codexVersion: input.codexVersion,
@@ -46,7 +49,7 @@ export function buildManifest(input: ManifestInput): ReleaseManifest {
         filename: archiveFilename(input.codexVersion, input.platform),
         sha256: input.archive.sha256,
         size: input.archive.size,
-        files: input.files,
+        files: input.files as ReleaseManifest["artifacts"][number]["files"],
       },
     ],
   };

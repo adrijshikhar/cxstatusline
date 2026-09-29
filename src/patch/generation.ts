@@ -1,8 +1,9 @@
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
-import { createHash, randomBytes } from "node:crypto";
-import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { z } from "zod";
-import { type FileDigest, type Platform, type PreparedPair, validateManifest } from "../distribution";
+import { digestOf, type FileDigest } from "../digest";
+import { modeFor, type Platform, type PreparedPair, validateManifest } from "../distribution";
 import { GENERATION_EXECUTABLES, GENERATION_LEGAL_FILES } from "../distribution/files";
 import type { Paths } from "../paths";
 import { parseSemver } from "../version";
@@ -19,9 +20,90 @@ export type InstallationRecord = Omit<PreparedPair, "directory">;
 
 const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._+-]*$/;
 
-function digestOf(file: string): FileDigest {
-  const buf = readFileSync(file);
-  return { sha256: createHash("sha256").update(buf).digest("hex"), size: buf.length };
+/** The alias upstream's own installer adds and its daemon skips when copying a package. */
+const ROOT_ALIAS = "codex";
+
+/** `bin/codex` and `codex-package.json` present: upstream's package layout. */
+export function isPackageLayout(dir: string): boolean {
+  return existsSync(join(dir, "bin", "codex")) && existsSync(join(dir, "codex-package.json"));
+}
+
+/** Where an executable lives: `bin/<name>` in the package layout, `<name>` in the legacy flat one. */
+export function executablePath(dir: string, name: "codex" | "codex-code-mode-host"): string {
+  return isPackageLayout(dir) ? join(dir, "bin", name) : join(dir, name);
+}
+
+/** What upstream's daemon reads from `codex-package.json` before it copies a package. */
+const PackageMetadata = z.object({
+  version: z.string(),
+  target: z.string(),
+  entrypoint: z.string(),
+}).passthrough();
+
+/**
+ * The one rule for "is `dir` the package `files` describes": every listed member is present with
+ * its digest and its mode bit, and `codex-package.json` names this exact Codex version, target and
+ * entrypoint (what `prepare_from_package` checks, `codex-rs/app-server-daemon/src/prepare_install.rs`).
+ * Returns the first problem as text, or null. Used by staging validation, the no-op detector and
+ * doctor, so the three can never disagree.
+ */
+export function verifyPackage(
+  dir: string,
+  files: Readonly<Record<string, FileDigest>>,
+  expect: { readonly target: string; readonly codexVersion: string },
+): string | null {
+  for (const [name, want] of Object.entries(files)) {
+    const file = join(dir, name);
+    let st;
+    try {
+      st = lstatSync(file);
+    } catch {
+      return `${name} is missing`;
+    }
+    if (!st.isFile()) return `${name} is not a regular file`;
+    const executable = (st.mode & 0o111) !== 0;
+    if (executable !== (modeFor(name) === 0o755)) return `${name} has the wrong executable bit`;
+    const got = digestOf(file);
+    if (got.sha256 !== want.sha256 || got.size !== want.size) return `${name} does not match its recorded digest`;
+  }
+  let metadata: z.infer<typeof PackageMetadata>;
+  try {
+    metadata = PackageMetadata.parse(JSON.parse(readFileSync(join(dir, "codex-package.json"), "utf8")));
+  } catch (e) {
+    return `codex-package.json is unreadable: ${e instanceof Error ? e.message.split("\n")[0] : String(e)}`;
+  }
+  if (metadata.entrypoint !== "bin/codex") return `codex-package.json entrypoint is ${JSON.stringify(metadata.entrypoint)}, not "bin/codex"`;
+  if (metadata.target !== expect.target) return `codex-package.json target is ${metadata.target}, expected ${expect.target}`;
+  if (metadata.version !== expect.codexVersion) return `codex-package.json version is ${metadata.version}, expected ${expect.codexVersion}`;
+  return null;
+}
+
+/**
+ * Every regular file under `dir` as `relative path -> digest`, the shape a release manifest's
+ * `files` map has. Rejects symlinks and anything that is not a file or directory: upstream's
+ * daemon refuses to copy a package containing links (`package_tree`), so a generation must never
+ * hold one. `installation.json` (ours, written last) and the root `codex -> bin/codex` alias
+ * (upstream's, skipped by `package_tree`) are the two entries that are not package content.
+ */
+export function packageFiles(dir: string): Record<string, FileDigest> {
+  const out: Record<string, FileDigest> = {};
+  const walk = (current: string): void => {
+    for (const name of readdirSync(current).sort()) {
+      const path = join(current, name);
+      const rel = relative(dir, path).split(sep).join("/");
+      const st = lstatSync(path);
+      if (rel === INSTALLATION_FILE || (rel === ROOT_ALIAS && st.isSymbolicLink())) continue;
+      if (st.isSymbolicLink()) throw new Error(`${rel} is a symbolic link; a Codex package may only contain regular files`);
+      if (st.isDirectory()) {
+        walk(path);
+        continue;
+      }
+      if (!st.isFile()) throw new Error(`${rel} is not a regular file`);
+      out[rel] = digestOf(path);
+    }
+  };
+  walk(dir);
+  return out;
 }
 
 /**

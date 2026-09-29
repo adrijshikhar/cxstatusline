@@ -25,7 +25,6 @@ import {
 } from "./env";
 import { buildManifest, workflowUrlFromEnv } from "./manifest";
 import {
-  ARCHIVE_ENTRIES,
   archiveFilename,
   assembleStaging,
   fileDigests,
@@ -59,7 +58,10 @@ export async function runBuild(flags: Record<string, string>): Promise<void> {
 
 
 
-/** Stage the five members, pack them deterministically, then write `manifest.json` + `SHA256SUMS`. */
+/**
+ * Add the legal files to the staged upstream package (`assemble` ran first), pack it
+ * deterministically, then write `manifest.json` + `SHA256SUMS`.
+ */
 export async function runPackage(flags: Record<string, string>): Promise<void> {
   const detection = resolveDetection(
     loadManifest(patchesDir()),
@@ -85,8 +87,7 @@ export async function runPackage(flags: Record<string, string>): Promise<void> {
   }
   const rustNotices = readFileSync(resolve(rustNoticesPath), "utf8");
 
-  resetDirectory(stagingDir, (entries) => entries.every((e) => (ARCHIVE_ENTRIES as readonly string[]).includes(e)));
-  assembleStaging({ upstreamDir: upstream, repoRoot: root, stagingDir, rustNotices });
+  assembleStaging({ packageDir: stagingDir, upstreamDir: upstream, repoRoot: root, rustNotices });
   mkdirSync(outDir, { recursive: true });
   const filename = archiveFilename(detection.codexVersion, platform);
   const archive = await packArchive(stagingDir, join(outDir, filename));
@@ -103,7 +104,8 @@ export async function runPackage(flags: Record<string, string>): Promise<void> {
     workflowUrl,
     createdAt: new Date().toISOString(),
     archive,
-    files: await fileDigests(stagingDir),
+    files: fileDigests(stagingDir),
+    schema: 3,
   });
   validateManifest(JSON.parse(JSON.stringify(manifest)), {
     codexVersion: detection.codexVersion,

@@ -7,11 +7,12 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { validateManifest, type Artifact, type Platform, type ReleaseManifest } from "../../src/distribution";
+import { codexTarget, validateManifest, type Artifact, type Platform, type ReleaseManifest } from "../../src/distribution";
 import { extractArchive } from "../../src/distribution/archive";
+import { verifyPackage } from "../../src/patch/generation";
 import { validateLinkage, validateVersion } from "../ci-prebuilt";
-import { ARCHIVE_ENTRIES, parseChecksums, sha256File } from "./pack";
-import { RUST_NOTICES_MARKER } from "./rust-licenses";
+import { parseChecksums, sha256File } from "./pack";
+import { RUST_NOTICES_MARKER, TOOL_NOTICES_MARKER } from "./rust-licenses";
 
 /** The deployment-target ceiling the release promises. */
 export const MAX_MINOS = "14.0";
@@ -21,6 +22,11 @@ const ELF_MACHINE: Partial<Record<Platform, string>> = {
   "linux-x64": "Advanced Micro Devices X86-64",
   "linux-arm64": "AArch64",
 };
+
+/** The two binaries we build; the linkage and deployment-target rules apply to these only. */
+const EXECUTABLES = ["bin/codex", "bin/codex-code-mode-host"] as const;
+/** Tools upstream's packager bundled; they get architecture checks only (bwrap and zsh are static). */
+const TOOLS = ["codex-path/rg", "codex-resources/bwrap", "codex-resources/zsh/bin/zsh"] as const;
 
 export interface VerifyOptions {
   readonly outDir: string;
@@ -83,14 +89,12 @@ function readManifest(outDir: string, o: VerifyOptions): ReleaseManifest {
 
 /**
  * Every staged member's bytes must equal the digest the manifest published for it - for the
- * artifact the archive was actually chosen from, not `artifacts[0]`: the schema permits two, and
- * comparing an arm64 extract against the x64 artifact's digests would fail for the wrong reason.
+ * artifact the archive was actually chosen from, not `artifacts[0]`: the schema permits several,
+ * and comparing an arm64 extract against the x64 artifact's digests would fail for the wrong reason.
  */
 async function checkExtractedDigests(staged: string, artifact: Artifact, checks: string[]): Promise<void> {
-  const files = artifact.files;
-  for (const name of ARCHIVE_ENTRIES) {
+  for (const [name, expected] of Object.entries(artifact.files)) {
     const actual = await sha256File(join(staged, name));
-    const expected = files[name];
     if (actual.sha256 !== expected.sha256 || actual.size !== expected.size) {
       throw new Error(`extracted ${name} does not match the digest recorded in manifest.json`);
     }
@@ -98,13 +102,20 @@ async function checkExtractedDigests(staged: string, artifact: Artifact, checks:
   checks.push("extracted files match manifest digests");
 }
 
+function presentTools(staged: string): readonly string[] {
+  return TOOLS.filter((name) => existsSync(join(staged, name)));
+}
+
 function checkMachO(staged: string, o: VerifyOptions, checks: string[]): void {
-  for (const name of ["codex", "codex-code-mode-host"] as const) {
+  for (const name of [...EXECUTABLES, ...presentTools(staged)]) {
     const file = join(staged, name);
     const arch = probe("lipo", ["-archs", file]).trim();
     if (arch !== MACHO_ARCH[o.platform]) {
       throw new Error(`${name}: Mach-O architecture ${arch} does not match ${o.platform}`);
     }
+  }
+  for (const name of EXECUTABLES) {
+    const file = join(staged, name);
     validateLinkage(probe("otool", ["-L", file]));
     validateMinos(probe("vtool", ["-show-build", file]));
   }
@@ -112,17 +123,17 @@ function checkMachO(staged: string, o: VerifyOptions, checks: string[]): void {
 }
 
 function checkElf(staged: string, o: VerifyOptions, checks: string[]): void {
-  for (const name of ["codex", "codex-code-mode-host"] as const) {
-    const file = join(staged, name);
-    const header = probe("readelf", ["-h", file]);
-    if (!header.includes("ELF64")) {
-      throw new Error(`${name}: expected ELF64 binary`);
-    }
-    const expected = ELF_MACHINE[o.platform];
+  const expected = ELF_MACHINE[o.platform];
+  for (const name of [...EXECUTABLES, ...presentTools(staged)]) {
+    const header = probe("readelf", ["-h", join(staged, name)]);
+    if (!header.includes("ELF64")) throw new Error(`${name}: expected ELF64 binary`);
     if (expected && !header.includes(expected)) {
       throw new Error(`${name}: ELF machine does not match ${expected} for ${o.platform}`);
     }
-    const dynamic = probe("readelf", ["-d", file]);
+  }
+  // bwrap and zsh are static musl builds; only the two executables must be dynamically linked.
+  for (const name of EXECUTABLES) {
+    const dynamic = probe("readelf", ["-d", join(staged, name)]);
     if (!/dynamic section/i.test(dynamic) && !dynamic.includes("NEEDED") && !dynamic.includes("DYNAMIC")) {
       throw new Error(`${name}: binary is not dynamically linked`);
     }
@@ -131,11 +142,21 @@ function checkElf(staged: string, o: VerifyOptions, checks: string[]): void {
 }
 
 function checkSmoke(staged: string, o: VerifyOptions, checks: string[]): void {
-  validateVersion(probe(join(staged, "codex"), ["--version"]), o.codexVersion);
-  if (!probe(join(staged, "codex-code-mode-host"), ["--help"]).includes("--listen")) {
+  validateVersion(probe(join(staged, "bin", "codex"), ["--version"]), o.codexVersion);
+  if (!probe(join(staged, "bin", "codex-code-mode-host"), ["--help"]).includes("--listen")) {
     throw new Error("codex-code-mode-host --help does not advertise --listen");
   }
   checks.push("staged codex --version and companion --help smoke passed");
+}
+
+/** The bundled tools must at least start: a wrong-architecture or truncated binary fails here. */
+function checkTools(staged: string, checks: string[]): void {
+  const rg = probe(join(staged, "codex-path", "rg"), ["--version"]);
+  if (!/^ripgrep \d+\.\d+\.\d+/.test(rg)) throw new Error(`codex-path/rg --version printed ${JSON.stringify(rg.slice(0, 80))}`);
+  if (existsSync(join(staged, "codex-resources", "bwrap"))) {
+    probe(join(staged, "codex-resources", "bwrap"), ["--version"]);
+  }
+  checks.push("bundled tools start");
 }
 
 function checkRustNotices(staged: string, checks: string[]): void {
@@ -150,7 +171,16 @@ function checkRustNotices(staged: string, checks: string[]): void {
   if (!hasBullet) {
     throw new Error("Rust dependency notices contain no dependency entries");
   }
-  checks.push("Rust dependency notices present");
+  const toolIndex = content.indexOf(TOOL_NOTICES_MARKER);
+  if (toolIndex === -1) throw new Error("Bundled tool licences marker is missing from THIRD_PARTY_NOTICES.md");
+  if (!/^### /m.test(content.slice(toolIndex))) throw new Error("Bundled tool licences section is empty");
+  checks.push("Rust dependency notices and bundled tool licences present");
+}
+
+function checkPackage(staged: string, artifact: Artifact, o: VerifyOptions, checks: string[]): void {
+  const problem = verifyPackage(staged, artifact.files, { target: codexTarget(o.platform), codexVersion: o.codexVersion });
+  if (problem !== null) throw new Error(`staged package is not the package the manifest describes: ${problem}`);
+  checks.push("package layout matches upstream's contract and the manifest");
 }
 
 /**
@@ -159,6 +189,7 @@ function checkRustNotices(staged: string, checks: string[]): void {
  */
 export async function verifyOutput(o: VerifyOptions): Promise<VerifyReport> {
   const manifest = readManifest(o.outDir, o);
+  if (manifest.schema !== 3) throw new Error(`release manifest schema ${manifest.schema} is not a package release; nothing to verify`);
   const artifact = manifest.artifacts.find((a) => a.platform === o.platform)!;
   const archivePath = join(o.outDir, artifact.filename);
   if (!existsSync(archivePath)) throw new Error(`${artifact.filename} is missing from ${o.outDir}`);
@@ -178,9 +209,10 @@ export async function verifyOutput(o: VerifyOptions): Promise<VerifyReport> {
 
   const staged = mkdtempSync(join(tmpdir(), "cxsl-verify-"));
   try {
-    await extractArchive(archivePath, staged);
-    checks.push("archive passes the installer's five-file validator");
+    await extractArchive(archivePath, staged, artifact.files);
+    checks.push("archive passes the installer's manifest-driven validator");
     await checkExtractedDigests(staged, artifact, checks);
+    checkPackage(staged, artifact, o, checks);
     checkRustNotices(staged, checks);
     if (o.skipMacho) {
       checks.push(o.platform.startsWith("linux-") ? "ELF arch/linkage SKIPPED" : "Mach-O arch/linkage/minos SKIPPED");
@@ -190,6 +222,7 @@ export async function verifyOutput(o: VerifyOptions): Promise<VerifyReport> {
       checkMachO(staged, o, checks);
     }
     checkSmoke(staged, o, checks);
+    checkTools(staged, checks);
   } finally {
     rmSync(staged, { recursive: true, force: true });
   }

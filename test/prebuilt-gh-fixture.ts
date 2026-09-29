@@ -5,21 +5,21 @@
  * network, creates a tag, a release or an issue: `fakeGh` records the exact argument arrays, which
  * is also how the "no shell interpolation" and "never --clobber" rules are asserted.
  */
-import { createHash } from "node:crypto";
 import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   archiveFilename,
-  ARCHIVE_ENTRIES,
   buildManifest,
+  fileDigests,
   mergeManifests,
   packArchive,
   writeChecksums,
   type GhResult,
   type GhRunner,
 } from "../scripts/prebuilt";
-import type { ArtifactFile, FileDigest, Platform } from "../src/distribution";
+import type { FileDigest, Platform } from "../src/distribution";
+import { RUST_NOTICES_MARKER, TOOL_NOTICES_MARKER } from "../scripts/prebuilt/rust-licenses";
 
 export const CX = "0.1.0";
 export const CODEX = "0.153.0";
@@ -35,23 +35,41 @@ export function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), `cxsl-pub-${prefix}-`));
 }
 
-export function digests(dir: string): Record<ArtifactFile, FileDigest> {
-  const out: Record<string, FileDigest> = {};
-  for (const name of ARCHIVE_ENTRIES) {
-    const bytes = readFileSync(join(dir, name));
-    out[name] = { sha256: createHash("sha256").update(bytes).digest("hex"), size: bytes.length };
-  }
-  return out as Record<ArtifactFile, FileDigest>;
+export function digests(dir: string): Record<string, FileDigest> {
+  return fileDigests(dir);
+}
+
+/**
+ * A staged package shaped like upstream's `build_codex_package.py` output plus our legal files,
+ * with stub executables whose output is exactly what `verify` demands.
+ */
+export function packageStaging(o: { codexVersion?: string; platform?: Platform; codexBody?: string } = {}): string {
+  const dir = tmp("staging");
+  const codexVersion = o.codexVersion ?? CODEX;
+  const platform = o.platform ?? "darwin-arm64";
+  const target = platform === "darwin-arm64" ? "aarch64-apple-darwin"
+    : platform === "darwin-x64" ? "x86_64-apple-darwin"
+    : platform === "linux-x64" ? "x86_64-unknown-linux-gnu" : "aarch64-unknown-linux-gnu";
+  const put = (name: string, body: string): void => {
+    mkdirSync(join(dir, name, ".."), { recursive: true });
+    writeFileSync(join(dir, name), body);
+    chmodSync(join(dir, name), /^(bin|codex-path|codex-resources)\//.test(name) ? 0o755 : 0o644);
+  };
+  put("bin/codex", o.codexBody ?? `#!/bin/sh\necho "codex-cli ${codexVersion}"\n`);
+  put("bin/codex-code-mode-host", '#!/bin/sh\necho "usage: --listen <addr>"\n');
+  put("codex-path/rg", '#!/bin/sh\necho "ripgrep 15.2.0"\n');
+  put("codex-resources/zsh/bin/zsh", "#!/bin/sh\nexit 0\n");
+  if (platform.startsWith("linux-")) put("codex-resources/bwrap", "#!/bin/sh\necho bubblewrap 0.11.0\n");
+  put("codex-package.json", `${JSON.stringify({ layoutVersion: 1, version: codexVersion, target, variant: "codex", entrypoint: "bin/codex", resourcesDir: "codex-resources", pathDir: "codex-path" }, null, 2)}\n`);
+  put("LICENSE", "LICENSE text\n");
+  put("NOTICE", "NOTICE text\n");
+  put("THIRD_PARTY_NOTICES.md", `THIRD_PARTY_NOTICES.md text\n\n${RUST_NOTICES_MARKER}\n\n- crate-a 1.0.0 (MIT)\n\n${TOOL_NOTICES_MARKER}\n\n### ripgrep (MIT OR Unlicense)\n\n\`\`\`\nMIT\n\`\`\`\n`);
+  return dir;
 }
 
 /** A complete, self-consistent release directory: archive + manifest.json + SHA256SUMS. */
 export async function releaseDir(sourceCommit = SOURCE, patchSha256 = PATCH_SHA): Promise<string> {
-  const stage = tmp("staging");
-  for (const name of ARCHIVE_ENTRIES) {
-    const executable = name === "codex" || name === "codex-code-mode-host";
-    writeFileSync(join(stage, name), executable ? "#!/bin/sh\necho stub\n" : `${name} text\n`);
-    chmodSync(join(stage, name), executable ? 0o755 : 0o644);
-  }
+  const stage = packageStaging();
   const out = tmp("out");
   const archive = await packArchive(stage, join(out, ARCHIVE));
   const manifest = buildManifest({
@@ -65,6 +83,9 @@ export async function releaseDir(sourceCommit = SOURCE, patchSha256 = PATCH_SHA)
     createdAt: "2026-09-07T00:00:00Z",
     archive,
     files: digests(stage),
+    patchVersion: 2,
+    patchFile: `codex-${CODEX}.patch`,
+    schema: 3,
   });
   writeFileSync(join(out, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   await writeChecksums(out, [ARCHIVE, "manifest.json"]);
@@ -76,16 +97,11 @@ export async function multiReleaseDir(
   platforms: readonly Platform[] = ["darwin-arm64", "darwin-x64"],
   sourceCommit = SOURCE,
 ): Promise<string> {
-  const stage = tmp("staging-multi");
-  for (const name of ARCHIVE_ENTRIES) {
-    const executable = name === "codex" || name === "codex-code-mode-host";
-    writeFileSync(join(stage, name), executable ? "#!/bin/sh\necho stub\n" : `${name} text\n`);
-    chmodSync(join(stage, name), executable ? 0o755 : 0o644);
-  }
   const out = tmp("out-multi");
   const manifests = [];
   const archiveNames: string[] = [];
   for (const platform of platforms) {
+    const stage = packageStaging({ platform });
     const archiveName = archiveFilename(CODEX, platform);
     archiveNames.push(archiveName);
     const archive = await packArchive(stage, join(out, archiveName));
@@ -101,6 +117,9 @@ export async function multiReleaseDir(
         createdAt: "2026-09-07T00:00:00Z",
         archive,
         files: digests(stage),
+        patchVersion: 2,
+        patchFile: `codex-${CODEX}.patch`,
+        schema: 3,
       }),
     );
   }
