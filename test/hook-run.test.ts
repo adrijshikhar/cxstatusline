@@ -9,7 +9,7 @@ import { WRAPPER_MARKER_V2, installWrapper, isOurWrapper } from "../src/patch/wr
 import { createGeneration, swapPointer } from "../src/patch/generation";
 import { probeRemoteCandidate } from "../src/patch/run";
 import { DEFAULT_STATE, readState, writeState, RELEASE_UNAVAILABLE, type State } from "../src/state";
-import { fakeExec, tmpEnv } from "./helpers";
+import { fakeExec, stagePackage, tmpEnv } from "./helpers";
 
 function setup(state: Partial<State>, upstreamVersion = "0.152.1", now = "2026-09-02T12:00:00Z") {
   const { env, root } = tmpEnv("cxstatusline test ");
@@ -36,38 +36,11 @@ function setup(state: Partial<State>, upstreamVersion = "0.152.1", now = "2026-0
 
 /** Put a complete generation in place, the way `activatePair` leaves the machine. */
 function installGeneration(paths: ReturnType<typeof resolvePaths>): string {
-  const pair = {
-    codexVersion: "0.152.1",
-    provenance: {
-      source: "prebuilt" as const,
-      cxVersion: "0.1.0",
-      platform: "darwin-arm64",
-      patchSha256: "a".repeat(64),
-      upstreamCommit: "b".repeat(40),
-      sourceCommit: null,
-      sourceDirty: false,
-      installedAt: "2026-09-02T12:00:00.000Z",
-      executables: {
-        codex: digest("GEN-CODEX"),
-        "codex-code-mode-host": digest("GEN-HOST"),
-      },
-    },
-  };
-  const staging = mkdtempSync(join(paths.libexecDir, "staging "));
-  writeFileSync(join(staging, "codex"), "GEN-CODEX");
-  writeFileSync(join(staging, "codex-code-mode-host"), "GEN-HOST");
-  for (const f of ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"]) writeFileSync(join(staging, f), `${f} body`);
-  try {
-    const dir = createGeneration({ ...pair, directory: staging }, paths);
-    swapPointer(paths, dir);
-    return dir;
-  } finally {
-    rmSync(staging, { recursive: true, force: true });
-  }
-}
-
-function digest(text: string): { sha256: string; size: number } {
-  return { sha256: createHash("sha256").update(text).digest("hex"), size: Buffer.byteLength(text) };
+  mkdirSync(paths.libexecDir, { recursive: true });
+  const pair = stagePackage(paths.libexecDir, { codex: "GEN-CODEX", host: "GEN-HOST", cxVersion: "0.1.0", installedAt: "2026-09-02T12:00:00.000Z" });
+  const dir = createGeneration(pair, paths);
+  swapPointer(paths, dir);
+  return dir;
 }
 
 const startup = JSON.stringify({ session_id: "s", cwd: "/", hook_event_name: "SessionStart", source: "startup" });

@@ -9,19 +9,27 @@ export function sha256(buf: Buffer): string {
   return createHash("sha256").update(buf).digest("hex");
 }
 
-/** The five members every published archive must carry, with recognisable bodies. */
-export function releaseEntries(): TarEntry[] {
-  return [
-    { name: "codex", mode: 0o755, data: "CODEX-BINARY" },
-    { name: "codex-code-mode-host", mode: 0o755, data: "HOST-BINARY" },
+/** The members of a published package archive (upstream's layout plus our legal files), with recognisable bodies. */
+export function releaseEntries(codexVersion = "0.153.0", platform: Platform = "darwin-arm64"): TarEntry[] {
+  const target = platform === "darwin-arm64" ? "aarch64-apple-darwin"
+    : platform === "darwin-x64" ? "x86_64-apple-darwin"
+    : platform === "linux-x64" ? "x86_64-unknown-linux-gnu" : "aarch64-unknown-linux-gnu";
+  const entries: TarEntry[] = [
     { name: "LICENSE", mode: 0o644, data: "MIT" },
     { name: "NOTICE", mode: 0o644, data: "NOTICE TEXT" },
     {
       name: "THIRD_PARTY_NOTICES.md",
       mode: 0o644,
-      data: "# Third party\n\n## Rust dependency licenses (generated)\n\n- crate-a 1.0.0 (MIT)\n",
+      data: "# Third party\n\n## Rust dependency licenses (generated)\n\n- crate-a 1.0.0 (MIT)\n\n## Bundled tool licenses\n\n### ripgrep (MIT OR Unlicense)\n\n```\nMIT\n```\n",
     },
+    { name: "bin/codex", mode: 0o755, data: "CODEX-BINARY" },
+    { name: "bin/codex-code-mode-host", mode: 0o755, data: "HOST-BINARY" },
+    { name: "codex-package.json", mode: 0o644, data: `${JSON.stringify({ layoutVersion: 1, version: codexVersion, target, variant: "codex", entrypoint: "bin/codex", resourcesDir: "codex-resources", pathDir: "codex-path" })}\n` },
+    { name: "codex-path/rg", mode: 0o755, data: "RG-BINARY" },
+    { name: "codex-resources/zsh/bin/zsh", mode: 0o755, data: "ZSH-BINARY" },
   ];
+  if (platform.startsWith("linux-")) entries.push({ name: "codex-resources/bwrap", mode: 0o755, data: "BWRAP-BINARY" });
+  return entries;
 }
 
 export interface ReleaseFixture {
@@ -39,7 +47,7 @@ export function releaseFixture(o: {
   entries?: TarEntry[];
 }): ReleaseFixture {
   const platform = o.platform ?? "darwin-arm64";
-  const parts = o.entries ?? releaseEntries();
+  const parts = o.entries ?? releaseEntries(o.codexVersion, platform);
   const archive = gzipSync(tarStream(parts));
   const files = Object.fromEntries(
     parts.map((e) => {
@@ -49,7 +57,8 @@ export function releaseFixture(o: {
   ) as ReleaseManifest["artifacts"][number]["files"];
   const archiveName = `cxstatusline-codex-${o.codexVersion}-${platform}.tar.gz`;
   const manifest: ReleaseManifest = {
-    schema: 1,
+    schema: 3,
+    patchVersion: 2,
     cxVersion: o.cxVersion ?? "0.2.1",
     codexVersion: o.codexVersion,
     upstreamTag: `rust-v${o.codexVersion}`,

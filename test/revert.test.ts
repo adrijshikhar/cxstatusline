@@ -122,9 +122,10 @@ describe("revert", () => {
     const older = join(paths.generationsDir, "0.152.0-20260901T000000-aaaaaa");
     const newer = join(paths.generationsDir, "0.152.1-20260907T121314-bbbbbb");
     for (const gen of [older, newer]) {
-      mkdirSync(gen, { recursive: true });
-      writeFileSync(join(gen, "codex"), "ELF");
-      writeFileSync(join(gen, "codex-code-mode-host"), "HOST");
+      mkdirSync(join(gen, "bin"), { recursive: true });
+      writeFileSync(join(gen, "bin", "codex"), "ELF");
+      writeFileSync(join(gen, "bin", "codex-code-mode-host"), "HOST");
+      writeFileSync(join(gen, "codex-package.json"), "{}");
       writeFileSync(join(gen, "installation.json"), "{}");
     }
     symlinkSync(newer, paths.currentGeneration);

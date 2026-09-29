@@ -1,19 +1,16 @@
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
-import { createHash } from "node:crypto";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { Context } from "../context";
-import { platformFor, type FileDigest, type PreparedPair } from "../distribution";
+import { digestOf } from "../digest";
+import { platformFor, type PreparedPair } from "../distribution";
 import { SOURCE_COMMIT, SOURCE_DIRTY, VERSION } from "../version-info";
 import type { SemVer } from "../version";
-import { buildPatched, type BuildResult } from "./build";
-import { GENERATION_EXECUTABLES } from "./generation";
+import { buildPatched } from "./build";
+import { packageFiles } from "./generation";
+import { assemblePackage, findPython, rustcHostTarget } from "./package-assemble";
 
-/** Where the compiled pair is staged before activation: same filesystem as the generations. */
+/** Where the compiled package is staged before activation: same filesystem as the generations. */
 const STAGING_PREFIX = "compiled-";
-
-function digestOf(file: string): FileDigest {
-  return { sha256: createHash("sha256").update(readFileSync(file)).digest("hex"), size: statSync(file).size };
-}
 
 /**
  * The platform label recorded in the provenance.
@@ -29,47 +26,9 @@ function platformLabel(): string {
 }
 
 /**
- * Copy the two freshly built executables into a private staging directory under `libexecDir`.
- * Why a copy and not the cargo target paths directly: `activatePair` validates and re-hashes a
- * self-contained directory, and the next `cargo build` in that checkout would overwrite the
- * originals underneath us.
- */
-function stage(ctx: Context, built: BuildResult): { directory: string; executables: Record<"codex" | "codex-code-mode-host", FileDigest> } {
-  mkdirSync(ctx.paths.libexecDir, { recursive: true });
-  const directory = mkdtempSync(join(ctx.paths.libexecDir, STAGING_PREFIX));
-  chmodSync(directory, 0o700);
-  const sources: Record<(typeof GENERATION_EXECUTABLES)[number], string> = {
-    codex: built.codex,
-    "codex-code-mode-host": built.codexCodeModeHost,
-  };
-  const executables: Partial<Record<"codex" | "codex-code-mode-host", FileDigest>> = {};
-  // A failed copy or chmod would otherwise leave a half-populated `compiled-*` directory under
-  // `libexecDir` that nothing ever removes, and that `revert` then has to explain. Mirrors
-  // `stageArchive` in src/distribution/prebuilt.ts.
-  try {
-    for (const name of GENERATION_EXECUTABLES) {
-      const target = join(directory, name);
-      copyFileSync(sources[name], target);
-      chmodSync(target, 0o755);
-      executables[name] = digestOf(target);
-    }
-  } catch (e) {
-    rmSync(directory, { recursive: true, force: true });
-    throw e;
-  }
-  return {
-    directory,
-    executables: {
-      codex: executables.codex as FileDigest,
-      "codex-code-mode-host": executables["codex-code-mode-host"] as FileDigest,
-    },
-  };
-}
-
-/**
- * Build the patched pair from source and stage it for activation.
- * The caller owns `pair.directory` and must remove it once `activatePair` has returned - exactly
- * the contract `preparePrebuilt` uses, so both sources converge on one activation path.
+ * Build the patched pair from source, then have upstream's own packager turn it into a package
+ * directory staged for activation. The caller owns `pair.directory` until `activatePair` moves it
+ * into the generations tree - exactly the contract `preparePrebuilt` uses.
  */
 export function prepareCompiled(
   ctx: Context,
@@ -86,16 +45,49 @@ export function prepareCompiled(
     ctx.which,
     onStatus,
   );
-  onStatus?.("stage", "Staging generation and verifying binaries...");
-  const staged = stage(ctx, built);
-  onStatus?.("stage-done", "Generation staged and binaries verified");
+  onStatus?.("stage", "Assembling the Codex package with upstream's packager...");
+  const python = findPython(ctx.which, ctx.run);
+  if (python === null) throw new Error("Python >= 3.10 is required to assemble the Codex package (brew install python / apt install python3)");
+  const cargo = ctx.which("cargo");
+  if (cargo === null) throw new Error("cargo is not on PATH");
+  mkdirSync(ctx.paths.libexecDir, { recursive: true });
+  const directory = mkdtempSync(join(ctx.paths.libexecDir, STAGING_PREFIX));
+  chmodSync(directory, 0o700);
+  // The packager caches its downloads under TMPDIR; a private directory, never a shared /tmp.
+  const tmpDir = mkdtempSync(join(ctx.paths.libexecDir, "download-"));
+  chmodSync(tmpDir, 0o700);
+  let target: string;
+  try {
+    target = rustcHostTarget(ctx.run);
+    assemblePackage({
+      upstream: ctx.paths.sourceDir,
+      target,
+      codexVersion: upstream.raw,
+      codex: built.codex,
+      codeModeHost: built.codexCodeModeHost,
+      packageDir: directory,
+      python,
+      cargo,
+      bwrapBin: process.platform === "linux" ? ctx.which("bwrap") : null,
+      tmpDir,
+      force: false,
+    }, ctx.run, ctx.log);
+  } catch (e) {
+    rmSync(directory, { recursive: true, force: true });
+    throw e;
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true });
+  }
+  const files = packageFiles(directory);
+  onStatus?.("stage-done", "Codex package assembled and verified");
   return {
-    directory: staged.directory,
+    directory,
     codexVersion: upstream.raw,
     provenance: {
       source: "compiled",
       cxVersion: VERSION,
       platform: platformLabel(),
+      target,
       patchVersion: ref.patchVersion,
       patchSha256,
       upstreamCommit: built.upstreamCommit,
@@ -103,7 +95,7 @@ export function prepareCompiled(
       sourceCommit: SOURCE_COMMIT,
       sourceDirty: SOURCE_DIRTY,
       installedAt: ctx.now().toISOString(),
-      executables: staged.executables,
+      files,
     },
   };
 }

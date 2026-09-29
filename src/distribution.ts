@@ -59,7 +59,12 @@ export interface PreparedPair {
     sourceCommit: string | null;
     sourceDirty: boolean;
     installedAt: string;
-    executables: Record<"codex" | "codex-code-mode-host", FileDigest>;
+    /** The Rust triple `codex-package.json` records; what upstream's daemon compares against its own. */
+    target: string;
+    /** Every file of the package, relative path -> digest: what a generation *is*. */
+    files: Record<string, FileDigest>;
+    /** Written by cxstatusline <= 0.10.x records only; superseded by `files`. */
+    executables?: Record<"codex" | "codex-code-mode-host", FileDigest>;
     release?: { tag: string; archiveSha256: string; manifest: ReleaseManifest };
   };
 }

@@ -23,7 +23,7 @@ import {
   wrapperScript,
 } from "../src/patch/wrapper";
 import { readState, writeState } from "../src/state";
-import { tmpEnv } from "./helpers";
+import { stagePackage, tmpEnv } from "./helpers";
 
 /** Give `paths.patchedBin` a body so `ensureWrapper(..., true)` is honest. */
 function makePatchedBin(patchedBin: string): void {
@@ -148,10 +148,6 @@ describe("wrapper", () => {
 
 const LEGAL_FILES = ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"] as const;
 
-function digest(text: string): FileDigest {
-  return { sha256: createHash("sha256").update(text).digest("hex"), size: Buffer.byteLength(text) };
-}
-
 /** A staging directory shaped exactly like the one task 2 hands to `activatePair`. */
 function stagePair(root: string, opts: {
   codex?: string;
@@ -161,28 +157,7 @@ function stagePair(root: string, opts: {
   installedAt?: string;
   legal?: boolean;
 } = {}): PreparedPair {
-  const dir = mkdtempSync(join(root, "staging "));
-  const codex = opts.codex ?? "NEW-CODEX";
-  const host = opts.host ?? "NEW-HOST";
-  writeFileSync(join(dir, "codex"), codex);
-  writeFileSync(join(dir, "codex-code-mode-host"), host);
-  const source = opts.source ?? "prebuilt";
-  if (opts.legal ?? source === "prebuilt") for (const f of LEGAL_FILES) writeFileSync(join(dir, f), `${f} body`);
-  return {
-    directory: dir,
-    codexVersion: opts.version ?? "0.152.1",
-    provenance: {
-      source,
-      cxVersion: "2.0.0",
-      platform: "darwin-arm64",
-      patchSha256: "a".repeat(64),
-      upstreamCommit: "b".repeat(40),
-      sourceCommit: null,
-      sourceDirty: false,
-      installedAt: opts.installedAt ?? "2026-09-07T12:13:14.000Z",
-      executables: { codex: digest(codex), "codex-code-mode-host": digest(host) },
-    },
-  };
+  return stagePackage(root, { ...opts, codex: opts.codex ?? "NEW-CODEX" });
 }
 
 function ctxFor(env: ReturnType<typeof tmpEnv>["env"], cxBin = "/cx"): Context {
@@ -228,7 +203,7 @@ function spacedHome(): { env: ReturnType<typeof tmpEnv>["env"]; root: string; pa
 function assertNeverMixed(paths: ReturnType<typeof resolvePaths>): "stock" | "generation" {
   const active = activeGeneration(paths);
   if (active !== null) {
-    for (const f of ["codex", "codex-code-mode-host", "installation.json"]) {
+    for (const f of ["bin/codex", "bin/codex-code-mode-host", "codex-package.json", "installation.json"]) {
       expect(existsSync(join(active, f))).toBe(true);
     }
   }
@@ -270,16 +245,21 @@ describe("generation activation", () => {
     const active = activeGeneration(paths);
     expect(active).not.toBeNull();
     expect(active?.startsWith(`${paths.generationsDir}/`)).toBe(true);
-    expect(readdirSync(active as string).sort()).toEqual([...LEGAL_FILES, "codex", "codex-code-mode-host", "installation.json"].sort());
+    expect(readdirSync(active as string).sort()).toEqual([...LEGAL_FILES, "bin", "codex", "codex-package.json", "codex-path", "codex-resources", "installation.json"].sort());
+    // The package tree, verbatim; the root `codex` is upstream's own alias onto bin/codex.
+    expect(readFileSync(join(active as string, "bin", "codex"), "utf8")).toBe("NEW-CODEX");
+    expect(readFileSync(join(active as string, "bin", "codex-code-mode-host"), "utf8")).toBe("NEW-HOST");
+    expect(readlinkSync(join(active as string, "codex"))).toBe("bin/codex");
     expect(readFileSync(join(active as string, "codex"), "utf8")).toBe("NEW-CODEX");
-    expect(readFileSync(join(active as string, "codex-code-mode-host"), "utf8")).toBe("NEW-HOST");
-    expect(statSync(join(active as string, "codex")).mode & 0o777).toBe(0o755);
-    expect(statSync(join(active as string, "codex-code-mode-host")).mode & 0o777).toBe(0o755);
+    expect(statSync(join(active as string, "bin", "codex")).mode & 0o777).toBe(0o755);
+    expect(statSync(join(active as string, "bin", "codex-code-mode-host")).mode & 0o777).toBe(0o755);
+    expect(statSync(join(active as string, "codex-package.json")).mode & 0o777).toBe(0o644);
+    expect(statSync(active as string).mode & 0o777).toBe(0o755);
     expect(lstatSync(paths.currentGeneration).isSymbolicLink()).toBe(true);
     expect(isOurWrapper(paths.wrapperPath)).toBe(true);
     expect(readFileSync(paths.wrapperPath, "utf8")).toBe(generationWrapperScript(paths.currentGeneration, "/cx"));
-    // The caller still owns the staging directory.
-    expect(existsSync(pair.directory)).toBe(true);
+    // The staged package was moved, not copied: staging is gone.
+    expect(existsSync(pair.directory)).toBe(false);
     expect(assertNeverMixed(paths)).toBe("generation");
   });
 
@@ -314,7 +294,7 @@ describe("generation activation", () => {
     expect(record).not.toHaveProperty("directory");
     expect(directory).toBe(pair.directory);
     // Compiled pairs carry no legal texts.
-    expect(readdirSync(activeGeneration(paths) as string).sort()).toEqual(["codex", "codex-code-mode-host", "installation.json"]);
+    expect(readdirSync(activeGeneration(paths) as string).sort()).toEqual(["bin", "codex", "codex-package.json", "codex-path", "codex-resources", "installation.json"]);
   });
 
   test("generation metadata stays authoritative when state.json disagrees", () => {
@@ -473,9 +453,9 @@ describe("generation activation", () => {
     const broken: readonly (readonly [string, string])[] = [
       ["truncated json", readFileSync(metadata, "utf8").slice(0, 40)],
       ["only the two fields the old check looked at", JSON.stringify({ codexVersion: "0.152.1", provenance: { source: "prebuilt" } })],
-      ["missing executables", JSON.stringify(withProvenance(whole, { executables: undefined }))],
-      ["short executable digest", JSON.stringify(withProvenance(whole, { executables: { codex: { sha256: "abc", size: 3 }, "codex-code-mode-host": { sha256: "d".repeat(64), size: 3 } } }))],
-      ["zero-size executable", JSON.stringify(withProvenance(whole, { executables: { codex: { sha256: "c".repeat(64), size: 0 }, "codex-code-mode-host": { sha256: "d".repeat(64), size: 3 } } }))],
+      ["short file digest", JSON.stringify(withProvenance(whole, { files: { "bin/codex": { sha256: "abc", size: 3 } } }))],
+      ["zero-size file", JSON.stringify(withProvenance(whole, { files: { "bin/codex": { sha256: "c".repeat(64), size: 0 } } }))],
+      ["target that is not a string", JSON.stringify(withProvenance(whole, { target: 7 }))],
       ["upstreamCommit that is not a 40-hex sha", JSON.stringify(withProvenance(whole, { upstreamCommit: "not-a-sha" }))],
       ["sourceCommit that is neither null nor a sha", JSON.stringify(withProvenance(whole, { sourceCommit: "" }))],
       ["patchSha256 that is not 64 hex", JSON.stringify(withProvenance(whole, { patchSha256: "a".repeat(63) }))],
@@ -494,9 +474,9 @@ describe("generation activation", () => {
   test("a staged pair whose bytes do not match its digests is never published", () => {
     const { env, root, paths } = spacedHome();
     const pair = stagePair(root);
-    writeFileSync(join(pair.directory, "codex"), "TAMPERED");
+    writeFileSync(join(pair.directory, "bin", "codex"), "TAMPERED");
 
-    expect(() => activatePair(pair, ctxFor(env))).toThrow(/codex/);
+    expect(() => activatePair(pair, ctxFor(env))).toThrow(/bin\/codex/);
 
     expect(existsSync(paths.currentGeneration)).toBe(false);
     expect(assertNeverMixed(paths)).toBe("stock");
@@ -507,6 +487,7 @@ describe("generation activation", () => {
     const pair = stagePair(root, { legal: false });
 
     expect(() => activatePair(pair, ctxFor(env))).toThrow(/NOTICE|LICENSE|THIRD_PARTY/);
+    expect(existsSync(pair.directory)).toBe(true); // refused before the move: staging is still the caller's
 
     expect(existsSync(paths.currentGeneration)).toBe(false);
     expect(assertNeverMixed(paths)).toBe("stock");

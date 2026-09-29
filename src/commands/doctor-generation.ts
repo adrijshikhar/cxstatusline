@@ -1,12 +1,13 @@
-import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { Context } from "../context";
 import { platformFor } from "../distribution";
 import type { Paths } from "../paths";
+import { digestOf } from "../digest";
 import {
   GENERATION_LEGAL_FILES,
   activeGeneration,
+  executablePath,
   insideGenerationsRoot,
   isGenerationDir,
   readInstallation,
@@ -113,16 +114,17 @@ function upstreamCommitLine(record: InstallationRecord | null): DoctorLine {
 /** Re-hash one executable from the active generation against the digest the record claims for it. */
 function digestLine(key: "codex" | "codex-code-mode-host", label: string, record: InstallationRecord | null, dir: string | null): DoctorLine {
   if (!record || !dir) return line(label, NO_GENERATION, null);
-  const file = join(dir, key);
+  const file = executablePath(dir, key);
   if (!existsSync(file)) return line(label, "missing", false);
-  let buf: Buffer;
+  let got;
   try {
-    buf = readFileSync(file);
+    got = digestOf(file);
   } catch (e) {
     return line(label, `unreadable: ${(e as Error).message.split("\n")[0]}`, false);
   }
-  const got = { sha256: createHash("sha256").update(buf).digest("hex"), size: buf.length };
-  const want = record.provenance.executables[key];
+  // Package records carry every file; records from cxstatusline <= 0.10.x only the two executables.
+  const want = record.provenance.files?.[`bin/${key}`] ?? record.provenance.executables?.[key];
+  if (!want) return line(label, "no digest recorded", false);
   const verified = got.sha256 === want.sha256 && got.size === want.size;
   return line(label, verified ? "verified" : "MISMATCH", verified);
 }
@@ -130,7 +132,7 @@ function digestLine(key: "codex" | "codex-code-mode-host", label: string, record
 /** Bounded probe of the active generation's own `codex --version`, expecting an exact match. */
 function codexVersionLine(ctx: Context, record: InstallationRecord | null, dir: string | null): DoctorLine {
   if (!record || !dir) return line("codex_version", NO_GENERATION, null);
-  const bin = join(dir, "codex");
+  const bin = executablePath(dir, "codex");
   if (!existsSync(bin)) return line("codex_version", "missing", false);
   let result;
   try {
