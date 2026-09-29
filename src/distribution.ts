@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { FileDigest } from "./digest";
 import { ARTIFACT_FILES, type ArtifactFile } from "./distribution/files";
 import { parseSemver } from "./version";
 
@@ -7,22 +8,25 @@ import { parseSemver } from "./version";
 export type Platform = "darwin-arm64" | "darwin-x64" | "linux-x64" | "linux-arm64";
 
 export type { ArtifactFile };
+export type { FileDigest } from "./digest";
 
-export interface FileDigest {
-  sha256: string;
-  size: number;
-}
+/** One archive member: its digest. Modes are a function of the path (`modeFor`), never stored. */
+export type ArchiveEntry = FileDigest;
 
 export interface Artifact {
   platform: Platform;
   filename: string;
   sha256: string;
   size: number;
-  files: Record<ArtifactFile, FileDigest>;
+  /**
+   * Schema 3: every member path, relative to the package root (`bin/codex`, `codex-path/rg`, ...).
+   * Schema 1/2: exactly the five flat basenames.
+   */
+  files: Record<ArtifactFile, ArchiveEntry> & Record<string, ArchiveEntry>;
 }
 
 export interface ReleaseManifest {
-  schema: 1 | 2;
+  schema: 1 | 2 | 3;
   patchVersion?: number;
   cxVersion?: string;
   codexVersion: string;
@@ -75,6 +79,46 @@ export const DEFAULT_PREBUILT_PLATFORMS: readonly Platform[] = ["darwin-arm64", 
 /** Spec archive name: `cxstatusline-codex-<codexVersion>-<platform>.tar.gz`. */
 const ARCHIVE_PREFIX = "cxstatusline-codex";
 
+// ---- Package layout (schema 3) ----
+
+/**
+ * The Rust target triple upstream's daemon compares `codex-package.json.target` against
+ * (`codex-rs/app-server-daemon/src/prepare_install.rs`, `platform_target()`). Linux is gnu because
+ * `scripts/build-prebuilt-docker.sh` builds gnu targets; upstream's own Linux default is musl.
+ */
+export function codexTarget(platform: Platform): string {
+  switch (platform) {
+    case "darwin-arm64": return "aarch64-apple-darwin";
+    case "darwin-x64": return "x86_64-apple-darwin";
+    case "linux-x64": return "x86_64-unknown-linux-gnu";
+    case "linux-arm64": return "aarch64-unknown-linux-gnu";
+  }
+}
+
+/** Nested member paths a package archive may carry: exactly the three upstream directories. */
+export const PACKAGE_PATH = /^(bin|codex-path|codex-resources)(\/[A-Za-z0-9][A-Za-z0-9._+-]*){1,4}$/;
+/** Root members a package archive may carry. */
+export const PACKAGE_ROOT_FILES: readonly string[] = ["codex-package.json", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"];
+/** 8 keys on macOS and 9 on Linux today; the cap only bounds a hostile manifest. */
+export const PACKAGE_MAX_FILES = 64;
+
+/** Members every package archive must carry for `platform` (upstream's `validate_package` plus our legal texts). */
+export function packageRequiredFiles(platform: Platform): readonly string[] {
+  const base = ["codex-package.json", "bin/codex", "bin/codex-code-mode-host", "codex-path/rg", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"];
+  return platform.startsWith("linux-") ? [...base, "codex-resources/bwrap"] : base;
+}
+
+/**
+ * The only mode rule anywhere: executables live under the three package directories (upstream sets
+ * +x on every file it puts there); everything at the root is text. The two flat basenames are the
+ * pre-package layout's executables.
+ */
+export function modeFor(path: string): 0o755 | 0o644 {
+  if (/^(bin|codex-path|codex-resources)\//.test(path)) return 0o755;
+  if (path === "codex" || path === "codex-code-mode-host") return 0o755;
+  return 0o644;
+}
+
 const HEX40 = /^[0-9a-f]{40}$/;
 const HEX64 = /^[0-9a-f]{64}$/;
 const ISO_8601 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
@@ -119,11 +163,7 @@ const FileDigestSchema = z
   })
   .strict();
 
-const filesShape = Object.fromEntries(ARTIFACT_FILES.map((k) => [k, FileDigestSchema])) as Record<
-  ArtifactFile,
-  typeof FileDigestSchema
->;
-const FilesSchema = z.object(filesShape).strict();
+const FilesSchema = z.record(z.string(), FileDigestSchema);
 
 const ArtifactSchema = z
   .object({
@@ -137,7 +177,7 @@ const ArtifactSchema = z
 
 const ManifestShapeSchema = z
   .object({
-    schema: z.union([z.literal(1), z.literal(2)]),
+    schema: z.union([z.literal(1), z.literal(2), z.literal(3)]),
     patchVersion: z.number().refine(safePositiveInt).optional(),
     cxVersion: z.string().optional(),
     codexVersion: z.string(),
@@ -158,11 +198,43 @@ type ManifestShape = z.infer<typeof ManifestShapeSchema>;
 // Zod validates structure; these rules require `expected` and cross-field agreement
 // (release identity), which is not expressible as static per-field schema alone.
 
+/** Schema 1/2: exactly the five flat basenames. */
+function checkFlatFiles(files: Record<string, unknown>): string | null {
+  const keys = Object.keys(files);
+  for (const name of ARTIFACT_FILES) if (!(name in files)) return `files is missing ${name}`;
+  for (const key of keys) if (!(ARTIFACT_FILES as readonly string[]).includes(key)) return `files has unexpected member ${key}`;
+  return null;
+}
+
+/**
+ * Schema 3: every key is a package path, the required set for the artifact's own platform is
+ * present, and no two keys can collide on disk (one a directory prefix of another, or two names
+ * that differ only by case on a case-insensitive filesystem).
+ */
+function checkPackageFiles(platform: Platform, files: Record<string, unknown>): string | null {
+  const keys = Object.keys(files);
+  if (keys.length > PACKAGE_MAX_FILES) return `files lists more than ${PACKAGE_MAX_FILES} members`;
+  for (const key of keys) {
+    if (!PACKAGE_PATH.test(key) && !PACKAGE_ROOT_FILES.includes(key)) return `files has unexpected member ${key}`;
+  }
+  for (const name of packageRequiredFiles(platform)) if (!(name in files)) return `files is missing ${name}`;
+  const lower = new Set<string>();
+  for (const key of keys) {
+    const folded = key.toLowerCase();
+    if (lower.has(folded)) return `files has members that differ only by case: ${key}`;
+    lower.add(folded);
+    for (const other of keys) if (other !== key && other.startsWith(`${key}/`)) return `files member ${key} is also a directory of ${other}`;
+  }
+  return null;
+}
+
 function checkArtifacts(m: ManifestShape, expected: ExpectedRelease): string | null {
   const seen = new Set<Platform>();
   for (const artifact of m.artifacts) {
     if (seen.has(artifact.platform)) return "duplicate platform in artifacts";
     seen.add(artifact.platform);
+    const files = m.schema === 3 ? checkPackageFiles(artifact.platform, artifact.files) : checkFlatFiles(artifact.files);
+    if (files) return files;
 
     if (artifact.filename.includes("/") || artifact.filename.includes("\\") || artifact.filename.includes("..")) {
       return "artifact filename contains illegal path characters";
@@ -175,8 +247,8 @@ function checkArtifacts(m: ManifestShape, expected: ExpectedRelease): string | n
 }
 
 function checkBusinessRules(m: ManifestShape, expected: ExpectedRelease): string | null {
-  if (m.schema === 2 && m.patchVersion === undefined) return "patchVersion is required for schema 2";
-  if (m.schema === 1 && m.patchVersion !== undefined) return "patchVersion requires schema 2";
+  if (m.schema >= 2 && m.patchVersion === undefined) return `patchVersion is required for schema ${m.schema}`;
+  if (m.schema === 1 && m.patchVersion !== undefined) return "patchVersion requires schema 2 or later";
   if (m.cxVersion !== undefined && !isStableVersion(m.cxVersion)) {
     return "cxVersion is not a valid semver";
   }
@@ -184,7 +256,7 @@ function checkBusinessRules(m: ManifestShape, expected: ExpectedRelease): string
     return "codexVersion does not match expected release";
   }
   if (m.upstreamTag !== `rust-v${m.codexVersion}`) return "upstreamTag does not match codexVersion";
-  if (m.schema === 2 && !/^[a-zA-Z0-9][a-zA-Z0-9._-]*\.patch$/.test(m.patchFile)) return "patchFile must be a patch basename";
+  if (m.schema >= 2 && !/^[a-zA-Z0-9][a-zA-Z0-9._-]*\.patch$/.test(m.patchFile)) return "patchFile must be a patch basename";
   if (m.schema === 1 && m.patchFile !== `codex-${m.codexVersion}.patch`) return "patchFile does not match codexVersion";
   if (Number.isNaN(Date.parse(m.createdAt))) return "createdAt is not a valid timestamp";
   return checkArtifacts(m, expected);
@@ -201,6 +273,12 @@ export function validateManifest(raw: unknown, expected: ExpectedRelease): Relea
   }
   if (!PLATFORMS.includes(expected.platform)) {
     throw new Error("validateManifest: expected release platform is not supported");
+  }
+
+  // Decided before the strict parse, so the message names the fix instead of a zod path.
+  const rawSchema = typeof raw === "object" && raw !== null ? (raw as { schema?: unknown }).schema : undefined;
+  if (typeof rawSchema === "number" && rawSchema > 3) {
+    throw new Error(`this release needs a newer cxstatusline (manifest schema ${rawSchema}); run npm i -g cxstatusline`);
   }
 
   const structural = ManifestShapeSchema.safeParse(raw);
