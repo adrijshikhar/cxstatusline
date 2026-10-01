@@ -92,14 +92,14 @@ describe("planUploads", () => {
 
 describe("compareIdentity", () => {
   test("same bytes with a different revision are not the same release", () => {
-    const manifest = releaseFixture({ codexVersion: "0.153.0" }).manifest;
-    const expected = { sourceCommit: manifest.sourceCommit, patchSha256: manifest.patchSha256, patchVersion: 2 };
+    const manifest = releaseFixture({ codexVersion: "0.153.0" }).manifest; // patchVersion 2
+    const expected = { sourceCommit: manifest.sourceCommit, patchSha256: manifest.patchSha256, patchVersion: 3 };
     expect(compareIdentity(manifest, expected).identical).toBe(false);
-    expect(compareIdentity({ ...manifest, schema: 2, patchVersion: 2 }, expected).identical).toBe(true);
+    expect(compareIdentity({ ...manifest, patchVersion: 3 }, expected).identical).toBe(true);
   });
   test("accepts a manifest built from the same commit and patch", async () => {
     const manifest = JSON.parse(readFileSync(join(await releaseDir(), "manifest.json"), "utf8"));
-    expect(compareIdentity(manifest, { sourceCommit: SOURCE, patchSha256: PATCH_SHA }).identical).toBe(true);
+    expect(compareIdentity(manifest, { sourceCommit: SOURCE, patchSha256: PATCH_SHA, patchVersion: 2 }).identical).toBe(true);
   });
 
   test("reports a differing sourceCommit and names both values", async () => {

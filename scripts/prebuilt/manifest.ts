@@ -3,7 +3,7 @@
  * installer's own `validateManifest`; this module only assembles the values, so there is never a
  * second copy of the schema to drift.
  */
-import type { ArtifactFile, FileDigest, Platform, ReleaseManifest } from "../../src/distribution";
+import type { FileDigest, Platform, ReleaseManifest } from "../../src/distribution";
 import { archiveFilename } from "./pack";
 
 export interface ManifestInput {
@@ -12,7 +12,7 @@ export interface ManifestInput {
   readonly platform: Platform;
   /** `git rev-parse HEAD` of the patched upstream checkout. */
   readonly upstreamCommit: string;
-  readonly patchVersion?: number;
+  readonly patchVersion: number;
   readonly patchFile?: string;
   readonly patchSha256: string;
   /** The frozen commit the build was checked out at - never `GITHUB_SHA`. See `sourceCommit`. */
@@ -20,17 +20,15 @@ export interface ManifestInput {
   readonly workflowUrl: string;
   readonly createdAt: string;
   readonly archive: FileDigest;
-  readonly files: Record<ArtifactFile, FileDigest>;
+  /** Every archive member path with its digest. */
+  readonly files: Record<string, FileDigest>;
 }
 
-/**
- * Build a single-platform manifest. Versioned builds carry the resolved patch file;
- * legacy inputs retain the original per-Codex filename convention.
- */
+/** Build a single-platform package manifest (schema 3). */
 export function buildManifest(input: ManifestInput): ReleaseManifest {
   return {
-    schema: input.patchVersion === undefined ? 1 : 2,
-    ...(input.patchVersion === undefined ? {} : { patchVersion: input.patchVersion }),
+    schema: 3,
+    patchVersion: input.patchVersion,
     cxVersion: input.cxVersion,
     codexVersion: input.codexVersion,
     upstreamTag: `rust-v${input.codexVersion}`,

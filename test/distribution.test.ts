@@ -7,8 +7,7 @@ import {
   type ExpectedRelease,
   type FileDigest,
   type Platform,
-  type ReleaseManifest,
-} from "../src/distribution";
+  type ReleaseManifest, packageRequiredFiles } from "../src/distribution";
 
 test("exact immutable identity and supported CPU only", () => {
   expect(releaseTag("0.153.0")).toBe("codex-v0.153.0");
@@ -40,14 +39,10 @@ function digest(sha: string, size = 1024): FileDigest {
   return { sha256: sha, size };
 }
 
-function filesFor(sha: string): Artifact["files"] {
-  return {
-    codex: digest(sha),
-    "codex-code-mode-host": digest(sha),
-    LICENSE: digest(sha),
-    NOTICE: digest(sha),
-    "THIRD_PARTY_NOTICES.md": digest(sha),
-  };
+function filesFor(sha: string, platform: Platform = "darwin-arm64"): Artifact["files"] {
+  const files: Artifact["files"] = { "codex-resources/zsh/bin/zsh": digest(sha) };
+  for (const name of packageRequiredFiles(platform)) files[name] = digest(sha);
+  return files;
 }
 
 function artifactFor(platform: Platform, sha: string): Artifact {
@@ -56,13 +51,14 @@ function artifactFor(platform: Platform, sha: string): Artifact {
     filename: `cxstatusline-codex-${CODEX}-${platform}.tar.gz`,
     sha256: sha,
     size: 2048,
-    files: filesFor(sha),
+    files: filesFor(sha, platform),
   };
 }
 
 function validManifest(): ReleaseManifest {
   return {
-    schema: 1,
+    schema: 3,
+    patchVersion: 2,
     cxVersion: CX,
     codexVersion: CODEX,
     upstreamTag: `rust-v${CODEX}`,
@@ -117,7 +113,9 @@ type Mutator = (m: ReleaseManifest) => unknown;
 
 const cases: Array<{ name: string; mutate: Mutator }> = [
   { name: "missing schema", mutate: (m) => { delete (m as unknown as Record<string, unknown>).schema; } },
-  { name: "unknown schema version", mutate: (m) => { (m as { schema: number }).schema = 2; } },
+  { name: "unknown schema version", mutate: (m) => { (m as { schema: number }).schema = 4; } },
+  { name: "pre-package schema", mutate: (m) => { (m as { schema: number }).schema = 2; } },
+  { name: "missing patchVersion", mutate: (m) => { delete (m as unknown as Record<string, unknown>).patchVersion; } },
   { name: "cxVersion not stable (prerelease)", mutate: (m) => { m.cxVersion = "0.2.1-beta.1"; } },
   { name: "missing codexVersion", mutate: (m) => { delete (m as unknown as Record<string, unknown>).codexVersion; } },
   { name: "codexVersion mismatched with expected", mutate: (m) => { m.codexVersion = "0.153.1"; } },
@@ -129,7 +127,6 @@ const cases: Array<{ name: string; mutate: Mutator }> = [
   { name: "upstreamCommit wrong length", mutate: (m) => { m.upstreamCommit = "c".repeat(39); } },
   { name: "upstreamCommit uppercase hex", mutate: (m) => { m.upstreamCommit = "C".repeat(40); } },
   { name: "missing patchFile", mutate: (m) => { delete (m as unknown as Record<string, unknown>).patchFile; } },
-  { name: "patchFile wrong version", mutate: (m) => { m.patchFile = "codex-0.999.0.patch"; } },
   { name: "missing patchSha256", mutate: (m) => { delete (m as unknown as Record<string, unknown>).patchSha256; } },
   { name: "patchSha256 malformed", mutate: (m) => { m.patchSha256 = "not-a-hash"; } },
   { name: "missing sourceCommit", mutate: (m) => { delete (m as unknown as Record<string, unknown>).sourceCommit; } },
@@ -200,7 +197,7 @@ const cases: Array<{ name: string; mutate: Mutator }> = [
   },
   {
     name: "artifact missing companion executable file (codex-code-mode-host)",
-    mutate: (m) => { delete (m.artifacts[0]!.files as Record<string, unknown>)["codex-code-mode-host"]; },
+    mutate: (m) => { delete (m.artifacts[0]!.files as Record<string, unknown>)["bin/codex-code-mode-host"]; },
   },
   {
     name: "artifact missing legal file (LICENSE)",
@@ -212,7 +209,7 @@ const cases: Array<{ name: string; mutate: Mutator }> = [
   },
   {
     name: "artifact file digest sha256 malformed",
-    mutate: (m) => { m.artifacts[0]!.files.codex.sha256 = "nope"; },
+    mutate: (m) => { m.artifacts[0]!.files["bin/codex"]!.sha256 = "nope"; },
   },
 ];
 
@@ -225,14 +222,13 @@ for (const { name, mutate } of cases) {
 }
 
 
-test("versioned release manifests require a valid revision; legacy remains readable", () => {
-  const legacy = validManifest();
-  expect(validateManifest(legacy, EXPECTED_ARM).patchVersion).toBeUndefined();
-  const versioned = { ...legacy, schema: 2, patchVersion: 2, patchFile: "codex-0.152.1.patch" };
-  expect(validateManifest(versioned, EXPECTED_ARM).patchVersion).toBe(2);
+test("patchVersion must be a positive integer; a pre-package manifest names the fix", () => {
+  const manifest = validManifest();
+  expect(validateManifest(manifest, EXPECTED_ARM).patchVersion).toBe(2);
   for (const patchVersion of [undefined, 0, -1, 1.5, "2"]) {
-    expect(() => validateManifest({ ...versioned, patchVersion }, EXPECTED_ARM)).toThrow();
+    expect(() => validateManifest({ ...manifest, patchVersion }, EXPECTED_ARM)).toThrow();
   }
-  expect(() => validateManifest({ ...legacy, patchVersion: 1 }, EXPECTED_ARM)).toThrow();
-  expect(() => validateManifest({ ...versioned, patchFile: "../evil.patch" }, EXPECTED_ARM)).toThrow();
+  expect(() => validateManifest({ ...manifest, patchFile: "../evil.patch" }, EXPECTED_ARM)).toThrow();
+  expect(() => validateManifest({ ...manifest, schema: 2 }, EXPECTED_ARM)).toThrow(/predates cxstatusline 0\.11 and has not been republished yet/);
+  expect(() => validateManifest({ ...manifest, schema: 4 }, EXPECTED_ARM)).toThrow(/needs a newer cxstatusline/);
 });

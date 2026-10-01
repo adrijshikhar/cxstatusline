@@ -42,6 +42,9 @@ env:
   MACOSX_DEPLOYMENT_TARGET: "14.0"
   CARGO_BUILD_JOBS: "3"
   CARGO_PROFILE_RELEASE_DEBUG: "0"
+  # Compiled objects cached across Codex versions on the M5 (`brew install sccache`).
+  RUSTC_WRAPPER: sccache
+  SCCACHE_DIR: ${{ github.workspace }}/../../sccache
 
 jobs:
   # Resolves every release input once, so no later job re-derives the version or the tag.
@@ -232,6 +235,16 @@ jobs:
             cd upstream/codex-rs
             rustup show active-toolchain
           } 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
+      # Upstream's packager (`scripts/build_codex_package.py`) needs Python >= 3.10; macOS CLT ships 3.9.
+      - name: Check packager prerequisites
+        if: ${{ runner.os != 'macOS' || !startsWith(matrix.platform, 'linux-') }}
+        run: |
+          set -o pipefail
+          {
+            command -v sccache >/dev/null || { echo "::error::sccache not found in PATH (brew install sccache)"; exit 1; }
+            python3 --version
+            python3 -c 'import sys; sys.exit(sys.version_info < (3, 10))' || { echo "::error::python3 >= 3.10 is required (brew install python)"; exit 1; }
+          } 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
       - name: Focused patched Rust tests
         if: ${{ runner.os != 'macOS' || !startsWith(matrix.platform, 'linux-') }}
         working-directory: upstream
@@ -245,12 +258,24 @@ jobs:
           set -o pipefail
           cargo build --release -p codex-cli --bin codex \
             -p codex-code-mode-host --bin codex-code-mode-host 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
+          sccache --show-stats 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log" || true
       - name: Audit Rust dependency licenses and generate notices
         if: ${{ runner.os != 'macOS' || !startsWith(matrix.platform, 'linux-') }}
         run: |
           set -o pipefail
           bun scripts/prebuilt.ts rust-notices --upstream "$GITHUB_WORKSPACE/upstream" \
             --out "$RUNNER_TEMP/rust-notices.md" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
+      # Upstream's own packager lays out `bin/`, `codex-path/rg`, `codex-resources/`, `codex-package.json`
+      # from the two patched binaries; `package` then adds the legal files and packs that tree.
+      - name: Assemble the Codex package
+        if: ${{ runner.os != 'macOS' || !startsWith(matrix.platform, 'linux-') }}
+        run: |
+          set -o pipefail
+          bun scripts/prebuilt.ts assemble \
+            --upstream "$GITHUB_WORKSPACE/upstream" \
+            --codex-version "$CODEX_VERSION" \
+            --platform "$PLATFORM" \
+            --out "$RUNNER_TEMP/staging" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
       # `out/` ends up holding exactly the three release assets; nothing else may be added to it.
       - name: Package release assets
         if: ${{ runner.os != 'macOS' || !startsWith(matrix.platform, 'linux-') }}

@@ -58,6 +58,24 @@ function ctx(over: Options = {}) {
       return { stdout: `codex-cli ${version}\n` };
     }
     if (cmd === "git" && args.includes("rev-parse")) return { stdout: `${UPSTREAM_COMMIT}\n` };
+    if (cmd === "rustc" && args[0] === "-vV") return { stdout: "rustc 1.95.0\nhost: aarch64-apple-darwin\n" };
+    if (args[0] === "-c" && String(args[1]).includes("sys.version_info")) return {};
+    if (String(args[0]).endsWith("build_codex_package.py")) {
+      // Upstream's packager, faked: lay out the package from the two built binaries.
+      const flag = (name: string) => args[args.indexOf(name) + 1]!;
+      const dir = flag("--package-dir");
+      const put = (name: string, body: string) => {
+        mkdirSync(join(dir, name, ".."), { recursive: true });
+        writeFileSync(join(dir, name), body);
+        chmodSync(join(dir, name), 0o755);
+      };
+      put("bin/codex", readFileSync(flag("--entrypoint-bin"), "utf8"));
+      put("bin/codex-code-mode-host", readFileSync(flag("--code-mode-host-bin"), "utf8"));
+      put("codex-path/rg", "RG");
+      put("codex-resources/zsh/bin/zsh", "ZSH");
+      writeFileSync(join(dir, "codex-package.json"), JSON.stringify({ layoutVersion: 1, version: flag("--package-version"), target: flag("--target"), variant: "codex", entrypoint: "bin/codex", resourcesDir: "codex-resources", pathDir: "codex-path" }));
+      return {};
+    }
     if (cmd === "rustup" && args[0] === "toolchain") return { stdout: `${REQUIRED_TOOLCHAIN}-aarch64-apple-darwin\n` };
     if (cmd === "rustup" && args[0] === "component") return { stdout: "cargo\nclippy\nrust-src\nrustfmt\n" };
     if (cmd === "cargo" && args[0] === "build") {
@@ -76,7 +94,7 @@ function ctx(over: Options = {}) {
   });
   const c: Context = {
     env, paths, run,
-    which: over.which ?? ((cmd) => (cmd === "just" ? null : `/usr/bin/${cmd}`)),
+    which: over.which ?? ((cmd) => (cmd === "just" || cmd === "bwrap" ? null : `/usr/bin/${cmd}`)),
     freeBytes: over.freeBytes ?? (() => MIN_FREE_BYTES * 2),
     cxBin: join(paths.binDir, "cxstatusline"),
     patchesDir,
@@ -91,7 +109,7 @@ function ctx(over: Options = {}) {
 function activePair(paths: ReturnType<typeof resolvePaths>): { codex: string; host: string } {
   const dir = activeGeneration(paths);
   if (dir === null) throw new Error("no active generation");
-  return { codex: readFileSync(join(dir, "codex"), "utf8"), host: readFileSync(join(dir, "codex-code-mode-host"), "utf8") };
+  return { codex: readFileSync(join(dir, "bin", "codex"), "utf8"), host: readFileSync(join(dir, "bin", "codex-code-mode-host"), "utf8") };
 }
 
 /** Everything under libexec that is not the pointer or the generations tree. */
@@ -547,7 +565,7 @@ describe("runInstall", () => {
 describe("runUpdate", () => {
   test("updates a same-version release generation and preserves it across mixed or interrupted assets", async () => {
     const old = releaseFixture({ cxVersion: VERSION, codexVersion: CODEX });
-    const changedEntries = releaseEntries().map((entry) => entry.name === "codex" ? { ...entry, data: "CODEX-BINARY-REBUILT" } : entry);
+    const changedEntries = releaseEntries(CODEX).map((entry) => entry.name === "bin/codex" ? { ...entry, data: "CODEX-BINARY-REBUILT" } : entry);
     const generated = releaseFixture({ cxVersion: VERSION, codexVersion: CODEX, entries: changedEntries });
     const next = { ...generated, manifest: { ...generated.manifest, patchSha256: "f".repeat(64) } };
     const routes: Record<string, Route> = { ...routesFor(old) };

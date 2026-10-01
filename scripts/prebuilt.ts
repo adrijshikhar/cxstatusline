@@ -7,6 +7,7 @@
  * call in the other `scripts/prebuilt/*` modules, and `./prebuilt/api` re-exports the tested
  * surface so `test/prebuilt*.test.ts` has one import path.
  */
+import { runAssemble } from "./prebuilt/cli-assemble";
 import { runBuild, runMerge, runPackage, runRustNotices, runVerify } from "./prebuilt/cli-build";
 import { runDetect } from "./prebuilt/cli-detect";
 import { runBackup, runPublish, runReportCommand, runRestore } from "./prebuilt/cli-publish";
@@ -24,9 +25,10 @@ const USAGE = [
   "               [--releases-file FILE] [--source-releases-file FILE]",
   "  build        --codex-version X.Y.Z --upstream DIR",
   "  rust-notices --upstream DIR --out FILE",
+  "  assemble     --upstream DIR --codex-version X.Y.Z --out DIR [--platform P] [--python BIN]",
   "  package      --codex-version X.Y.Z [--cx-version X.Y.Z] --source-commit SHA --upstream DIR --staging DIR",
   "               --out DIR --rust-notices FILE [--workflow-url URL] [--platform P]",
-  "  verify       --out DIR --codex-version X.Y.Z [--cx-version X.Y.Z] [--platform P] [--skip-macho]",
+  "  verify       --out DIR --codex-version X.Y.Z [--cx-version X.Y.Z] [--platform P] [--skip-macho] [--skip-daemon]",
   "  merge        --inputs DIR[,DIR...] --out DIR --platforms P[,P...]",
   "  publish      --tag TAG --dir DIR --run-id ID --run-url URL --source-commit SHA",
   "               --codex-version X.Y.Z --backup-dir DIR [--cx-version X.Y.Z] [--event NAME] [--platforms P]",
@@ -45,6 +47,7 @@ if (import.meta.main) {
     if (command === "detect") await runDetect(flags);
     else if (command === "build") await runBuild(flags);
     else if (command === "rust-notices") await runRustNotices(flags);
+    else if (command === "assemble") await runAssemble(flags);
     else if (command === "package") await runPackage(flags);
     else if (command === "verify") await runVerify(flags);
     else if (command === "merge") await runMerge(flags);

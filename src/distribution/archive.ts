@@ -1,8 +1,9 @@
-import { createReadStream, createWriteStream, type WriteStream } from "node:fs";
-import { join } from "node:path";
+import { createReadStream, createWriteStream, mkdirSync, type WriteStream } from "node:fs";
+import { dirname, join } from "node:path";
 import { createGunzip } from "node:zlib";
 import { Parser, type ReadEntry } from "tar";
-import { ARTIFACT_FILES, GENERATION_EXECUTABLES } from "./files";
+import type { ArchiveEntry } from "../distribution";
+import { modeFor } from "../distribution";
 
 /**
  * Parse-only tar handling: `tar.Parser` hands us type, name, size and mode of every entry *before*
@@ -10,8 +11,8 @@ import { ARTIFACT_FILES, GENERATION_EXECUTABLES } from "./files";
  * `tar.x`/`extract` would write first and ask later, so it is never used here.
  */
 
-/** Exactly what a release archive may contain - basenames only, regular files only. */
-const ALLOWED = ARTIFACT_FILES;
+/** What the caller expects to find: the manifest's `files` map (exact paths, declared sizes). */
+type Expected = Readonly<Record<string, ArchiveEntry>>;
 
 /** Untrusted archive metadata is only ever compared against these; it never sets them. */
 export const EXTRACTED_TOTAL_LIMIT = 2 * 1024 * 1024 * 1024;
@@ -21,7 +22,7 @@ const EXECUTABLE_MODE = 0o755;
 const LEGAL_MODE = 0o644;
 
 function isExecutable(name: string): boolean {
-  return (GENERATION_EXECUTABLES as readonly string[]).includes(name);
+  return modeFor(name) === 0o755;
 }
 
 /** Archive-controlled text must never reach a message unbounded or with control characters. */
@@ -43,21 +44,24 @@ interface Budget {
  * Everything decided from the header alone. Returns the reason to reject, or null to accept.
  * Sizes here are *declared* - the write below still refuses an entry whose body does not match.
  */
-function rejectionReason(entry: ReadEntry, seen: Set<string>, budget: Budget): string | null {
+function rejectionReason(entry: ReadEntry, seen: Set<string>, budget: Budget, expected: Expected): string | null {
   const name = entry.path;
   if (entry.type !== "File") {
     return `archive entry ${quoteName(name)} is a ${entry.type}, not a regular file`;
   }
   // `entry.path` only normalises Windows separators, so the header name is compared verbatim:
-  // "../evil", "/etc/passwd", "bin/codex" and "./" all fail this membership test.
-  if (!(ALLOWED as readonly string[]).includes(name) || entry.header.path !== name) {
-    return `archive entry ${quoteName(name)} is not one of the five expected files`;
+  // "../evil", "/etc/passwd", "./" and any path the manifest did not list all fail this test.
+  if (!Object.hasOwn(expected, name) || entry.header.path !== name) {
+    return `archive entry ${quoteName(name)} is not listed in the release manifest`;
   }
   if (seen.has(name)) return `archive contains ${quoteName(name)} more than once`;
   if (entry.linkpath) return `archive entry ${quoteName(name)} carries a link target`;
 
   const size = entry.size;
   if (!Number.isSafeInteger(size) || size < 0) return `archive entry ${quoteName(name)} declares an unusable size`;
+  if (size !== expected[name]!.size) {
+    return `archive entry ${quoteName(name)} declares ${size} bytes but the manifest records ${expected[name]!.size}`;
+  }
   const executable = isExecutable(name);
   if (executable && size === 0) return `archive entry ${quoteName(name)} is an empty executable`;
   const mode = entry.mode ?? entry.header.mode ?? 0;
@@ -80,12 +84,16 @@ interface Write {
   abort(cause: Error): void;
 }
 
-function writeEntry(entry: ReadEntry, staging: string): Write {
+function writeEntry(entry: ReadEntry, staging: string, expected: Expected): Write {
   const name = entry.path;
   const mode = isExecutable(name) ? EXECUTABLE_MODE : LEGAL_MODE;
+  // Nested members (`bin/codex`) need their directory; the name already passed the manifest's
+  // path rules, so this can only create directories inside `staging`.
+  const target = join(staging, name);
+  if (name.includes("/")) mkdirSync(dirname(target), { recursive: true });
   // "wx": a name is only ever written once, so a duplicate slipping past the check still cannot
   // overwrite bytes that were already verified.
-  const sink: WriteStream = createWriteStream(join(staging, name), { mode, flags: "wx" });
+  const sink: WriteStream = createWriteStream(target, { mode, flags: "wx" });
   const done = new Promise<void>((resolve, reject) => {
     sink.on("error", reject);
     entry.on("error", reject);
@@ -108,7 +116,7 @@ function writeEntry(entry: ReadEntry, staging: string): Write {
 }
 
 /** Drive the gunzip -> parse pipeline, accepting or rejecting each entry from its header alone. */
-function parseArchive(archivePath: string, staging: string, writes: Write[]): Promise<void> {
+function parseArchive(archivePath: string, staging: string, writes: Write[], expected: Expected): Promise<void> {
   const seen = new Set<string>();
   const budget: Budget = { total: 0, legal: 0 };
   return new Promise<void>((resolve, reject) => {
@@ -131,14 +139,14 @@ function parseArchive(archivePath: string, staging: string, writes: Write[]): Pr
         entry.resume();
         return;
       }
-      const reason = rejectionReason(entry, seen, budget);
+      const reason = rejectionReason(entry, seen, budget, expected);
       if (reason !== null) {
         fail(new Error(reason));
         entry.resume();
         return;
       }
       seen.add(entry.path);
-      writes.push(writeEntry(entry, staging));
+      writes.push(writeEntry(entry, staging, expected));
     });
     parser.on("error", fail);
     gunzip.on("error", fail);
@@ -146,7 +154,7 @@ function parseArchive(archivePath: string, staging: string, writes: Write[]): Pr
     parser.on("end", () => {
       if (settled) return;
       settled = true;
-      const missing = ALLOWED.filter((name) => !seen.has(name));
+      const missing = Object.keys(expected).filter((name) => !seen.has(name));
       if (missing.length > 0) {
         reject(new Error(`archive is missing ${missing.join(", ")}`));
         return;
@@ -158,14 +166,16 @@ function parseArchive(archivePath: string, staging: string, writes: Write[]): Pr
 }
 
 /**
- * Gunzip `archivePath` with node:zlib, validate every tar entry against the five-file allowlist,
- * and write the accepted files into `staging`. Rejects on the first violation; the caller owns
- * removing `staging` afterwards.
+ * Gunzip `archivePath` with node:zlib, validate every tar entry against `files` (the release
+ * manifest's member map: exact paths, declared sizes, executable bit iff `modeFor` says so), and
+ * write the accepted files into `staging`. Rejects on the first violation; the caller owns removing
+ * `staging` afterwards.
  */
-export async function extractArchive(archivePath: string, staging: string): Promise<void> {
+export async function extractArchive(archivePath: string, staging: string, files: Readonly<Record<string, ArchiveEntry>>): Promise<void> {
+  const expected: Expected = files;
   const writes: Write[] = [];
   try {
-    await parseArchive(archivePath, staging, writes);
+    await parseArchive(archivePath, staging, writes, expected);
   } catch (e) {
     await Promise.allSettled(writes.map((w) => w.done));
     throw e;

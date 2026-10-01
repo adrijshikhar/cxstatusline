@@ -122,9 +122,10 @@ describe("revert", () => {
     const older = join(paths.generationsDir, "0.152.0-20260901T000000-aaaaaa");
     const newer = join(paths.generationsDir, "0.152.1-20260907T121314-bbbbbb");
     for (const gen of [older, newer]) {
-      mkdirSync(gen, { recursive: true });
-      writeFileSync(join(gen, "codex"), "ELF");
-      writeFileSync(join(gen, "codex-code-mode-host"), "HOST");
+      mkdirSync(join(gen, "bin"), { recursive: true });
+      writeFileSync(join(gen, "bin", "codex"), "ELF");
+      writeFileSync(join(gen, "bin", "codex-code-mode-host"), "HOST");
+      writeFileSync(join(gen, "codex-package.json"), "{}");
       writeFileSync(join(gen, "installation.json"), "{}");
     }
     symlinkSync(newer, paths.currentGeneration);
@@ -227,5 +228,50 @@ describe("revert", () => {
 
     expect(actions.actions.join("\n")).toMatch(/state\.json was corrupt/);
     expect(readlinkSync(paths.wrapperPath)).toBe(real); // acceptance 5 still reachable
+  });
+});
+
+describe("revert and the package era", () => {
+  test("removes flat and never-activated generations by their name, leaves a foreign name and a symlink alone", () => {
+    const { env, root } = tmpEnv("cxstatusline test ");
+    const paths = resolvePaths(env);
+    writeState(paths.stateFile, { ...DEFAULT_STATE, patched_from: "0.157.0" });
+    const flat = join(paths.generationsDir, "0.157.0-20260928T091105-a63712");
+    mkdirSync(flat, { recursive: true });
+    writeFileSync(join(flat, "codex"), "ELF");
+    writeFileSync(join(flat, "installation.json"), "{}");
+    const interrupted = join(paths.generationsDir, "0.158.0-20260929T100000-bbbbbb");
+    mkdirSync(join(interrupted, "bin"), { recursive: true });
+    writeFileSync(join(interrupted, "bin", "codex"), "ELF"); // no installation.json: SIGKILL mid-createGeneration
+    const foreign = join(paths.generationsDir, "0.158.0-backup");
+    mkdirSync(foreign, { recursive: true });
+    writeFileSync(join(foreign, "README"), "mine");
+    const elsewhere = join(root, "elsewhere");
+    mkdirSync(elsewhere);
+    symlinkSync(elsewhere, join(paths.generationsDir, "0.159.0-20260929T100000-cccccc"));
+
+    const actions = revert(context(env));
+
+    expect(existsSync(flat)).toBe(false);
+    expect(existsSync(interrupted)).toBe(false);
+    expect(existsSync(join(foreign, "README"))).toBe(true);
+    expect(existsSync(elsewhere)).toBe(true);
+    expect(actions.actions.join("\n")).toMatch(/removed 2 cxstatusline generations/);
+  });
+
+  test("names the daemon's copy of our generation and the commands to remove it, without touching it", () => {
+    const { env } = tmpEnv("cxstatusline test ");
+    const paths = resolvePaths(env);
+    writeState(paths.stateFile, { ...DEFAULT_STATE, patched_from: "0.157.0" });
+    const root = join(paths.codexHome, "packages", "app-server-daemon");
+    const release = join(root, "releases", "0.157.0-aarch64-apple-darwin");
+    mkdirSync(release, { recursive: true });
+    writeFileSync(join(release, "installation.json"), JSON.stringify({ codexVersion: "0.157.0", provenance: { cxVersion: "0.11.0" } }));
+    symlinkSync(release, join(root, "current"));
+
+    const actions = revert(context(env));
+
+    expect(actions.actions.join("\n")).toContain(`codex app-server daemon stop && rm -rf ${root}`);
+    expect(existsSync(join(release, "installation.json"))).toBe(true);
   });
 });

@@ -67,7 +67,8 @@ Try out themes, arrange widgets, and preview your custom OpenAI Codex statusline
 - **Node.js 22+**.
 - **Existing Codex CLI installation** kept in place (`~/.codex/`).
 - **Git**.
-- **Rust toolchain** (1.95.0+) is required only if building from source (`--compile`).
+- **Rust toolchain** (1.95.0+) and **Python 3.10+** are required only if building from source (`--compile`): Codex's package is assembled by upstream's own Python packager. On Linux, `--compile` also needs `bwrap` (bubblewrap) on `PATH` or `libcap-dev` + `pkg-config` to build it.
+- Prebuilt installs need nothing beyond Node.
 
 ## 🚀 Install
 
@@ -178,6 +179,12 @@ Options:
 - Note: Running `cxstatusline update --compile` or `--force` will automatically forward to `cxstatusline upgrade` with a notice.
 
 Session-start updates also leave a newer patched pair in place when the original Codex installation is older, including under the `every` policy.
+
+#### The app-server daemon (Codex 0.157 and newer)
+
+Codex now starts a shared background app-server daemon and copies the package it was started from into `~/.codex/packages/app-server-daemon/`. cxstatusline installs Codex as that complete package (upstream's own layout: `bin/`, `codex-path/rg`, `codex-resources/`, `codex-package.json`), so the daemon starts normally. The daemon keeps and updates its own copy independently of cxstatusline; the statusline patch runs in the TUI process and is unaffected. `cxstatusline doctor` shows the daemon's copy as `daemon_package`; if its version drifts from the active generation, run `codex app-server daemon restart`. To run without the daemon: `codex --no-daemon`, or `[features] daemon_auto_start = false` in `~/.codex/config.toml`.
+
+Installs made by cxstatusline 0.10.x and older were bare binaries; the session-start hook rebuilds such an install once in the background, or run `cxstatusline upgrade`. Releases published from this version on cannot be read by cxstatusline 0.10.x: update with `npm i -g cxstatusline`.
 
 ## Revert
 

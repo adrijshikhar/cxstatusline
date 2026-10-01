@@ -3,15 +3,16 @@
  * disk, using the installer's own archive validator and manifest schema rather than a second
  * implementation. A verify failure means the release must not be published.
  */
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { validateManifest, type Artifact, type Platform, type ReleaseManifest } from "../../src/distribution";
+import { codexTarget, validateManifest, type Artifact, type Platform, type ReleaseManifest } from "../../src/distribution";
 import { extractArchive } from "../../src/distribution/archive";
+import { verifyPackage } from "../../src/patch/generation";
 import { validateLinkage, validateVersion } from "../ci-prebuilt";
-import { ARCHIVE_ENTRIES, parseChecksums, sha256File } from "./pack";
-import { RUST_NOTICES_MARKER } from "./rust-licenses";
+import { parseChecksums, sha256File } from "./pack";
+import { RUST_NOTICES_MARKER, TOOL_NOTICES_MARKER } from "./rust-licenses";
 
 /** The deployment-target ceiling the release promises. */
 export const MAX_MINOS = "14.0";
@@ -22,6 +23,11 @@ const ELF_MACHINE: Partial<Record<Platform, string>> = {
   "linux-arm64": "AArch64",
 };
 
+/** The two binaries we build; the linkage and deployment-target rules apply to these only. */
+const EXECUTABLES = ["bin/codex", "bin/codex-code-mode-host"] as const;
+/** Tools upstream's packager bundled; they get architecture checks only (bwrap and zsh are static). */
+const TOOLS = ["codex-path/rg", "codex-resources/bwrap", "codex-resources/zsh/bin/zsh"] as const;
+
 export interface VerifyOptions {
   readonly outDir: string;
   readonly cxVersion?: string;
@@ -29,6 +35,8 @@ export interface VerifyOptions {
   readonly platform: Platform;
   /** Skip the `lipo`/`otool`/`vtool` probes. Only ever true for unit tests and non-macOS hosts. */
   readonly skipMacho: boolean;
+  /** Skip the real `codex app-server daemon start` probe. Only ever true for unit tests (stub executables). */
+  readonly skipDaemon?: boolean;
 }
 
 export interface VerifyReport {
@@ -83,14 +91,12 @@ function readManifest(outDir: string, o: VerifyOptions): ReleaseManifest {
 
 /**
  * Every staged member's bytes must equal the digest the manifest published for it - for the
- * artifact the archive was actually chosen from, not `artifacts[0]`: the schema permits two, and
- * comparing an arm64 extract against the x64 artifact's digests would fail for the wrong reason.
+ * artifact the archive was actually chosen from, not `artifacts[0]`: the schema permits several,
+ * and comparing an arm64 extract against the x64 artifact's digests would fail for the wrong reason.
  */
 async function checkExtractedDigests(staged: string, artifact: Artifact, checks: string[]): Promise<void> {
-  const files = artifact.files;
-  for (const name of ARCHIVE_ENTRIES) {
+  for (const [name, expected] of Object.entries(artifact.files)) {
     const actual = await sha256File(join(staged, name));
-    const expected = files[name];
     if (actual.sha256 !== expected.sha256 || actual.size !== expected.size) {
       throw new Error(`extracted ${name} does not match the digest recorded in manifest.json`);
     }
@@ -98,13 +104,20 @@ async function checkExtractedDigests(staged: string, artifact: Artifact, checks:
   checks.push("extracted files match manifest digests");
 }
 
+function presentTools(staged: string): readonly string[] {
+  return TOOLS.filter((name) => existsSync(join(staged, name)));
+}
+
 function checkMachO(staged: string, o: VerifyOptions, checks: string[]): void {
-  for (const name of ["codex", "codex-code-mode-host"] as const) {
+  for (const name of [...EXECUTABLES, ...presentTools(staged)]) {
     const file = join(staged, name);
     const arch = probe("lipo", ["-archs", file]).trim();
     if (arch !== MACHO_ARCH[o.platform]) {
       throw new Error(`${name}: Mach-O architecture ${arch} does not match ${o.platform}`);
     }
+  }
+  for (const name of EXECUTABLES) {
+    const file = join(staged, name);
     validateLinkage(probe("otool", ["-L", file]));
     validateMinos(probe("vtool", ["-show-build", file]));
   }
@@ -112,17 +125,17 @@ function checkMachO(staged: string, o: VerifyOptions, checks: string[]): void {
 }
 
 function checkElf(staged: string, o: VerifyOptions, checks: string[]): void {
-  for (const name of ["codex", "codex-code-mode-host"] as const) {
-    const file = join(staged, name);
-    const header = probe("readelf", ["-h", file]);
-    if (!header.includes("ELF64")) {
-      throw new Error(`${name}: expected ELF64 binary`);
-    }
-    const expected = ELF_MACHINE[o.platform];
+  const expected = ELF_MACHINE[o.platform];
+  for (const name of [...EXECUTABLES, ...presentTools(staged)]) {
+    const header = probe("readelf", ["-h", join(staged, name)]);
+    if (!header.includes("ELF64")) throw new Error(`${name}: expected ELF64 binary`);
     if (expected && !header.includes(expected)) {
       throw new Error(`${name}: ELF machine does not match ${expected} for ${o.platform}`);
     }
-    const dynamic = probe("readelf", ["-d", file]);
+  }
+  // bwrap and zsh are static musl builds; only the two executables must be dynamically linked.
+  for (const name of EXECUTABLES) {
+    const dynamic = probe("readelf", ["-d", join(staged, name)]);
     if (!/dynamic section/i.test(dynamic) && !dynamic.includes("NEEDED") && !dynamic.includes("DYNAMIC")) {
       throw new Error(`${name}: binary is not dynamically linked`);
     }
@@ -131,11 +144,21 @@ function checkElf(staged: string, o: VerifyOptions, checks: string[]): void {
 }
 
 function checkSmoke(staged: string, o: VerifyOptions, checks: string[]): void {
-  validateVersion(probe(join(staged, "codex"), ["--version"]), o.codexVersion);
-  if (!probe(join(staged, "codex-code-mode-host"), ["--help"]).includes("--listen")) {
+  validateVersion(probe(join(staged, "bin", "codex"), ["--version"]), o.codexVersion);
+  if (!probe(join(staged, "bin", "codex-code-mode-host"), ["--help"]).includes("--listen")) {
     throw new Error("codex-code-mode-host --help does not advertise --listen");
   }
   checks.push("staged codex --version and companion --help smoke passed");
+}
+
+/** The bundled tools must at least start: a wrong-architecture or truncated binary fails here. */
+function checkTools(staged: string, checks: string[]): void {
+  const rg = probe(join(staged, "codex-path", "rg"), ["--version"]);
+  if (!/^ripgrep \d+\.\d+\.\d+/.test(rg)) throw new Error(`codex-path/rg --version printed ${JSON.stringify(rg.slice(0, 80))}`);
+  if (existsSync(join(staged, "codex-resources", "bwrap"))) {
+    probe(join(staged, "codex-resources", "bwrap"), ["--version"]);
+  }
+  checks.push("bundled tools start");
 }
 
 function checkRustNotices(staged: string, checks: string[]): void {
@@ -150,7 +173,94 @@ function checkRustNotices(staged: string, checks: string[]): void {
   if (!hasBullet) {
     throw new Error("Rust dependency notices contain no dependency entries");
   }
-  checks.push("Rust dependency notices present");
+  const toolIndex = content.indexOf(TOOL_NOTICES_MARKER);
+  if (toolIndex === -1) throw new Error("Bundled tool licences marker is missing from THIRD_PARTY_NOTICES.md");
+  if (!/^### /m.test(content.slice(toolIndex))) throw new Error("Bundled tool licences section is empty");
+  checks.push("Rust dependency notices and bundled tool licences present");
+}
+
+/** `<CODEX_HOME>/app-server-control/app-server-control.sock`, which must fit a 104-byte `sun_path`. */
+const SOCKET_SUFFIX_BYTES = "/app-server-control/app-server-control.sock".length;
+const SUN_PATH_MAX = 104;
+
+function readPid(file: string): number | null {
+  try {
+    const raw = JSON.parse(readFileSync(file, "utf8")) as { pid?: unknown };
+    return typeof raw.pid === "number" && Number.isInteger(raw.pid) && raw.pid > 1 ? raw.pid : null;
+  } catch {
+    return null;
+  }
+}
+
+function killGroup(pid: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(-pid, signal); // both daemon processes are setsid leaders
+  } catch {
+    try {
+      process.kill(pid, signal);
+    } catch {
+      /* already gone */
+    }
+  }
+}
+
+/**
+ * The only check that reaches upstream's `prepare_from_package`: start the app-server daemon from
+ * the staged package in a throwaway, short `/tmp` home and stop it again.
+ *
+ * Why `/tmp` and not `tmpdir()`: on macOS `tmpdir()` is under `/var/folders/...`, and the daemon's
+ * control socket path must fit a 104-byte `sun_path`. Why `TMPDIR` is set rather than unset: with
+ * it unset Codex's shared socket directory is `/tmp/codex-daemon-<uid>`, shared with any real
+ * session of the same user on the builder. Why `settings.json` first: on a stable version the daemon
+ * otherwise spawns a detached updater that fetches upstream's installer after five minutes, and
+ * `daemon stop` never stops it.
+ */
+function checkDaemonStart(staged: string, o: VerifyOptions, checks: string[]): void {
+  const root = mkdtempSync("/tmp/cxsl-");
+  const home = join(root, "h");
+  const codexHome = join(root, "c");
+  const tmp = join(root, "t");
+  const stateDir = join(codexHome, "app-server-daemon");
+  const codex = join(staged, "bin", "codex");
+  const env = { HOME: home, CODEX_HOME: codexHome, TMPDIR: tmp, PATH: "/usr/bin:/bin" };
+  const daemon = (args: string[], timeout: number) =>
+    spawnSync(codex, ["app-server", "daemon", ...args], { env, encoding: "utf8", timeout, maxBuffer: 4 * 1024 * 1024 });
+  try {
+    for (const dir of [home, stateDir, tmp]) mkdirSync(dir, { recursive: true });
+    if (Buffer.byteLength(realpathSync(codexHome)) + SOCKET_SUFFIX_BYTES > SUN_PATH_MAX) {
+      throw new Error(`probe home ${codexHome} is too long for the daemon's Unix socket path`);
+    }
+    writeFileSync(join(codexHome, "config.toml"), 'openai_base_url = "http://127.0.0.1:9/v1"\n');
+    writeFileSync(join(stateDir, "settings.json"), '{"updater":{"autoUpdateEnabled":false}}\n');
+    const start = daemon(["start"], 60_000);
+    const output = `${start.stdout}\n${start.stderr}`;
+    if (start.status !== 0) throw new Error(`codex app-server daemon start exited ${String(start.status)}: ${output.trim().slice(-600)}`);
+    if (output.includes("no complete local package")) throw new Error(`the daemon rejected the staged package: ${output.trim().slice(-600)}`);
+    let status = "";
+    try {
+      status = String((JSON.parse(start.stdout.trim().split("\n").at(-1) ?? "{}") as { status?: unknown }).status ?? "");
+    } catch {
+      /* reported below */
+    }
+    if (status !== "started") throw new Error(`expected daemon status "started", got ${JSON.stringify(status)}: ${output.trim().slice(-300)}`);
+    if (!existsSync(join(codexHome, "packages", "app-server-daemon", "current", "bin", "codex"))) {
+      throw new Error("the daemon started but did not copy the package into its store");
+    }
+    checks.push("codex app-server daemon start accepted the staged package and copied it");
+  } finally {
+    daemon(["stop"], 30_000);
+    const pids = [readPid(join(stateDir, "daemon.pid")), readPid(join(stateDir, "daemon-updater.pid"))].filter((p): p is number => p !== null);
+    for (const pid of pids) killGroup(pid, "SIGTERM");
+    if (pids.length > 0) spawnSync("sleep", ["5"]);
+    for (const pid of pids) killGroup(pid, "SIGKILL");
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function checkPackage(staged: string, artifact: Artifact, o: VerifyOptions, checks: string[]): void {
+  const problem = verifyPackage(staged, artifact.files, { target: codexTarget(o.platform), codexVersion: o.codexVersion });
+  if (problem !== null) throw new Error(`staged package is not the package the manifest describes: ${problem}`);
+  checks.push("package layout matches upstream's contract and the manifest");
 }
 
 /**
@@ -159,6 +269,7 @@ function checkRustNotices(staged: string, checks: string[]): void {
  */
 export async function verifyOutput(o: VerifyOptions): Promise<VerifyReport> {
   const manifest = readManifest(o.outDir, o);
+  if (manifest.schema !== 3) throw new Error(`release manifest schema ${manifest.schema} is not a package release; nothing to verify`);
   const artifact = manifest.artifacts.find((a) => a.platform === o.platform)!;
   const archivePath = join(o.outDir, artifact.filename);
   if (!existsSync(archivePath)) throw new Error(`${artifact.filename} is missing from ${o.outDir}`);
@@ -178,9 +289,10 @@ export async function verifyOutput(o: VerifyOptions): Promise<VerifyReport> {
 
   const staged = mkdtempSync(join(tmpdir(), "cxsl-verify-"));
   try {
-    await extractArchive(archivePath, staged);
-    checks.push("archive passes the installer's five-file validator");
+    await extractArchive(archivePath, staged, artifact.files);
+    checks.push("archive passes the installer's manifest-driven validator");
     await checkExtractedDigests(staged, artifact, checks);
+    checkPackage(staged, artifact, o, checks);
     checkRustNotices(staged, checks);
     if (o.skipMacho) {
       checks.push(o.platform.startsWith("linux-") ? "ELF arch/linkage SKIPPED" : "Mach-O arch/linkage/minos SKIPPED");
@@ -190,6 +302,9 @@ export async function verifyOutput(o: VerifyOptions): Promise<VerifyReport> {
       checkMachO(staged, o, checks);
     }
     checkSmoke(staged, o, checks);
+    checkTools(staged, checks);
+    if (o.skipDaemon) checks.push("daemon start probe SKIPPED");
+    else checkDaemonStart(staged, o, checks);
   } finally {
     rmSync(staged, { recursive: true, force: true });
   }

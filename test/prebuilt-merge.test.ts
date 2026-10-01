@@ -36,8 +36,8 @@ describe("mergeManifests", () => {
 
   test("rejects different patch revisions across platforms", () => {
     expect(() => mergeManifests([
-      { ...arm64, schema: 2, patchVersion: 1 },
-      { ...x64, schema: 2, patchVersion: 2 },
+      { ...arm64, patchVersion: 1 },
+      { ...x64, patchVersion: 2 },
     ])).toThrow(/patchVersion/);
   });
 

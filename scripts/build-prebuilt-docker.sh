@@ -155,13 +155,15 @@ echo "==> Running build inside container..."
   -v "$REPO_ROOT:/workspace" \
   -v cxstatusline-cargo-cache:/usr/local/cargo/registry \
   -v cxstatusline-cargo-git:/usr/local/cargo/git \
-  -v cxstatusline-rustup-cache:/usr/local/rustup \
+  -v "cxstatusline-rustup-${DOCKER_PLATFORM//\//-}:/usr/local/rustup" \
+  -v cxstatusline-sccache:/root/.cache/sccache \
   -w /workspace \
   -e CODEX_VERSION="$CODEX_VERSION" \
   -e SOURCE_COMMIT="$SOURCE_COMMIT" \
   -e PLATFORM="$PLATFORM" \
   -e TARGET="$TARGET" \
   -e SKIP_TESTS="$SKIP_TESTS" \
+  -e CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-4}" \
   -e WORKFLOW_URL="${WORKFLOW_URL:-https://github.com/adrijshikhar/cxstatusline/actions/runs/local-docker}" \
   "$IMAGE_NAME" \
   bash -c '
@@ -169,9 +171,14 @@ echo "==> Running build inside container..."
     export RUNNER_TEMP=/tmp
     export GITHUB_WORKSPACE=/workspace
     export GITHUB_ENV=/tmp/cx-env.sh
-    export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-8}"
+    export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-4}"
     export CARGO_TERM_COLOR=never
     export CARGO_PROFILE_RELEASE_DEBUG=0
+    # Compiled objects are cached across Codex versions and both Linux architectures (keys include
+    # the target triple); only crate sources were cached before.
+    export RUSTC_WRAPPER=sccache
+    export SCCACHE_DIR=/root/.cache/sccache
+    python3 -c "import sys; sys.exit(sys.version_info < (3, 10))" || { echo "python3 >= 3.10 is required by upstream'"'"'s packager" >&2; exit 1; }
     touch /tmp/cx-env.sh
 
     echo "==> Installing Bun dependencies..."
@@ -199,14 +206,22 @@ echo "==> Running build inside container..."
     echo "==> Compiling synchronized executable pair..."
     cd /workspace/upstream/codex-rs
     cargo build --release -p codex-cli --bin codex -p codex-code-mode-host --bin codex-code-mode-host
+    sccache --show-stats || true
     cd /workspace
 
     echo "==> Auditing licenses and notices..."
     bun scripts/prebuilt.ts rust-notices --upstream /workspace/upstream --out /tmp/rust-notices.md
 
-    echo "==> Packaging release assets..."
+    echo "==> Assembling the Codex package with upstream'"'"'s packager..."
     rm -rf /tmp/staging /workspace/out/"$PLATFORM"
-    mkdir -p /tmp/staging /workspace/out
+    mkdir -p /workspace/out
+    bun scripts/prebuilt.ts assemble \
+      --upstream /workspace/upstream \
+      --codex-version "$CODEX_VERSION" \
+      --platform "$PLATFORM" \
+      --out /tmp/staging
+
+    echo "==> Packaging release assets..."
     bun scripts/prebuilt.ts package \
       --codex-version "$CODEX_VERSION" \
       --source-commit "$SOURCE_COMMIT" \

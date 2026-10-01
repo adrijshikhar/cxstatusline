@@ -36,9 +36,12 @@ blocker for the tested target; it does not imply the Linux arm64 archive was bui
 
 ## Footer gate
 
-`scripts/test-footer-smoke.py` launches an explicit Codex executable in a PTY with an isolated
-temporary `CODEX_HOME`, a deterministic three-row renderer, a loopback-only API base URL, and no
-inherited API credentials. It checks the executable version, idle state, draft typing and cursor,
+`scripts/test-footer-smoke.py` launches an explicit Codex executable - the active generation's
+`bin/codex`, so the package layout and the app-server daemon start are exercised too - in a PTY
+with an isolated temporary `CODEX_HOME` under `/tmp` (short enough for the daemon's Unix socket),
+the daemon updater disabled, a deterministic three-row renderer, a loopback-only API base URL, and
+no inherited API credentials. No `-c` overrides are passed: any override outside Codex's small
+allowlist would silently exclude the daemon from the run. It checks the executable version, idle state, draft typing and cursor,
 slash-menu open/close, renderer refresh, and narrow/wide terminal resize. It never submits a model
 prompt. Warning and response state transitions are covered by the focused Rust composer tests.
 
