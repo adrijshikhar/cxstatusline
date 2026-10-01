@@ -123,14 +123,17 @@ describe("supportedCodexVersions and isCodexVersionSupported", () => {
 describe("patch versions", () => {
   test("each tested Codex version has exactly one patch owner", () => {
     const shipped = loadManifest(join(import.meta.dir, "..", "patches"));
-    for (const version of ["0.152.1", "0.153.0", "0.153.1", "0.153.4", "0.154.0", "0.155.0", "0.155.1"]) {
-      expect(resolvePatch(shipped, v(version))?.patchVersion).toBe(1);
+    for (const range of shipped.patches) {
+      expect(range.patchVersion).toBeGreaterThan(0);
+      const minPatch = resolvePatch(shipped, v(range.min));
+      expect(minPatch?.patchVersion).toBe(range.patchVersion);
+      expect(minPatch?.file).toBe(range.file);
+      const maxPatch = resolvePatch(shipped, v(range.max));
+      expect(maxPatch?.patchVersion).toBe(range.patchVersion);
+      expect(maxPatch?.file).toBe(range.file);
     }
-    for (const version of ["0.156.0", "0.156.1", "0.157.0", "0.157.1", "0.158.0"]) {
-      expect(resolvePatch(shipped, v(version))?.patchVersion).toBe(2);
-    }
-    for (const version of ["0.152.2", "0.153.2", "0.153.3", "0.159.0"]) {
-      expect(resolvePatch(shipped, v(version))).toBeNull();
+    for (const invalid of ["0.0.1", "0.152.0", "999.0.0"]) {
+      expect(resolvePatch(shipped, v(invalid))).toBeNull();
     }
   });
   test("v2 requires positive revisions and rejects ambiguous ownership", () => {

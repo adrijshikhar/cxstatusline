@@ -17,11 +17,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { list } from "tar";
 import {
-  ARCHIVE_ENTRIES,
   ARCHIVE_MTIME,
+  STAGING_TOP_LEVEL,
   archiveFilename,
   blockedIssueTitle,
   buildManifest,
+  fileDigests,
   packArchive,
   resetDirectory,
   resolveDetection,
@@ -34,10 +35,10 @@ import {
   writeChecksums,
   type ManifestInput,
 } from "../scripts/prebuilt";
-import { RUST_NOTICES_MARKER } from "../scripts/prebuilt/rust-licenses";
 import { extractArchive } from "../src/distribution/archive";
-import { validateManifest, type ArtifactFile, type FileDigest, type Platform } from "../src/distribution";
+import { validateManifest, type FileDigest, type Platform } from "../src/distribution";
 import type { Manifest } from "../src/patch/manifest";
+import { packageStaging } from "./prebuilt-gh-fixture";
 
 const CX = "0.1.0";
 const CODEX = "0.153.0";
@@ -65,46 +66,18 @@ function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), `cxsl-prebuilt-${prefix}-`));
 }
 
-/** A staging directory holding the five archive members, with the release's exact modes. */
-function staging(body = "#!/bin/sh\necho stub\n"): string {
-  const dir = tmp("staging");
-  for (const name of ARCHIVE_ENTRIES) {
-    const executable = name === "codex" || name === "codex-code-mode-host";
-    const text = name === "THIRD_PARTY_NOTICES.md"
-      ? `THIRD_PARTY_NOTICES.md text\n\n${RUST_NOTICES_MARKER}\n\n- crate-a 1.0.0 (MIT)\n`
-      : `${name} text\n`;
-    writeFileSync(join(dir, name), executable ? body : text);
-    chmodSync(join(dir, name), executable ? 0o755 : 0o644);
-  }
-  return dir;
+/** A staged package (upstream's layout plus our legal files) with stub executables. */
+function staging(body?: string, platform: Platform = "darwin-arm64"): string {
+  return packageStaging({ platform, codexBody: body });
 }
 
-/** Fake executables whose smoke output is exactly what `verify` demands. */
-function smokeStaging(version = CODEX): string {
-  const dir = tmp("smoke");
-  writeFileSync(join(dir, "codex"), `#!/bin/sh\necho "codex-cli ${version}"\n`);
-  writeFileSync(join(dir, "codex-code-mode-host"), '#!/bin/sh\necho "usage: --listen <addr>"\n');
-  chmodSync(join(dir, "codex"), 0o755);
-  chmodSync(join(dir, "codex-code-mode-host"), 0o755);
-  for (const name of ["LICENSE", "NOTICE"]) {
-    writeFileSync(join(dir, name), `${name} text\n`);
-    chmodSync(join(dir, name), 0o644);
-  }
-  writeFileSync(
-    join(dir, "THIRD_PARTY_NOTICES.md"),
-    `THIRD_PARTY_NOTICES.md text\n\n${RUST_NOTICES_MARKER}\n\n- crate-a 1.0.0 (MIT)\n`,
-  );
-  chmodSync(join(dir, "THIRD_PARTY_NOTICES.md"), 0o644);
-  return dir;
+/** Alias kept for the verify tests: stubs whose smoke output is exactly what `verify` demands. */
+function smokeStaging(version = CODEX, platform: Platform = "darwin-arm64"): string {
+  return packageStaging({ codexVersion: version, platform });
 }
 
-function digests(stagingDir: string): Record<ArtifactFile, FileDigest> {
-  const out: Record<string, FileDigest> = {};
-  for (const name of ARCHIVE_ENTRIES) {
-    const bytes = readFileSync(join(stagingDir, name));
-    out[name] = { sha256: createHash("sha256").update(bytes).digest("hex"), size: bytes.length };
-  }
-  return out as Record<ArtifactFile, FileDigest>;
+function digests(stagingDir: string): Record<string, FileDigest> {
+  return fileDigests(stagingDir);
 }
 
 function manifestInput(stagingDir: string, archive: FileDigest, over: Partial<ManifestInput> = {}): ManifestInput {
@@ -119,6 +92,8 @@ function manifestInput(stagingDir: string, archive: FileDigest, over: Partial<Ma
     createdAt: "2026-09-07T00:00:00Z",
     archive,
     files: digests(stagingDir),
+    patchVersion: 2,
+    patchFile: `codex-${CODEX}.patch`,
     ...over,
   };
 }
@@ -277,10 +252,11 @@ describe("buildManifest", () => {
       codexVersion: CODEX,
       platform: "darwin-arm64",
     });
-    expect(parsed.schema).toBe(2);
+    expect(parsed.schema).toBe(3);
     expect(parsed.patchVersion).toBe(2);
     expect(parsed.artifacts).toHaveLength(1);
     expect(parsed.artifacts[0]!.filename).toBe(`cxstatusline-codex-${CODEX}-darwin-arm64.tar.gz`);
+    expect(Object.keys(parsed.artifacts[0]!.files)).toContain("bin/codex");
     expect(parsed.upstreamTag).toBe(`rust-v${CODEX}`);
     expect(parsed.patchFile).toBe("codex-0.152.1.patch");
   });
@@ -329,13 +305,14 @@ describe("runPackage", () => {
   const frozen = "e".repeat(40);
   const noticesFile = join(tmp("notices"), "rust-notices.md");
   writeFileSync(noticesFile, "## crate-a 1.0.0 (MIT)\n\nMIT text\n");
+  // `assemble` (upstream's packager) ran first: the staging directory already holds the package.
   const packageFlags = (upstream: string, out: string): Record<string, string> => ({
     "codex-version": CODEX,
     "cx-version": CX,
     "source-commit": frozen,
     "rust-notices": noticesFile,
     upstream,
-    staging: join(tmp("staging-run"), "staged"),
+    staging: packageStaging(),
     out,
     "workflow-url": RUN_URL,
   });
@@ -351,8 +328,13 @@ describe("runPackage", () => {
       if (previous === undefined) delete process.env.GITHUB_SHA;
       else process.env.GITHUB_SHA = previous;
     }
-    const manifest = JSON.parse(readFileSync(join(out, "manifest.json"), "utf8")) as { sourceCommit: string };
+    const manifest = JSON.parse(readFileSync(join(out, "manifest.json"), "utf8")) as { sourceCommit: string; schema: number; artifacts: { files: Record<string, unknown> }[] };
     expect(manifest.sourceCommit).toBe(frozen);
+    expect(manifest.schema).toBe(3);
+    expect(Object.keys(manifest.artifacts[0]!.files).sort()).toEqual([
+      "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md", "bin/codex", "bin/codex-code-mode-host",
+      "codex-package.json", "codex-path/rg", "codex-resources/zsh/bin/zsh",
+    ]);
   });
 
   test("refuses to package without an explicit source commit", async () => {
@@ -375,7 +357,7 @@ describe("packArchive", () => {
     const b = join(tmp("b"), "two.tar.gz");
     const first = await packArchive(dir, a);
     // Re-stamping the staged files is what a second CI run looks like: same bytes, new mtimes.
-    for (const name of ARCHIVE_ENTRIES) utimesSync(join(dir, name), new Date(1e9), new Date(1e9));
+    for (const name of Object.keys(fileDigests(dir))) utimesSync(join(dir, name), new Date(1e9), new Date(1e9));
     const second = await packArchive(dir, b);
     expect(readFileSync(a).equals(readFileSync(b))).toBe(true);
     expect(second).toEqual(first);
@@ -389,7 +371,7 @@ describe("packArchive", () => {
     expect(readFileSync(one).equals(readFileSync(two))).toBe(false);
   });
 
-  test("holds exactly the five expected entries in fixed order, with no './' entry", async () => {
+  test("holds exactly the package's files in sorted order, no directory and no './' entry", async () => {
     const archivePath = join(tmp("c"), "release.tar.gz");
     await packArchive(staging(), archivePath);
     const entries: { path: string; mode: number; mtime: Date | undefined }[] = [];
@@ -397,18 +379,21 @@ describe("packArchive", () => {
       file: archivePath,
       onReadEntry: (e) => entries.push({ path: e.path, mode: e.mode ?? 0, mtime: e.mtime }),
     });
-    expect(entries.map((e) => e.path)).toEqual([...ARCHIVE_ENTRIES]);
-    expect(entries.map((e) => e.mode & 0o777)).toEqual([0o755, 0o755, 0o644, 0o644, 0o644]);
+    expect(entries.map((e) => e.path)).toEqual([
+      "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md", "bin/codex", "bin/codex-code-mode-host",
+      "codex-package.json", "codex-path/rg", "codex-resources/zsh/bin/zsh",
+    ]);
+    expect(entries.map((e) => e.mode & 0o777)).toEqual([0o644, 0o644, 0o644, 0o755, 0o755, 0o644, 0o755, 0o755]);
     expect(entries.every((e) => e.mtime?.getTime() === ARCHIVE_MTIME.getTime())).toBe(true);
   });
 
-  test("the archive passes the installer's five-file validator", async () => {
+  test("the archive passes the installer's manifest-driven validator", async () => {
     const dir = staging();
     const archivePath = join(tmp("f"), "release.tar.gz");
     await packArchive(dir, archivePath);
     const restored = tmp("restored");
-    await extractArchive(archivePath, restored);
-    for (const name of ARCHIVE_ENTRIES) expect(readFileSync(join(restored, name)).length).toBeGreaterThan(0);
+    await extractArchive(archivePath, restored, fileDigests(dir));
+    for (const name of Object.keys(fileDigests(dir))) expect(readFileSync(join(restored, name)).length).toBeGreaterThan(0);
   });
 
   test("refuses to pack an empty or missing member", async () => {
@@ -464,7 +449,10 @@ describe("packArchive memory behaviour", () => {
     const source = readFileSync(join(import.meta.dir, "..", "scripts", "prebuilt", "pack.ts"), "utf8");
     expect(source).not.toMatch(/gzipSync/);
     expect(source).not.toMatch(/readFileSync\(/);
-    expect(source).toMatch(/createReadStream/);
+    // The streamed digest lives in src/digest.ts; pack.ts hashes archives only through it.
+    expect(source).toMatch(/sha256File/);
+    const digest = readFileSync(join(import.meta.dir, "..", "src", "digest.ts"), "utf8");
+    expect(digest).toMatch(/createReadStream/);
   });
 });
 
@@ -483,7 +471,7 @@ describe("writeChecksums", () => {
 describe("resetDirectory", () => {
   test("clears a directory it recognises and refuses one it does not", () => {
     const ours = staging();
-    resetDirectory(ours, (e) => e.every((n) => (ARCHIVE_ENTRIES as readonly string[]).includes(n)));
+    resetDirectory(ours, (e) => e.every((n) => STAGING_TOP_LEVEL.includes(n)));
     expect(existsSync(ours)).toBe(false);
 
     const theirs = tmp("theirs");
@@ -518,6 +506,7 @@ describe("verifyOutput", () => {
       codexVersion: CODEX,
       platform: "darwin-arm64",
       skipMacho: true,
+      skipDaemon: true,
     });
     expect(report.machoSkipped).toBe(true);
     expect(report.manifest.cxVersion).toBe(CX);
@@ -527,13 +516,14 @@ describe("verifyOutput", () => {
   });
 
   test("accepts a self-consistent Linux release directory and reports skipped ELF probes", async () => {
-    const out = await releaseDir(smokeStaging(), "linux-x64");
+    const out = await releaseDir(smokeStaging(CODEX, "linux-x64"), "linux-x64");
     const report = await verifyOutput({
       outDir: out,
       cxVersion: CX,
       codexVersion: CODEX,
       platform: "linux-x64",
       skipMacho: true,
+      skipDaemon: true,
     });
     expect(report.machoSkipped).toBe(true);
     expect(report.manifest.cxVersion).toBe(CX);
@@ -549,14 +539,14 @@ describe("verifyOutput", () => {
     bytes[bytes.length - 1] = (bytes.at(-1)! ^ 0xff) & 0xff;
     writeFileSync(archivePath, bytes);
     await expect(
-      verifyOutput({ outDir: out, cxVersion: CX, codexVersion: CODEX, platform: "darwin-arm64", skipMacho: true }),
+      verifyOutput({ outDir: out, cxVersion: CX, codexVersion: CODEX, platform: "darwin-arm64", skipMacho: true, skipDaemon: true }),
     ).rejects.toThrow(/sha256|SHA256SUMS/);
   });
 
   test("rejects a staged codex whose --version disagrees with the release", async () => {
     const out = await releaseDir(smokeStaging("0.152.1"));
     await expect(
-      verifyOutput({ outDir: out, cxVersion: CX, codexVersion: CODEX, platform: "darwin-arm64", skipMacho: true }),
+      verifyOutput({ outDir: out, cxVersion: CX, codexVersion: CODEX, platform: "darwin-arm64", skipMacho: true, skipDaemon: true }),
     ).rejects.toThrow(/version/);
   });
 
@@ -564,7 +554,7 @@ describe("verifyOutput", () => {
     const out = tmp("empty");
     mkdirSync(out, { recursive: true });
     await expect(
-      verifyOutput({ outDir: out, cxVersion: CX, codexVersion: CODEX, platform: "darwin-arm64", skipMacho: true }),
+      verifyOutput({ outDir: out, cxVersion: CX, codexVersion: CODEX, platform: "darwin-arm64", skipMacho: true, skipDaemon: true }),
     ).rejects.toThrow(/manifest\.json/);
   });
 });

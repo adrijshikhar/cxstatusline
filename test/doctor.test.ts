@@ -4,14 +4,14 @@ import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync }
 import { join } from "node:path";
 import type { Context } from "../src/context";
 import { doctorReport, formatDoctor, type DoctorLine } from "../src/commands/doctor";
-import type { ArtifactFile, FileDigest, Platform, PreparedPair, ReleaseManifest } from "../src/distribution";
+import { packageRequiredFiles, type FileDigest, type Platform, type PreparedPair, type ReleaseManifest } from "../src/distribution";
 import { installHook } from "../src/hook/install";
 import { resolvePaths } from "../src/paths";
 import { REQUIRED_TOOLCHAIN } from "../src/patch/preflight";
 import { activatePair, activeGeneration, installWrapper } from "../src/patch/wrapper";
 import { DEFAULT_STATE, RELEASE_UNAVAILABLE, writeState } from "../src/state";
 import { VERSION } from "../src/version-info";
-import { fakeExec, tmpEnv } from "./helpers";
+import { fakeExec, stagePackage, tmpEnv } from "./helpers";
 
 function ctx(upstreamVersion: string, which: (c: string) => string | null = () => "/x") {
   const { env, root } = tmpEnv();
@@ -42,13 +42,12 @@ function fakeDigest(seed: string): FileDigest {
 }
 
 /** A structurally valid `ReleaseManifest`-shaped object, just complete enough to pass `validateManifest`. */
-function fakeManifest(codexVersion: string, cxVersion: string, platform: Platform): ReleaseManifest {
+function fakeManifest(codexVersion: string, cxVersion: string, platform: Platform, patchVersion = 2): ReleaseManifest {
   const d = fakeDigest("asset");
-  const files = Object.fromEntries(
-    (["codex", "codex-code-mode-host", ...LEGAL_FILES] as const).map((k) => [k, d]),
-  ) as Record<ArtifactFile, FileDigest>;
+  const files = Object.fromEntries(packageRequiredFiles(platform).map((k) => [k, d])) as ReleaseManifest["artifacts"][number]["files"];
   return {
-    schema: 1,
+    schema: 3,
+    patchVersion,
     cxVersion,
     codexVersion,
     upstreamTag: `rust-v${codexVersion}`,
@@ -78,36 +77,22 @@ function stagePair(root: string, opts: {
   sourceDirty?: boolean;
   cxVersion?: string;
 } = {}): PreparedPair {
-  const dir = mkdtempSync(join(root, "staging-"));
   const version = opts.version ?? "0.152.1";
-  const codex = `#!/bin/sh\necho codex-cli ${version}\n`;
-  const host = "HOST";
-  writeFileSync(join(dir, "codex"), codex);
-  chmodSync(join(dir, "codex"), 0o755);
-  writeFileSync(join(dir, "codex-code-mode-host"), host);
-  chmodSync(join(dir, "codex-code-mode-host"), 0o755);
   const source = opts.source ?? "prebuilt";
-  if (opts.legal ?? source === "prebuilt") for (const f of LEGAL_FILES) writeFileSync(join(dir, f), `${f} body`);
   const cxVersion = opts.cxVersion ?? VERSION;
-  return {
-    directory: dir,
-    codexVersion: version,
-    provenance: {
-      source,
-      patchVersion: opts.patchVersion,
-      cxVersion,
-      platform: "darwin-arm64",
-      patchSha256: "a".repeat(64),
-      upstreamCommit: "b".repeat(40),
-      sourceCommit: opts.sourceCommit ?? null,
-      sourceDirty: opts.sourceDirty ?? false,
-      installedAt: "2026-09-07T12:13:14.000Z",
-      executables: { codex: fakeDigest(codex), "codex-code-mode-host": fakeDigest(host) },
-      ...(source === "prebuilt"
-        ? { release: { tag: `cxstatusline-v${cxVersion}-codex-v${version}`, archiveSha256: "e".repeat(64), manifest: fakeManifest(version, cxVersion, "darwin-arm64") } }
-        : {}),
-    },
-  };
+  const patchVersion = opts.patchVersion ?? 2;
+  return stagePackage(root, {
+    ...opts,
+    version,
+    source,
+    cxVersion,
+    patchVersion,
+    host: "HOST",
+    prefix: "staging-",
+    provenance: source === "prebuilt"
+      ? { release: { tag: `cxstatusline-v${cxVersion}-codex-v${version}`, archiveSha256: "e".repeat(64), manifest: fakeManifest(version, cxVersion, "darwin-arm64", patchVersion) } }
+      : {},
+  });
 }
 
 /** A minimal Context: no upstream Codex anywhere, no toolchain, only `codex --version` answered. */
@@ -151,7 +136,7 @@ describe("doctorReport", () => {
     expect((await doctorReport(c)).map((l) => l.key)).toEqual([
       "renderer", "settings", "upstream", "state", "patch_version", "patched_from", "policy", "codex_target", "drift", "wrapper",
       "active", "generation", "platform", "cx_version", "release", "patch", "source_commit",
-      "upstream_commit", "codex_digest", "host_digest", "codex_version", "legal",
+      "upstream_commit", "codex_digest", "host_digest", "codex_version", "legal", "package_layout", "daemon_package",
       "hook", "last_attempt", "toolchain", "lock", "command_cache",
     ]);
   });
@@ -251,13 +236,15 @@ describe("doctorReport", () => {
     expect(get(lines, "cx_version")).toMatchObject({ ok: true });
     expect(get(lines, "release")).toMatchObject({ ok: true });
     expect(get(lines, "patch")).toMatchObject({ ok: null, value: "a".repeat(12) });
-    expect(get(lines, "patch_version")).toMatchObject({ ok: null, value: "unknown (legacy)" });
+    expect(get(lines, "patch_version")).toMatchObject({ ok: null, value: "v2" });
     expect(get(lines, "source_commit")).toMatchObject({ ok: null, value: "unknown" });
     expect(get(lines, "upstream_commit")).toMatchObject({ ok: null, value: "b".repeat(12) });
     expect(get(lines, "codex_digest")).toMatchObject({ ok: true, value: "verified" });
     expect(get(lines, "host_digest")).toMatchObject({ ok: true, value: "verified" });
     expect(get(lines, "codex_version")).toMatchObject({ ok: true, value: `codex-cli ${codexVersion}` });
     expect(get(lines, "legal")).toMatchObject({ ok: true, value: "present" });
+    expect(get(lines, "package_layout")).toMatchObject({ ok: true, value: "ok (aarch64-apple-darwin)" });
+    expect(get(lines, "daemon_package")).toMatchObject({ ok: null, value: "none" });
     expect(get(lines, "toolchain")).toMatchObject({ ok: null, value: expect.stringContaining("optional for prebuilt") });
     expect(get(lines, "drift")).toMatchObject({ ok: true, value: "none" });
     expect(get(lines, "legacy")).toBeUndefined();
@@ -308,7 +295,7 @@ describe("doctorReport", () => {
     const c = bareCtx(env, paths);
     activatePair(stagePair(root), c);
     const dir = activeGeneration(paths)!;
-    rmSync(join(dir, "codex-code-mode-host"));
+    rmSync(join(dir, "bin", "codex-code-mode-host"));
 
     expect(get(await doctorReport(c), "host_digest")).toMatchObject({ ok: false, value: "missing" });
   });
@@ -561,5 +548,61 @@ describe("doctorReport", () => {
       ok: null,
       value: "0.155.1 supported (active: 0.154.0; run cxstatusline install to update)",
     });
+  });
+});
+
+describe("doctorReport package layout", () => {
+  /** A flat generation exactly as cxstatusline <= 0.10.x left it: two files, a record with only `executables`. */
+  function installFlat(paths: ReturnType<typeof resolvePaths>, version: string): string {
+    const dir = join(paths.generationsDir, `${version}-20260928T091105-a63712`);
+    mkdirSync(dir, { recursive: true });
+    const codex = `#!/bin/sh\necho codex-cli ${version}\n`;
+    writeFileSync(join(dir, "codex"), codex);
+    chmodSync(join(dir, "codex"), 0o755);
+    writeFileSync(join(dir, "codex-code-mode-host"), "HOST");
+    writeFileSync(join(dir, "installation.json"), JSON.stringify({
+      codexVersion: version,
+      provenance: {
+        source: "prebuilt", cxVersion: "0.10.1", platform: "darwin-arm64", patchVersion: 2,
+        patchSha256: "a".repeat(64), upstreamCommit: "b".repeat(40), sourceCommit: "c".repeat(40), sourceDirty: false,
+        installedAt: "2026-09-28T09:11:05.119Z",
+        executables: { codex: fakeDigest(codex), "codex-code-mode-host": fakeDigest("HOST") },
+      },
+    }));
+    symlinkSync(dir, paths.currentGeneration);
+    return dir;
+  }
+
+  test("a flat generation from an older cxstatusline is a failing package_layout line for a daemon-era Codex", async () => {
+    const { env } = tmpEnv();
+    const paths = resolvePaths(env);
+    installFlat(paths, "0.157.0");
+    const lines = await doctorReport(bareCtx(env, paths, "0.157.0"));
+    expect(get(lines, "active")).toMatchObject({ ok: true, value: "prebuilt 0.157.0" });
+    expect(get(lines, "codex_digest")).toMatchObject({ ok: true, value: "verified" }); // the legacy digests still verify
+    expect(get(lines, "package_layout")).toMatchObject({ ok: false, value: "flat layout from an older cxstatusline: run cxstatusline upgrade" });
+  });
+
+  test("the same flat generation is only informational for a Codex that has no daemon", async () => {
+    const { env } = tmpEnv();
+    const paths = resolvePaths(env);
+    installFlat(paths, "0.152.1");
+    const lines = await doctorReport(bareCtx(env, paths));
+    expect(get(lines, "package_layout")).toMatchObject({ ok: null });
+  });
+
+  test("daemon_package names the daemon's copy and flags a version different from the active generation", async () => {
+    const { env, root } = tmpEnv();
+    const paths = resolvePaths(env);
+    activatePair(stagePair(root, { version: "0.157.0" }), bareCtx(env, paths, "0.157.0"));
+    const release = join(paths.codexHome, "packages", "app-server-daemon", "releases", "0.156.1-aarch64-apple-darwin");
+    mkdirSync(release, { recursive: true });
+    writeFileSync(join(release, "codex-package.json"), JSON.stringify({ version: "0.156.1" }));
+    symlinkSync(release, join(paths.codexHome, "packages", "app-server-daemon", "current"));
+    const lines = await doctorReport(bareCtx(env, paths, "0.157.0"));
+    // Two plain assertions: bun's toMatchObject with an asymmetric matcher rewrites the received value.
+    const daemon = get(lines, "daemon_package");
+    expect(daemon?.ok).toBe(false);
+    expect(daemon?.value).toMatch(/^daemon 0\.156\.1 differs from active 0\.157\.0 \(.*\); run codex app-server daemon restart$/);
   });
 });

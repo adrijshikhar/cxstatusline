@@ -25,7 +25,6 @@ import {
 } from "./env";
 import { buildManifest, workflowUrlFromEnv } from "./manifest";
 import {
-  ARCHIVE_ENTRIES,
   archiveFilename,
   assembleStaging,
   fileDigests,
@@ -59,7 +58,10 @@ export async function runBuild(flags: Record<string, string>): Promise<void> {
 
 
 
-/** Stage the five members, pack them deterministically, then write `manifest.json` + `SHA256SUMS`. */
+/**
+ * Add the legal files to the staged upstream package (`assemble` ran first), pack it
+ * deterministically, then write `manifest.json` + `SHA256SUMS`.
+ */
 export async function runPackage(flags: Record<string, string>): Promise<void> {
   const detection = resolveDetection(
     loadManifest(patchesDir()),
@@ -85,8 +87,7 @@ export async function runPackage(flags: Record<string, string>): Promise<void> {
   }
   const rustNotices = readFileSync(resolve(rustNoticesPath), "utf8");
 
-  resetDirectory(stagingDir, (entries) => entries.every((e) => (ARCHIVE_ENTRIES as readonly string[]).includes(e)));
-  assembleStaging({ upstreamDir: upstream, repoRoot: root, stagingDir, rustNotices });
+  assembleStaging({ packageDir: stagingDir, upstreamDir: upstream, repoRoot: root, rustNotices });
   mkdirSync(outDir, { recursive: true });
   const filename = archiveFilename(detection.codexVersion, platform);
   const archive = await packArchive(stagingDir, join(outDir, filename));
@@ -96,14 +97,15 @@ export async function runPackage(flags: Record<string, string>): Promise<void> {
     codexVersion: detection.codexVersion,
     platform,
     upstreamCommit: upstreamCommit(upstream),
-    patchVersion: detection.patchVersion,
+    // A package release is always a versioned patch; `detect` refuses legacy (unversioned) entries.
+    patchVersion: detection.patchVersion ?? 1,
     patchFile: detection.patchFile,
     patchSha256: (await sha256File(join(patchesDir(), detection.patchFile))).sha256,
     sourceCommit: frozenCommit,
     workflowUrl,
     createdAt: new Date().toISOString(),
     archive,
-    files: await fileDigests(stagingDir),
+    files: fileDigests(stagingDir),
   });
   validateManifest(JSON.parse(JSON.stringify(manifest)), {
     codexVersion: detection.codexVersion,
@@ -121,6 +123,7 @@ export async function runVerify(flags: Record<string, string>): Promise<void> {
     codexVersion: required(flags, "codex-version"),
     platform: flags["platform"] ? releasePlatform(flags) : platformFor(process.platform, process.arch),
     skipMacho: flags["skip-macho"] === "true",
+    skipDaemon: flags["skip-daemon"] === "true",
   });
   summary([
     `## Prebuilt verification: ${report.archive}`,

@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadManifest } from "../src/patch/manifest";
-import { DEFAULT_PREBUILT_PLATFORMS, type ReleaseManifest } from "../src/distribution";
+import { DEFAULT_PREBUILT_PLATFORMS, packageRequiredFiles, type ReleaseManifest } from "../src/distribution";
 import { classifyCoverage, fetchAllReleasePages, fetchUpstreamPages, stableUpstreamVersions, upsertCoverageIssue, COVERAGE_ISSUE_MARKER, COVERAGE_ISSUE_TITLE, type CoverageRelease, type CoverageReport } from "../scripts/upstream-coverage";
 import type { GhRunner } from "../scripts/prebuilt/gh";
 
@@ -17,11 +17,11 @@ function metadata(version: string): ReleaseManifest {
   const patch = manifest.patches.find((entry) => entry.min === version)!;
   const bytes = readFileSync(join(patchesDir, patch.file));
   const patchSha256 = createHash("sha256").update(bytes).digest("hex");
-  const files = Object.fromEntries(["codex", "codex-code-mode-host", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"]
+  const files = Object.fromEntries(packageRequiredFiles("linux-arm64")
     .map((name) => [name, { sha256: "a".repeat(64), size: 1 }])) as ReleaseManifest["artifacts"][number]["files"];
   return {
-    schema: 2,
-    patchVersion: patch.patchVersion,
+    schema: 3,
+    patchVersion: patch.patchVersion ?? 1,
     codexVersion: version,
     upstreamTag: `rust-v${version}`,
     upstreamCommit: "b".repeat(40),

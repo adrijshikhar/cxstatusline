@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import type { Context } from "../src/context";
 import type { RunResult } from "../src/env";
-import { releaseTag, type ArtifactFile, type ReleaseManifest } from "../src/distribution";
+import { releaseTag, type ReleaseManifest } from "../src/distribution";
 import { preparePrebuilt } from "../src/distribution";
 import type { FetchLike } from "../src/distribution/transport";
 import { activeGeneration, createGeneration, readInstallation, swapPointer } from "../src/patch/generation";
@@ -78,10 +78,12 @@ test("stages a verified prebuilt pair from a release server", async () => {
       "LICENSE",
       "NOTICE",
       "THIRD_PARTY_NOTICES.md",
-      "codex",
-      "codex-code-mode-host",
+      "bin",
+      "codex-package.json",
+      "codex-path",
+      "codex-resources",
     ]);
-    expect(readFileSync(join(pair.directory, "codex"), "utf8")).toBe("CODEX-BINARY");
+    expect(readFileSync(join(pair.directory, "bin", "codex"), "utf8")).toBe("CODEX-BINARY");
     expect(pair.codexVersion).toBe(CODEX);
     expect(pair.provenance.source).toBe("prebuilt");
     expect(pair.provenance.cxVersion).toBe(CX);
@@ -91,13 +93,14 @@ test("stages a verified prebuilt pair from a release server", async () => {
     expect(pair.provenance.sourceCommit).toBe(fixture.manifest.sourceCommit);
     expect(pair.provenance.sourceDirty).toBe(false);
     expect(pair.provenance.installedAt).toBe("2026-09-07T10:00:00.000Z");
-    expect(pair.provenance.executables.codex).toEqual(fixture.manifest.artifacts[0]!.files.codex);
+    expect(pair.provenance.target).toBe("aarch64-apple-darwin");
+    expect(pair.provenance.files).toEqual(fixture.manifest.artifacts[0]!.files);
     expect(pair.provenance.release?.tag).toBe(TAG);
     expect(pair.provenance.release?.archiveSha256).toBe(fixture.manifest.artifacts[0]!.sha256);
     expect(pair.provenance.release?.manifest).toEqual(fixture.manifest);
     // The version probe runs the staged binary, from the staging directory, under a timeout.
     expect(calls).toHaveLength(1);
-    expect(calls[0]!.cmd).toBe(join(pair.directory, "codex"));
+    expect(calls[0]!.cmd).toBe(join(pair.directory, "bin", "codex"));
     expect(calls[0]!.args).toEqual(["--version"]);
     expect(calls[0]!.opts?.timeoutMs).toBeGreaterThan(0);
     // The download temp is gone; only the staging directory survives, for the caller to install.
@@ -197,7 +200,7 @@ test("gh supplies both assets when the public path 404s", async () => {
   try {
     const result = await preparePrebuilt(ctx, EXPECTED, { baseUrl: server.baseUrl });
     expect(result.kind).toBe("staged");
-    expect(readFileSync(join(result.pair.directory, "codex"), "utf8")).toBe("CODEX-BINARY");
+    expect(readFileSync(join(result.pair.directory, "bin", "codex"), "utf8")).toBe("CODEX-BINARY");
   } finally {
     await server.close();
   }
@@ -249,7 +252,7 @@ test("a failed install leaves an already-installed generation byte-identical", a
   } finally {
     await good.close();
   }
-  const before = readFileSync(join(generation, "codex"));
+  const before = readFileSync(join(generation, "bin", "codex"));
 
   const broken = await releaseServer({});
   try {
@@ -257,7 +260,7 @@ test("a failed install leaves an already-installed generation byte-identical", a
   } finally {
     await broken.close();
   }
-  expect(readFileSync(join(generation, "codex"))).toEqual(before);
+  expect(readFileSync(join(generation, "bin", "codex"))).toEqual(before);
   expect(activeGeneration(ctx.paths)).toBe(generation);
   expect(libexecEntries(ctx)).toEqual(["current", "generations"]);
 });
@@ -294,7 +297,7 @@ test("a tampered installed binary forces a fresh download instead of a no-op", a
   const { ctx } = prebuiltCtx();
   try {
     const generation = await installOnce(ctx, server.baseUrl);
-    writeFileSync(join(generation, "codex"), "TAMPERED-BINARY");
+    writeFileSync(join(generation, "bin", "codex"), "TAMPERED-BINARY");
     const again = await preparePrebuilt(ctx, EXPECTED, { baseUrl: server.baseUrl });
     expect(again.kind).toBe("staged");
     expect(again.pair.directory).not.toBe(generation);
@@ -318,9 +321,10 @@ test("a missing legal file in the active generation forces a fresh download", as
   }
 });
 
-test("every artifact file key is covered by the staged pair", () => {
-  const keys: ArtifactFile[] = ["codex", "codex-code-mode-host", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"];
-  expect(new Set(entries().map((e) => e.name))).toEqual(new Set(keys));
+test("every required package member is covered by the fixture archive", () => {
+  const keys = ["bin/codex", "bin/codex-code-mode-host", "codex-package.json", "codex-path/rg", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"];
+  const names = new Set(entries().map((e) => e.name));
+  for (const key of keys) expect(names.has(key)).toBe(true);
 });
 
 // ---- The injected-fetch seam (no server, no sockets) ----
@@ -371,8 +375,6 @@ test("a redirect off https is refused", async () => {
 
 test("patch revision survives download and activation; conflicting metadata is rejected", async () => {
   const fixture = release();
-  fixture.manifest.schema = 2;
-  fixture.manifest.patchVersion = 2;
   const server = await releaseServer(routesFor(fixture));
   const { ctx } = prebuiltCtx();
   try {
@@ -393,10 +395,8 @@ test("patch revision survives download and activation; conflicting metadata is r
   }
 });
 
-test("unchanged pair is detected with schema 2 manifests where cxVersion is omitted", async () => {
+test("unchanged pair is detected when the manifest omits cxVersion", async () => {
   const fixture = release();
-  fixture.manifest.schema = 2;
-  fixture.manifest.patchVersion = 1;
   delete fixture.manifest.cxVersion;
   const server = await releaseServer(routesFor(fixture));
   const { ctx } = prebuiltCtx();
@@ -413,3 +413,23 @@ test("unchanged pair is detected with schema 2 manifests where cxVersion is omit
   }
 });
 
+
+test("a release published before cxstatusline 0.11 (schema 2, flat archive) is refused with the reason", async () => {
+  const flat: TarEntry[] = [
+    { name: "codex", mode: 0o755, data: "CODEX-BINARY" },
+    { name: "codex-code-mode-host", mode: 0o755, data: "HOST-BINARY" },
+    { name: "LICENSE", mode: 0o644, data: "MIT" },
+    { name: "NOTICE", mode: 0o644, data: "NOTICE TEXT" },
+    { name: "THIRD_PARTY_NOTICES.md", mode: 0o644, data: "# Third party" },
+  ];
+  const fixture = releaseFixture({ cxVersion: CX, codexVersion: CODEX, entries: flat });
+  (fixture.manifest as { schema: number }).schema = 2;
+  const server = await releaseServer(routesFor(fixture));
+  const { ctx } = prebuiltCtx();
+  try {
+    await expect(preparePrebuilt(ctx, EXPECTED, { baseUrl: server.baseUrl })).rejects.toThrow(/predates cxstatusline 0\.11 and has not been republished yet; use --compile or wait/);
+    expect(libexecEntries(ctx)).toEqual([]);
+  } finally {
+    await server.close();
+  }
+});

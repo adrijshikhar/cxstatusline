@@ -1,27 +1,116 @@
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
-import { createHash, randomBytes } from "node:crypto";
-import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { z } from "zod";
-import { type FileDigest, type Platform, type PreparedPair, validateManifest } from "../distribution";
-import { GENERATION_EXECUTABLES, GENERATION_LEGAL_FILES } from "../distribution/files";
+import { digestOf, type FileDigest } from "../digest";
+import { modeFor, type Platform, type PreparedPair, validateManifest } from "../distribution";
 import type { Paths } from "../paths";
 import { parseSemver } from "../version";
 
 /** The metadata file that makes a generation self-describing - and authoritative over state.json. */
 export const INSTALLATION_FILE = "installation.json";
 
-// The allowlist itself lives in the leaf module `src/distribution/files.ts` (no imports, so no
-// cycle); re-exported here because a generation's layout *is* that allowlist.
-export { GENERATION_EXECUTABLES, GENERATION_LEGAL_FILES };
+/** The two executables we build; they live under `bin/` in the package layout. */
+export const GENERATION_EXECUTABLES = ["codex", "codex-code-mode-host"] as const;
 
-/** A `PreparedPair` without its temporary staging directory - exactly what a generation records. */
-export type InstallationRecord = Omit<PreparedPair, "directory">;
+/** Shipped at the package root of prebuilt pairs; absent from locally compiled ones. */
+export const GENERATION_LEGAL_FILES = ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"] as const;
+
+/**
+ * A `PreparedPair` without its temporary staging directory - exactly what a generation records.
+ * `target` and `files` are optional here only because records written by cxstatusline <= 0.10.x
+ * (flat generations) carry neither; every producer in this version writes both.
+ */
+export type InstallationRecord = Omit<PreparedPair, "directory" | "provenance"> & {
+  provenance: Omit<PreparedPair["provenance"], "target" | "files"> & { target?: string; files?: Record<string, FileDigest> };
+};
 
 const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._+-]*$/;
 
-function digestOf(file: string): FileDigest {
-  const buf = readFileSync(file);
-  return { sha256: createHash("sha256").update(buf).digest("hex"), size: buf.length };
+/** The alias upstream's own installer adds and its daemon skips when copying a package. */
+const ROOT_ALIAS = "codex";
+
+/** `bin/codex` and `codex-package.json` present: upstream's package layout. */
+export function isPackageLayout(dir: string): boolean {
+  return existsSync(join(dir, "bin", "codex")) && existsSync(join(dir, "codex-package.json"));
+}
+
+/** Where an executable lives: `bin/<name>` in the package layout, `<name>` in the legacy flat one. */
+export function executablePath(dir: string, name: "codex" | "codex-code-mode-host"): string {
+  return isPackageLayout(dir) ? join(dir, "bin", name) : join(dir, name);
+}
+
+/** What upstream's daemon reads from `codex-package.json` before it copies a package. */
+const PackageMetadata = z.object({
+  version: z.string(),
+  target: z.string(),
+  entrypoint: z.string(),
+}).passthrough();
+
+/**
+ * The one rule for "is `dir` the package `files` describes": every listed member is present with
+ * its digest and its mode bit, and `codex-package.json` names this exact Codex version, target and
+ * entrypoint (what `prepare_from_package` checks, `codex-rs/app-server-daemon/src/prepare_install.rs`).
+ * Returns the first problem as text, or null. Used by staging validation, the no-op detector and
+ * doctor, so the three can never disagree.
+ */
+export function verifyPackage(
+  dir: string,
+  files: Readonly<Record<string, FileDigest>>,
+  expect: { readonly target: string; readonly codexVersion: string },
+): string | null {
+  for (const [name, want] of Object.entries(files)) {
+    const file = join(dir, name);
+    let st;
+    try {
+      st = lstatSync(file);
+    } catch {
+      return `${name} is missing`;
+    }
+    if (!st.isFile()) return `${name} is not a regular file`;
+    const executable = (st.mode & 0o111) !== 0;
+    if (executable !== (modeFor(name) === 0o755)) return `${name} has the wrong executable bit`;
+    const got = digestOf(file);
+    if (got.sha256 !== want.sha256 || got.size !== want.size) return `${name} does not match its recorded digest`;
+  }
+  let metadata: z.infer<typeof PackageMetadata>;
+  try {
+    metadata = PackageMetadata.parse(JSON.parse(readFileSync(join(dir, "codex-package.json"), "utf8")));
+  } catch (e) {
+    return `codex-package.json is unreadable: ${e instanceof Error ? e.message.split("\n")[0] : String(e)}`;
+  }
+  if (metadata.entrypoint !== "bin/codex") return `codex-package.json entrypoint is ${JSON.stringify(metadata.entrypoint)}, not "bin/codex"`;
+  if (metadata.target !== expect.target) return `codex-package.json target is ${metadata.target}, expected ${expect.target}`;
+  if (metadata.version !== expect.codexVersion) return `codex-package.json version is ${metadata.version}, expected ${expect.codexVersion}`;
+  return null;
+}
+
+/**
+ * Every regular file under `dir` as `relative path -> digest`, the shape a release manifest's
+ * `files` map has. Rejects symlinks and anything that is not a file or directory: upstream's
+ * daemon refuses to copy a package containing links (`package_tree`), so a generation must never
+ * hold one. `installation.json` (ours, written last) and the root `codex -> bin/codex` alias
+ * (upstream's, skipped by `package_tree`) are the two entries that are not package content.
+ */
+export function packageFiles(dir: string): Record<string, FileDigest> {
+  const out: Record<string, FileDigest> = {};
+  const walk = (current: string): void => {
+    for (const name of readdirSync(current).sort()) {
+      const path = join(current, name);
+      const rel = relative(dir, path).split(sep).join("/");
+      const st = lstatSync(path);
+      if (rel === INSTALLATION_FILE || (rel === ROOT_ALIAS && st.isSymbolicLink())) continue;
+      if (st.isSymbolicLink()) throw new Error(`${rel} is a symbolic link; a Codex package may only contain regular files`);
+      if (st.isDirectory()) {
+        walk(path);
+        continue;
+      }
+      if (!st.isFile()) throw new Error(`${rel} is not a regular file`);
+      out[rel] = digestOf(path);
+    }
+  };
+  walk(dir);
+  return out;
 }
 
 /**
@@ -70,26 +159,30 @@ export function insideGenerationsRoot(paths: Paths, candidate: string): boolean 
 }
 
 /**
- * Validate the staging directory the caller prepared: both executables present and byte-identical
- * to the digests recorded in the provenance, plus the legal texts a prebuilt pair must carry.
- * Why here and not only at download time: this is the last gate before bytes become runnable.
+ * Validate the staging directory the caller prepared: it is exactly the package `provenance.files`
+ * describes (every member, digest and mode bit; `codex-package.json` naming this version and target)
+ * and, for a prebuilt pair, carries the legal texts. Why here and not only at download time: this
+ * is the last gate before bytes become runnable.
  */
 function validateStaging(pair: PreparedPair): void {
   if (!SAFE_SEGMENT.test(pair.codexVersion)) {
     throw new Error(`prepared pair has an unusable codexVersion "${pair.codexVersion}"`);
   }
-  for (const name of GENERATION_EXECUTABLES) {
-    const file = join(pair.directory, name);
-    if (!existsSync(file)) throw new Error(`staged pair is missing ${name}`);
-    const want = pair.provenance.executables[name];
-    const got = digestOf(file);
-    if (got.sha256 !== want.sha256 || got.size !== want.size) {
-      throw new Error(`staged ${name} does not match its recorded digest; refusing to install it`);
-    }
-  }
+  const problem = verifyPackage(pair.directory, pair.provenance.files, { target: pair.provenance.target, codexVersion: pair.codexVersion });
+  if (problem !== null) throw new Error(`staged package is not the one its provenance describes: ${problem}; refusing to install it`);
   if (pair.provenance.source === "prebuilt") {
     for (const name of GENERATION_LEGAL_FILES) {
-      if (!existsSync(join(pair.directory, name))) throw new Error(`prebuilt pair is missing ${name}`);
+      if (!(name in pair.provenance.files) || !existsSync(join(pair.directory, name))) throw new Error(`prebuilt pair is missing ${name}`);
+    }
+  }
+  // Belt and braces for the two executables: hashed again by name, so a manifest that forgot them
+  // cannot pass on the strength of the other members.
+  for (const name of GENERATION_EXECUTABLES) {
+    const want = pair.provenance.files[`bin/${name}`];
+    if (!want) throw new Error(`staged pair is missing bin/${name}`);
+    const got = digestOf(join(pair.directory, "bin", name));
+    if (got.sha256 !== want.sha256 || got.size !== want.size) {
+      throw new Error(`staged bin/${name} does not match its recorded digest; refusing to install it`);
     }
   }
 }
@@ -97,17 +190,6 @@ function validateStaging(pair: PreparedPair): void {
 function installationRecord(pair: PreparedPair): InstallationRecord {
   const { directory: _staging, ...record } = pair;
   return record;
-}
-
-function copyInto(from: string, into: string, name: string, mode: number, expected?: FileDigest): void {
-  const target = join(into, name);
-  copyFileSync(join(from, name), target);
-  chmodSync(target, mode);
-  if (!expected) return;
-  const got = digestOf(target);
-  if (got.sha256 !== expected.sha256 || got.size !== expected.size) {
-    throw new Error(`${name} did not survive the copy into the new generation intact`);
-  }
 }
 
 function commitJson(file: string, value: unknown, rename: typeof renameSync): void {
@@ -121,28 +203,39 @@ function commitJson(file: string, value: unknown, rename: typeof renameSync): vo
   }
 }
 
-function freshDirectory(pair: PreparedPair, paths: Paths): string {
+/** The name shape every generation directory has; `revert` trusts it as ours. */
+export const GENERATION_NAME = /^\d+\.\d+\.\d+-\d{8}T\d{6}-[0-9a-f]{6}$/;
+
+/** A never-used name under the generations tree. Not created: the staged package is moved onto it. */
+function freshName(pair: PreparedPair, paths: Paths): string {
   mkdirSync(paths.generationsDir, { recursive: true });
   for (;;) {
     const dir = join(paths.generationsDir, `${pair.codexVersion}-${stamp(pair.provenance.installedAt)}-${randomBytes(3).toString("hex")}`);
-    if (existsSync(dir)) continue; // names are never reused, not even after a revert
-    mkdirSync(dir);
-    return dir;
+    if (!existsSync(dir)) return dir; // names are never reused, not even after a revert
   }
 }
 
 /**
- * Build one complete, immutable generation and return its path. It is not active yet: only
- * `swapPointer` makes it observable, so an interrupted build leaves an unreferenced directory.
+ * Turn the staged package into one complete, immutable generation and return its path. The
+ * staging directory is *moved* (one `rename(2)`; staging lives on the generations filesystem by
+ * construction), so the bytes `validateStaging` just hashed are the bytes that become runnable -
+ * nothing is copied and nothing is re-hashed. It is not active yet: only `swapPointer` makes it
+ * observable, so an interrupted build leaves an unreferenced directory. A failed move leaves the
+ * staging directory untouched for the caller; a failure after the move removes the generation.
  */
 export function createGeneration(pair: PreparedPair, paths: Paths, rename: typeof renameSync = renameSync): string {
   validateStaging(pair);
-  const dir = freshDirectory(pair, paths);
+  const dir = freshName(pair, paths);
   try {
-    for (const name of GENERATION_EXECUTABLES) copyInto(pair.directory, dir, name, 0o755, pair.provenance.executables[name]);
-    for (const name of GENERATION_LEGAL_FILES) {
-      if (existsSync(join(pair.directory, name))) copyInto(pair.directory, dir, name, 0o644);
-    }
+    rename(pair.directory, dir);
+  } catch (e) {
+    if ((e as { code?: string }).code !== "EXDEV") throw e;
+    cpSync(pair.directory, dir, { recursive: true, verbatimSymlinks: true });
+    rmSync(pair.directory, { recursive: true, force: true });
+  }
+  try {
+    chmodSync(dir, 0o755); // staging directories are private (0700)
+    symlinkSync("bin/codex", join(dir, ROOT_ALIAS)); // upstream's own alias, skipped by its daemon's copy
     // Last, so a directory carrying installation.json is by definition complete.
     commitJson(join(dir, INSTALLATION_FILE), installationRecord(pair), rename);
   } catch (e) {
@@ -154,9 +247,9 @@ export function createGeneration(pair: PreparedPair, paths: Paths, rename: typeo
   return dir;
 }
 
-/** True for a directory that holds a complete cxstatusline generation. Used by `revert`. */
+/** True for a directory that holds a complete cxstatusline generation in the package layout. */
 export function isGenerationDir(dir: string): boolean {
-  return existsSync(join(dir, INSTALLATION_FILE)) && existsSync(join(dir, "codex"));
+  return existsSync(join(dir, INSTALLATION_FILE)) && isPackageLayout(dir);
 }
 
 export function listGenerations(paths: Paths): string[] {
@@ -249,7 +342,9 @@ const RecordSchema = z.object({
     sourceCommit: z.string().regex(HEX40, "sourceCommit must be 40 lowercase hex chars").nullable(),
     sourceDirty: z.boolean(),
     installedAt: z.string(),
-    executables: z.object({ codex: DigestSchema, "codex-code-mode-host": DigestSchema }),
+    target: z.string().optional(),
+    files: z.record(z.string(), DigestSchema).optional(),
+    executables: z.object({ codex: DigestSchema, "codex-code-mode-host": DigestSchema }).optional(),
     release: z
       .object({
         tag: z.string(),

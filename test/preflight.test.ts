@@ -34,6 +34,15 @@ describe("preflight", () => {
     const r = preflight(deps({ which: (c) => (c === "cargo" ? null : "/x") }), "/share");
     expect(r).toMatchObject({ ok: false, reason: expect.stringMatching(/cargo/) });
   });
+  test("no Python >= 3.10 on PATH names the fix (macOS CLT ships 3.9)", () => {
+    const none = preflight(deps({ which: (c) => (c.startsWith("python") ? null : "/x") }), "/share");
+    expect(none).toMatchObject({ ok: false, reason: expect.stringMatching(/Python >= 3\.10/), fix: expect.stringContaining("brew install python") });
+    const old = fakeExec((cmd, args) => {
+      if (args[0] === "-c") return { status: 1 }; // sys.version_info < (3, 10)
+      return healthyRun(cmd, args);
+    }).run;
+    expect(preflight(deps({ run: old }), "/share")).toMatchObject({ ok: false, reason: expect.stringMatching(/Python >= 3\.10/) });
+  });
   test("the required toolchain is not installed", () => {
     const run = fakeExec((cmd, args) => (cmd === "rustup" && args[0] === "toolchain" ? { stdout: "stable-aarch64-apple-darwin\n" } : {})).run;
     const r = preflight(deps({ run }), "/share");

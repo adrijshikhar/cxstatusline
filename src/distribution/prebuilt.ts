@@ -1,22 +1,19 @@
-import { createHash } from "node:crypto";
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { Context } from "../context";
 import {
+  codexTarget,
   releaseTag,
   validateManifest,
   type Artifact,
-  type ArtifactFile,
   type ExpectedRelease,
-  type FileDigest,
   type PreparedPair,
   type ReleaseManifest,
 } from "../distribution";
-import { activeGeneration, readInstallation } from "../patch/generation";
+import { activeGeneration, isPackageLayout, readInstallation, verifyPackage } from "../patch/generation";
 import { compareSemver, parseSemver } from "../version";
 import { VERSION } from "../version-info";
 import { extractArchive } from "./archive";
-import { ARTIFACT_FILES } from "./files";
 import { ARCHIVE_MAX_BYTES, MANIFEST_MAX_BYTES, downloadAsset, sanitize, type FetchLike, type TransportOptions } from "./transport";
 
 /** The release asset holding the manifest. The archive's name comes from the manifest itself. */
@@ -29,15 +26,6 @@ const PROBE_TIMEOUT_MS = 30_000;
 export type PrebuiltPreparation =
   | { kind: "staged"; pair: PreparedPair }
   | { kind: "unchanged"; pair: PreparedPair };
-
-function digestOf(file: string): FileDigest {
-  const bytes = readFileSync(file);
-  return { sha256: createHash("sha256").update(bytes).digest("hex"), size: bytes.length };
-}
-
-function sameDigest(a: FileDigest, b: FileDigest): boolean {
-  return a.sha256 === b.sha256 && a.size === b.size;
-}
 
 /** A private directory on the same filesystem as the generations, so activation never copies across. */
 function privateTemp(ctx: Context, prefix: string): string {
@@ -82,35 +70,28 @@ function unchangedPair(ctx: Context, manifest: ReleaseManifest, artifact: Artifa
 
   const directory = activeGeneration(ctx.paths);
   if (directory === null) return null;
-  for (const name of ARTIFACT_FILES) {
-    try {
-      if (!sameDigest(digestOf(join(directory, name)), artifact.files[name])) return null;
-    } catch {
-      return null; // unreadable or missing: not the release we are being asked for
-    }
-  }
-  return { directory, codexVersion: record.codexVersion, provenance: record.provenance };
+  // A flat generation from an older cxstatusline, or one whose bytes drifted, is not this release.
+  if (record.provenance.files === undefined || !isPackageLayout(directory)) return null;
+  if (verifyPackage(directory, artifact.files, { target: codexTarget(artifact.platform), codexVersion: manifest.codexVersion }) !== null) return null;
+  return { directory, codexVersion: record.codexVersion, provenance: record.provenance as PreparedPair["provenance"] };
 }
 
-/** Re-hash every extracted file against the manifest before anything may run it. */
-function verifyStaged(staging: string, artifact: Artifact): Record<"codex" | "codex-code-mode-host", FileDigest> {
-  const digests: Partial<Record<ArtifactFile, FileDigest>> = {};
-  for (const name of ARTIFACT_FILES) {
-    const got = digestOf(join(staging, name));
-    if (!sameDigest(got, artifact.files[name])) {
-      throw new Error(`staged ${name} does not match the release manifest sha256`);
-    }
-    digests[name] = got;
+/**
+ * The staged tree must be exactly the package the manifest describes, for the platform the
+ * archive was published for - a builder that mislabelled `--platform` is caught here, before
+ * anything runs, by the `codex-package.json` target check.
+ */
+function verifyStaged(staging: string, manifest: ReleaseManifest, artifact: Artifact): void {
+  if (manifest.schema !== 3) {
+    throw new Error(`release ${releaseTag(manifest.codexVersion)} predates cxstatusline 0.11 and has not been republished yet; use --compile or wait`);
   }
-  return {
-    codex: digests.codex as FileDigest,
-    "codex-code-mode-host": digests["codex-code-mode-host"] as FileDigest,
-  };
+  const problem = verifyPackage(staging, artifact.files, { target: codexTarget(artifact.platform), codexVersion: manifest.codexVersion });
+  if (problem !== null) throw new Error(`staged package does not match the release manifest: ${problem}`);
 }
 
 /** The last gate: the staged binary must introduce itself as exactly the version we asked for. */
 function probeVersion(ctx: Context, staging: string, codexVersion: string): void {
-  const probe = ctx.run(join(staging, "codex"), ["--version"], { timeoutMs: PROBE_TIMEOUT_MS });
+  const probe = ctx.run(join(staging, "bin", "codex"), ["--version"], { timeoutMs: PROBE_TIMEOUT_MS });
   const reported = sanitize((probe.stdout || probe.stderr).slice(0, 512));
   if (probe.status !== 0 || reported !== `codex-cli ${codexVersion}`) {
     throw new Error(`staged codex reported version "${reported}" instead of "codex-cli ${codexVersion}"`);
@@ -124,7 +105,7 @@ function stagedPair(
   artifact: Artifact,
   tag: string,
 ): PreparedPair {
-  const executables = verifyStaged(staging, artifact);
+  verifyStaged(staging, manifest, artifact);
   probeVersion(ctx, staging, manifest.codexVersion);
   return {
     directory: staging,
@@ -133,13 +114,14 @@ function stagedPair(
       source: "prebuilt",
       cxVersion: manifest.cxVersion ?? VERSION,
       platform: artifact.platform,
+      target: codexTarget(artifact.platform),
       patchVersion: manifest.patchVersion,
       patchSha256: manifest.patchSha256,
       upstreamCommit: manifest.upstreamCommit,
       sourceCommit: manifest.sourceCommit,
       sourceDirty: false,
       installedAt: ctx.now().toISOString(),
-      executables,
+      files: artifact.files,
       release: { tag, archiveSha256: artifact.sha256, manifest },
     },
   };
@@ -182,7 +164,7 @@ async function stageArchive(
   const staging = privateTemp(ctx, "staging-");
   try {
     opts.onStatus?.("extract", "Extracting and verifying executables...");
-    await extractArchive(archive, staging);
+    await extractArchive(archive, staging, artifact.files);
     const pair = stagedPair(ctx, staging, manifest, artifact, tag);
     opts.onStatus?.("extract-done", "Verified executables (codex, codex-code-mode-host)");
     return pair;

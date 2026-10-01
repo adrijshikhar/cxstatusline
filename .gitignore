@@ -9,3 +9,5 @@ coverage/
 .agents/
 .codex/
 .playwright-mcp/
+__pycache__/
+*.pyc

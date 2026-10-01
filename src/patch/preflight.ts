@@ -2,6 +2,7 @@ import { accessSync, constants, existsSync, statfsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import type { Runner } from "../env";
+import { findPython } from "./package-assemble";
 
 export const MIN_FREE_BYTES = 20 * 1024 ** 3;
 
@@ -67,6 +68,18 @@ export function preflight(deps: PreflightDeps, shareDir: string): PreflightResul
   }
   const toolchain = checkToolchain(deps);
   if (!toolchain.ok) return toolchain;
+  // Upstream's packager (`scripts/build_codex_package.py`) assembles the package after the build.
+  if (findPython(deps.which, deps.run) === null) {
+    return no("Python >= 3.10 is not on PATH; Codex's package is assembled by upstream's Python packager",
+      "brew install python   (or apt install python3), then reopen your shell");
+  }
+  if (process.platform === "linux" && !deps.which("bwrap")) {
+    const libcap = deps.run("pkg-config", ["--exists", "libcap"]);
+    if (!deps.which("pkg-config") || libcap.status !== 0) {
+      return no("bubblewrap is not on PATH and libcap-dev is not installed; Codex's Linux package needs one of them for its sandbox",
+        "apt install bubblewrap   (or apt install libcap-dev pkg-config), then re-run");
+    }
+  }
   const free = deps.freeBytes(shareDir);
   if (free < MIN_FREE_BYTES) {
     return no(`${gib(free)} free at ${shareDir}; a Codex release build needs 20 GiB`,

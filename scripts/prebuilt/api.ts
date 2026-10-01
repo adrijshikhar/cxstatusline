@@ -26,8 +26,9 @@ export {
   type Provenance,
 } from "./notes";
 export {
-  ARCHIVE_ENTRIES,
   ARCHIVE_MTIME,
+  LEGAL_FILES,
+  STAGING_TOP_LEVEL,
   archiveFilename,
   assembleStaging,
   fileDigests,

@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import type { Context } from "../context";
 import { acquireLock } from "../lock";
 import { describeLookup, preserveLauncherRestore, readUpstreamVersion, resolveUpstream } from "../codex/upstream";
+import { activeGeneration as activeGenerationDir, isPackageLayout } from "../patch/generation";
 import { ensureWrapper, isOurWrapper, readInstallation } from "../patch/wrapper";
 import { probeRemoteCandidate, type RemoteCandidate } from "../patch/run";
 import { readState, writeState, RELEASE_RETRY_AFTER_MS, RELEASE_UNAVAILABLE, type State } from "../state";
@@ -142,7 +143,12 @@ export async function runHook(ctx: Context, stdin: string, deps: HookDeps): Prom
   const effectiveInstalled = activeGeneration ?? state.patched_from;
   if (effectiveInstalled === null) return done();
   const patched = parseSemver(effectiveInstalled);
-  const drift = needsRepatch(upstream, patched, state.policy);
+  // A generation installed by cxstatusline <= 0.10.x is a bare pair, not the package upstream's
+  // daemon needs (Codex >= 0.157 refuses to start from it). Same version, so no version drift:
+  // it is treated as drift anyway, once, and rebuilt in the background.
+  const active = activeGenerationDir(ctx.paths);
+  const flat = active !== null && !isPackageLayout(active);
+  const drift = needsRepatch(upstream, patched, state.policy) || flat;
 
   if (!drift) maintainWrapper(ctx, messages);
 
@@ -172,7 +178,9 @@ export async function runHook(ctx: Context, stdin: string, deps: HookDeps): Prom
 
   if (drift) {
     deps.spawnDetached(ctx.cxBin, ["hook", "acquire"], ctx.paths.patchLog);
-    messages.push(`cxstatusline: Codex updated to ${upstream.raw} (installed pair is from ${effectiveInstalled}). Installing the new pair in the background - reopen Codex in a few minutes. Log: ${ctx.paths.patchLog}`);
+    messages.push(flat && !needsRepatch(upstream, patched, state.policy)
+      ? `cxstatusline: this Codex was installed by an older cxstatusline; rebuilding it in the background - reopen Codex in a few minutes. Log: ${ctx.paths.patchLog}`
+      : `cxstatusline: Codex updated to ${upstream.raw} (installed pair is from ${effectiveInstalled}). Installing the new pair in the background - reopen Codex in a few minutes. Log: ${ctx.paths.patchLog}`);
   }
   return done();
 }

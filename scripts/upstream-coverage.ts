@@ -79,6 +79,10 @@ export function classifyCoverage(
     if (!release) return { version, status: "missing-prebuilt", detail: "No published matching release" };
     const raw = metadataByVersion.get(version);
     if (raw === undefined) return fail(version, "Release manifest is missing", patch.patchVersion);
+    const rawSchema = typeof raw === "object" && raw !== null ? (raw as { schema?: unknown }).schema : undefined;
+    if (typeof rawSchema === "number" && rawSchema < 3) {
+      return fail(version, "Release predates the package format (manifest schema < 3); republish it", patch.patchVersion);
+    }
     let releaseManifest: ReleaseManifest | undefined;
     try {
       for (const platform of platforms) {
@@ -91,7 +95,7 @@ export function classifyCoverage(
     const selectedBytes = readFileSync(join(patchesDir, patch.file));
     const selectedSha = createHash("sha256").update(selectedBytes).digest("hex");
     if (releaseManifest.patchSha256 !== selectedSha) return fail(version, "Release patch digest differs from selected patch", patch.patchVersion);
-    if (releaseManifest.schema === 2 && releaseManifest.patchVersion !== patch.patchVersion) {
+    if (releaseManifest.patchVersion !== patch.patchVersion) {
       return fail(version, `Release patchVersion ${releaseManifest.patchVersion} differs from selected ${patch.patchVersion}`, patch.patchVersion);
     }
     const assets = new Map(release.assets.map((asset) => [asset.name, asset.size]));
@@ -109,7 +113,7 @@ export function classifyCoverage(
     return {
       version,
       status: "ready",
-      detail: releaseManifest.schema === 1 ? `Ready; legacy manifest digest matches, Rust revision unknown` : `Ready; Rust patch v${patch.patchVersion}`,
+      detail: `Ready; Rust patch v${patch.patchVersion}`,
       ...(patch.patchVersion === undefined ? {} : { patchVersion: patch.patchVersion }),
     };
   });
