@@ -1,7 +1,7 @@
 {
   "version": 2,
   "tag_prefix": "rust-v",
-  "candidate": "0.159.0",
+  "candidate": "0.159.3",
   "patches": [
     {
       "patchVersion": 1,
@@ -80,6 +80,12 @@
       "max": "0.159.0",
       "file": "codex-0.159.0.patch",
       "patchVersion": 2
+    },
+    {
+      "patchVersion": 2,
+      "min": "0.159.3",
+      "max": "0.159.3",
+      "file": "codex-0.159.3.patch"
     }
   ]
 }
