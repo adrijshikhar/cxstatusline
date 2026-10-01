@@ -354,14 +354,25 @@ describe("publishRelease", () => {
   });
 
   test("refuses a changed published identity that drops a platform", async () => {
-    const oldDir = await multiReleaseDir(["darwin-arm64", "linux-x64"], "d".repeat(40));
+    const oldDir = await multiReleaseDir(["darwin-arm64", "linux-arm64"], "d".repeat(40));
     const newDir = await releaseDir(SOURCE, "e".repeat(64));
     const fake = releaseServer(handles());
-    await publishRelease({ ...publishArgs(oldDir, fake.run), sourceCommit: "d".repeat(40), platforms: ["darwin-arm64", "linux-x64"] });
+    await publishRelease({ ...publishArgs(oldDir, fake.run), sourceCommit: "d".repeat(40), platforms: ["darwin-arm64", "linux-arm64"] });
     const backupDir = tmp("missing-platform-backup");
     await backupPublishedRelease(fake.run, TAG, CODEX, backupDir);
-    await expect(publishRelease({ ...publishArgs(newDir, fake.run), backupDir })).rejects.toThrow(/omits.*linux-x64/);
+    await expect(publishRelease({ ...publishArgs(newDir, fake.run), backupDir })).rejects.toThrow(/omits.*linux-arm64/);
     expect(fake.of("release delete")).toHaveLength(0);
+  });
+
+  test("allows superseding legacy non-arm64 platforms when replacing with supported arm64 platforms", async () => {
+    const oldDir = await multiReleaseDir(["darwin-arm64", "linux-arm64", "linux-x64"], "d".repeat(40));
+    const newDir = await multiReleaseDir(["darwin-arm64", "linux-arm64"], SOURCE);
+    const fake = releaseServer(handles());
+    await publishRelease({ ...publishArgs(oldDir, fake.run), sourceCommit: "d".repeat(40), platforms: ["darwin-arm64", "linux-arm64", "linux-x64"] });
+    const backupDir = tmp("legacy-x64-backup");
+    await backupPublishedRelease(fake.run, TAG, CODEX, backupDir);
+    const outcome = await publishRelease({ ...publishArgs(newDir, fake.run), platforms: ["darwin-arm64", "linux-arm64"], backupDir });
+    expect(outcome.kind).toBe("published");
   });
 
   test("rebuilds every retained platform from the new identity", async () => {
