@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { codexTarget, validateManifest, type Artifact, type Platform, type ReleaseManifest } from "../../src/distribution";
 import { extractArchive } from "../../src/distribution/archive";
 import { verifyPackage } from "../../src/patch/generation";
+import { compareSemver, parseSemver } from "../../src/version";
 import { validateLinkage, validateVersion } from "../ci-prebuilt";
 import { parseChecksums, sha256File } from "./pack";
 import { RUST_NOTICES_MARKER, TOOL_NOTICES_MARKER } from "./rust-licenses";
@@ -303,8 +304,15 @@ export async function verifyOutput(o: VerifyOptions): Promise<VerifyReport> {
     }
     checkSmoke(staged, o, checks);
     checkTools(staged, checks);
-    if (o.skipDaemon) checks.push("daemon start probe SKIPPED");
-    else checkDaemonStart(staged, o, checks);
+    const parsed = parseSemver(o.codexVersion);
+    const supportsDaemonPackage = parsed !== null && compareSemver(parsed, { major: 0, minor: 156, patch: 0, raw: "0.156.0" }) >= 0;
+    if (o.skipDaemon) {
+      checks.push("daemon start probe SKIPPED");
+    } else if (!supportsDaemonPackage) {
+      checks.push("daemon start probe SKIPPED (Codex < 0.156.0 lacks prepare_from_package)");
+    } else {
+      checkDaemonStart(staged, o, checks);
+    }
   } finally {
     rmSync(staged, { recursive: true, force: true });
   }

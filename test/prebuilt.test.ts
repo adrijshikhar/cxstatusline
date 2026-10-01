@@ -532,6 +532,19 @@ describe("verifyOutput", () => {
     expect(report.checks).toContain("ELF arch/linkage SKIPPED");
   });
 
+  test("skips daemon start probe for Codex versions prior to 0.156.0", async () => {
+    const out = await releaseDir(smokeStaging(CODEX));
+    const report = await verifyOutput({
+      outDir: out,
+      cxVersion: CX,
+      codexVersion: CODEX,
+      platform: "darwin-arm64",
+      skipMacho: true,
+      skipDaemon: false,
+    });
+    expect(report.checks).toContain("daemon start probe SKIPPED (Codex < 0.156.0 lacks prepare_from_package)");
+  });
+
   test("rejects a tampered archive whose bytes no longer match the manifest", async () => {
     const out = await releaseDir(smokeStaging());
     const archivePath = join(out, archiveFilename(CODEX, "darwin-arm64"));
