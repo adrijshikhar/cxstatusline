@@ -337,6 +337,63 @@ describe("command dispatch", () => {
     })).toBe(1);
     expect(receivedPrebuilts).toEqual(["0.152.1"]);
   });
+  test("interactive install defaults to the latest prebuilt version even when older upstream is installed", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    const ctx = d.deps.context!(d.env, { say: () => {}, log: () => {} });
+    writeFileSync(join(ctx.patchesDir, "manifest.json"), JSON.stringify({
+      version: 1,
+      tag_prefix: "rust-v",
+      candidate: "0.157.0",
+      patches: [
+        { min: "0.152.1", max: "0.152.1", file: "p.patch" },
+        { min: "0.155.0", max: "0.155.0", file: "p.patch" },
+        { min: "0.156.0", max: "0.156.0", file: "p.patch" },
+      ],
+    }));
+    const mockReleases = [
+      { tag_name: "codex-v0.156.0", draft: false },
+      { tag_name: "codex-v0.155.0", draft: false },
+      { tag_name: "codex-v0.152.1", draft: false },
+    ];
+    const mockFetch = async () => new Response(JSON.stringify(mockReleases), { status: 200 });
+    let pickedDefault: string | undefined;
+    const promptVersion = async (opts: any) => {
+      pickedDefault = opts.defaultVersion;
+      return { version: opts.defaultVersion, compile: false };
+    };
+    await main(["install"], { ...t.io, isTTY: true, env: d.env }, {
+      ...d.deps,
+      transport: { fetch: mockFetch as any },
+      promptVersion,
+    });
+    expect(pickedDefault).toBe("0.156.0");
+  });
+  test("interactive install --compile defaults to the latest supported version", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    const ctx = d.deps.context!(d.env, { say: () => {}, log: () => {} });
+    writeFileSync(join(ctx.patchesDir, "manifest.json"), JSON.stringify({
+      version: 1,
+      tag_prefix: "rust-v",
+      candidate: "0.157.0",
+      patches: [
+        { min: "0.152.1", max: "0.152.1", file: "p.patch" },
+        { min: "0.155.0", max: "0.155.0", file: "p.patch" },
+        { min: "0.156.0", max: "0.156.0", file: "p.patch" },
+      ],
+    }));
+    let pickedDefault: string | undefined;
+    const promptVersion = async (opts: any) => {
+      pickedDefault = opts.defaultVersion;
+      return { version: opts.defaultVersion, compile: true };
+    };
+    await main(["install", "--compile"], { ...t.io, isTTY: true, env: d.env }, {
+      ...d.deps,
+      promptVersion,
+    });
+    expect(pickedDefault).toBe("0.157.0");
+  });
   test("cancelling the version picker exits without starting installation", async () => {
     const t = io("");
     const d = dispatchDeps();
