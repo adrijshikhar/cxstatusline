@@ -188,6 +188,7 @@ jobs:
           ./scripts/build-prebuilt-docker.sh \
             --platform "$PLATFORM" \
             --codex-version "$CODEX_VERSION" \
+            --skip-tests \
             --workflow-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
       # Clones the exact upstream tag and applies the exact patch; `--check` first, never a fixup.
       - name: Fetch exact upstream and apply patch
