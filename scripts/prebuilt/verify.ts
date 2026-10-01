@@ -305,7 +305,8 @@ export async function verifyOutput(o: VerifyOptions): Promise<VerifyReport> {
     checkSmoke(staged, o, checks);
     checkTools(staged, checks);
     const parsed = parseSemver(o.codexVersion);
-    const supportsDaemonPackage = parsed !== null && compareSemver(parsed, { major: 0, minor: 156, patch: 0, raw: "0.156.0" }) >= 0;
+    const threshold = parseSemver("0.156.0");
+    const supportsDaemonPackage = parsed !== null && threshold !== null && compareSemver(parsed, threshold) >= 0;
     if (o.skipDaemon) {
       checks.push("daemon start probe SKIPPED");
     } else if (!supportsDaemonPackage) {
