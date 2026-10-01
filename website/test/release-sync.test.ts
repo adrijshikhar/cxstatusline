@@ -12,7 +12,8 @@ describe("compareSemver", () => {
 describe("resolveLatestVersion", () => {
   test("retains static version when npm is older (e.g. 0.5.1 vs static 0.6.0)", async () => {
     const mockFetch: FetchLike = async (url) => {
-      if (String(url).includes("registry.npmjs.org")) {
+      const parsedUrl = new URL(typeof url === "string" ? url : url.toString());
+      if (parsedUrl.hostname === "registry.npmjs.org") {
         return new Response(JSON.stringify({ version: "0.5.1" }), { status: 200 });
       }
       return new Response(JSON.stringify({ version: "0.6.0" }), { status: 200 });
@@ -24,7 +25,8 @@ describe("resolveLatestVersion", () => {
 
   test("upgrades when npm returns a newer version", async () => {
     const mockFetch: FetchLike = async (url) => {
-      if (String(url).includes("registry.npmjs.org")) {
+      const parsedUrl = new URL(typeof url === "string" ? url : url.toString());
+      if (parsedUrl.hostname === "registry.npmjs.org") {
         return new Response(JSON.stringify({ version: "0.7.0" }), { status: 200 });
       }
       return new Response(JSON.stringify({ version: "0.6.0" }), { status: 200 });
@@ -37,10 +39,11 @@ describe("resolveLatestVersion", () => {
 
   test("falls back to GitHub when npm is offline or failing", async () => {
     const mockFetch: FetchLike = async (url) => {
-      if (String(url).includes("registry.npmjs.org")) {
+      const parsedUrl = new URL(typeof url === "string" ? url : url.toString());
+      if (parsedUrl.hostname === "registry.npmjs.org") {
         return new Response("Service Unavailable", { status: 503 });
       }
-      if (String(url).includes("raw.githubusercontent.com")) {
+      if (parsedUrl.hostname === "raw.githubusercontent.com") {
         return new Response(JSON.stringify({ version: "0.6.0" }), { status: 200 });
       }
       return new Response("Not Found", { status: 404 });
