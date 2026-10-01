@@ -27,7 +27,8 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-CODEX_VERSION="0.155.0"
+DEFAULT_CODEX_VERSION="$(node -e 'const m = JSON.parse(require("fs").readFileSync("'"$REPO_ROOT"'/patches/manifest.json")); console.log(m.candidate || m.patches[m.patches.length - 1].max);' 2>/dev/null || echo "0.159.0")"
+CODEX_VERSION="$DEFAULT_CODEX_VERSION"
 PLATFORM=""
 REMOTE_HOST=""
 SKIP_TESTS="${SKIP_TESTS:-false}"
@@ -40,7 +41,7 @@ Usage: $(basename "$0") [options]
 Build cxstatusline prebuilt binaries in a Linux Docker container.
 
 Options:
-  --codex-version <ver>  Codex version to build (default: 0.155.0)
+  --codex-version <ver>  Codex version to build (default: $DEFAULT_CODEX_VERSION)
   --platform <plat>      Target platform: linux-arm64 or linux-x64 (default: auto-detected)
   --remote <host>        Remote SSH host for Docker (e.g. 192.168.1.41 or nemesis@192.168.1.41)
   --skip-tests           Skip the 'just test' step for faster test builds

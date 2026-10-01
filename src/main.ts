@@ -7,8 +7,6 @@ import { VERSION } from "./version-info";
 import { resolvePaths } from "./paths";
 import { realContext, type Context } from "./context";
 import { appendLog, describeOutcome, runAcquisition, runInstall, runPatch, runUpdate, simulateDrift } from "./patch/run";
-import { loadState, upstreamFor } from "./patch/acquire";
-import { readUpstreamVersion } from "./codex/upstream";
 import { loadManifest, supportedCodexVersions } from "./patch/manifest";
 import { fetchPublishedPrebuiltVersions } from "./distribution/prebuilt";
 import { promptCodexVersion, type PromptVersionOptions, type PromptVersionSelection } from "./ui/prompt-version";
@@ -155,13 +153,15 @@ async function installCommand(argv: readonly string[], io: MainIo, deps: MainDep
 
   const ctx = contextFor(io, deps);
 
-  if (io.isTTY === true && !yes && !codexVersion) {
+  if (!codexVersion) {
     let manifest;
     try {
       manifest = loadManifest(ctx.patchesDir);
     } catch (e) {
-      io.stderr(`Cannot load supported Codex versions: ${e instanceof Error ? e.message : String(e)}\n`);
-      return 1;
+      if (io.isTTY === true && !yes) {
+        io.stderr(`Cannot load supported Codex versions: ${e instanceof Error ? e.message : String(e)}\n`);
+        return 1;
+      }
     }
     if (manifest) {
       const supported = supportedCodexVersions(manifest);
@@ -175,44 +175,32 @@ async function installCommand(argv: readonly string[], io: MainIo, deps: MainDep
           }
         }
 
-        let defaultVersion: string | undefined;
-        try {
-          const located = upstreamFor(ctx, loadState(ctx));
-          if ("bin" in located) {
-            const upstream = readUpstreamVersion(located.bin, ctx.run);
-            if (upstream) {
-              const semverStr = `${upstream.major}.${upstream.minor}.${upstream.patch}`;
-              if (supported.includes(semverStr)) {
-                if (compile || !prebuiltVersions || prebuiltVersions.includes(semverStr)) {
-                  defaultVersion = semverStr;
-                }
-              }
-            }
+        const defaultVersion = compile
+          ? supported[0]!
+          : (prebuiltVersions && prebuiltVersions.length > 0
+              ? (supported.find((v) => prebuiltVersions.includes(v)) ?? supported[0]!)
+              : supported[0]!);
+
+        if (io.isTTY === true && !yes) {
+          const prompter = deps.promptVersion ?? promptCodexVersion;
+          const result = await prompter({
+            supportedVersions: supported,
+            prebuiltVersions,
+            defaultVersion,
+            compile,
+            isTTY: true,
+            say: (l) => io.stdout(`${l}\n`),
+          });
+          if (result === null) {
+            io.stdout("Installation cancelled.\n");
+            return 0;
           }
-        } catch {
-          // ignore detection error
+          const selection = typeof result === "string" ? { version: result, compile: false } : result;
+          codexVersion = selection.version;
+          compile = compile || selection.compile;
+        } else {
+          codexVersion = defaultVersion;
         }
-
-        if (!defaultVersion && prebuiltVersions && prebuiltVersions.length > 0) {
-          defaultVersion = supported.find((v) => prebuiltVersions.includes(v));
-        }
-
-        const prompter = deps.promptVersion ?? promptCodexVersion;
-        const result = await prompter({
-          supportedVersions: supported,
-          prebuiltVersions,
-          defaultVersion,
-          compile,
-          isTTY: true,
-          say: (l) => io.stdout(`${l}\n`),
-        });
-        if (result === null) {
-          io.stdout("Installation cancelled.\n");
-          return 0;
-        }
-        const selection = typeof result === "string" ? { version: result, compile: false } : result;
-        codexVersion = selection.version;
-        compile = compile || selection.compile;
       }
     }
   }
