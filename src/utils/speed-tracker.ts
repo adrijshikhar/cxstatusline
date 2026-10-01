@@ -23,6 +23,7 @@ export interface SpeedCacheData {
   readonly samples: SpeedSample[];
   readonly lastActiveMetrics: SpeedMetrics;
   readonly lastActiveTimeMs: number;
+  readonly sessionCumulativeMetrics?: SpeedMetrics;
 }
 
 const memoryCache = new Map<string, SpeedCacheData>();
@@ -126,6 +127,13 @@ export function resolveLiveSpeedMetrics(context: RenderContext, windowSeconds?: 
           requestCount: 0,
         },
         lastActiveTimeMs: nowMs,
+        sessionCumulativeMetrics: {
+          totalDurationMs: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          requestCount: 0,
+        },
       };
       writeCache(context.commandCacheDir, initialCache);
       return {
@@ -152,6 +160,9 @@ export function resolveLiveSpeedMetrics(context: RenderContext, windowSeconds?: 
 
     let nextLastActiveMetrics = { ...cached.lastActiveMetrics };
     let nextLastActiveTimeMs = cached.lastActiveTimeMs;
+    let nextSessionCumulative = cached.sessionCumulativeMetrics
+      ? { ...cached.sessionCumulativeMetrics }
+      : { ...cached.lastActiveMetrics };
     let nextLastSample = cached.lastSample;
 
     if ((deltaInput > 0 || deltaOutput > 0) && elapsedSinceLastSec >= 0.2) {
@@ -160,12 +171,23 @@ export function resolveLiveSpeedMetrics(context: RenderContext, windowSeconds?: 
 
       // Sanity filter to discard anomalies
       if (instOutput <= MAX_PLAUSIBLE_OUTPUT_SPEED && instInput <= MAX_PLAUSIBLE_INPUT_SPEED) {
+        const deltaDurationMs = Math.round(elapsedSinceLastSec * 1000);
+        const validDeltaIn = Math.max(0, deltaInput);
+        const validDeltaOut = Math.max(0, deltaOutput);
+
         nextLastActiveMetrics = {
-          totalDurationMs: Math.round(elapsedSinceLastSec * 1000),
-          inputTokens: Math.max(0, deltaInput),
-          outputTokens: Math.max(0, deltaOutput),
-          totalTokens: Math.max(0, deltaInput) + Math.max(0, deltaOutput),
+          totalDurationMs: deltaDurationMs,
+          inputTokens: validDeltaIn,
+          outputTokens: validDeltaOut,
+          totalTokens: validDeltaIn + validDeltaOut,
           requestCount: cached.lastActiveMetrics.requestCount + 1,
+        };
+        nextSessionCumulative = {
+          totalDurationMs: nextSessionCumulative.totalDurationMs + deltaDurationMs,
+          inputTokens: nextSessionCumulative.inputTokens + validDeltaIn,
+          outputTokens: nextSessionCumulative.outputTokens + validDeltaOut,
+          totalTokens: nextSessionCumulative.totalTokens + validDeltaIn + validDeltaOut,
+          requestCount: nextSessionCumulative.requestCount + 1,
         };
         nextLastActiveTimeMs = nowMs;
         nextLastSample = {
@@ -174,6 +196,13 @@ export function resolveLiveSpeedMetrics(context: RenderContext, windowSeconds?: 
           outputTokens: rawOutput,
         };
       }
+    } else if (deltaInput === 0 && deltaOutput === 0 && (session?.run_state === "ready" || elapsedSinceLastSec >= 5)) {
+      // Idle at prompt waiting for user input: advance sample time so idle wait is not counted toward turn duration
+      nextLastSample = {
+        timeMs: nowMs,
+        inputTokens: rawInput,
+        outputTokens: rawOutput,
+      };
     }
 
     const updatedCache: SpeedCacheData = {
@@ -182,6 +211,7 @@ export function resolveLiveSpeedMetrics(context: RenderContext, windowSeconds?: 
       samples,
       lastActiveMetrics: nextLastActiveMetrics,
       lastActiveTimeMs: nextLastActiveTimeMs,
+      sessionCumulativeMetrics: nextSessionCumulative,
     };
     writeCache(context.commandCacheDir, updatedCache);
 
@@ -212,8 +242,12 @@ export function resolveLiveSpeedMetrics(context: RenderContext, windowSeconds?: 
       };
     }
 
-    // 2. If recent active speed is available within 60s, return it
-    if (nextLastActiveTimeMs && nowMs - nextLastActiveTimeMs <= 60_000 && nextLastActiveMetrics.totalDurationMs > 0) {
+    // 2. Default: Session average speed (persists across idle periods)
+    if (nextSessionCumulative.totalDurationMs > 0) {
+      return nextSessionCumulative;
+    }
+
+    if (nextLastActiveMetrics.totalDurationMs > 0) {
       return nextLastActiveMetrics;
     }
 

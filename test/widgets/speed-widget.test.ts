@@ -227,6 +227,101 @@ describe("Speed widgets", () => {
         };
 
         expect(outWidget.render({ id: "out", type: "output-speed" }, ctx3, DEFAULT_SETTINGS)).toBe("Out: 50.0 t/s");
+
+        // Idle past 60 seconds (5 minutes later): session avg persists, while windowed mode expires to no-data
+        const ctx4: RenderContext = {
+          data: {
+            payload_version: 1,
+            session: { id: sessionId, started_at: startTime.toISOString(), run_state: "ready" },
+            usage: { input_tokens: 1300, output_tokens: 200 },
+          },
+          now: new Date("2026-09-23T12:05:00Z"),
+          terminalWidth: 120,
+          isPreview: false,
+          commandCacheDir: tempDir,
+        };
+
+        expect(outWidget.render({ id: "out", type: "output-speed" }, ctx4, DEFAULT_SETTINGS)).toBe("Out: 50.0 t/s");
+        expect(inWidget.render({ id: "in", type: "input-speed" }, ctx4, DEFAULT_SETTINGS)).toBe("In: 150.0 t/s");
+        expect(totalWidget.render({ id: "tot", type: "total-speed" }, ctx4, DEFAULT_SETTINGS)).toBe("Total: 200.0 t/s");
+
+        // Windowed speed (30s) correctly shows no-data (em dash) when quiet for 5 minutes
+        expect(
+          outWidget.render({ id: "out", type: "output-speed", metadata: { windowSeconds: "30" } }, ctx4, DEFAULT_SETTINGS)
+        ).toBe("Out: —");
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test("accumulates true session-average speed across multiple turns without counting idle time", () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "cx-speed-multiturn-test-"));
+      try {
+        const outWidget = new OutputSpeedWidget();
+        const inWidget = new InputSpeedWidget();
+        const totalWidget = new TotalSpeedWidget();
+
+        const sessionId = "session-multiturn-test";
+        const startTime = new Date("2026-09-23T12:00:00Z");
+
+        // Initial observation (baseline established)
+        const ctx1: RenderContext = {
+          data: {
+            payload_version: 1,
+            session: { id: sessionId, started_at: startTime.toISOString(), run_state: "working" },
+            usage: { input_tokens: 1000, output_tokens: 100 },
+          },
+          now: startTime,
+          terminalWidth: 120,
+          isPreview: false,
+          commandCacheDir: tempDir,
+        };
+        outWidget.render({ id: "out", type: "output-speed" }, ctx1, DEFAULT_SETTINGS);
+
+        // Turn 1: 2 seconds, +300 input, +100 output (In: 150 t/s, Out: 50 t/s)
+        const ctx2: RenderContext = {
+          data: {
+            payload_version: 1,
+            session: { id: sessionId, started_at: startTime.toISOString(), run_state: "working" },
+            usage: { input_tokens: 1300, output_tokens: 200 },
+          },
+          now: new Date("2026-09-23T12:00:02Z"),
+          terminalWidth: 120,
+          isPreview: false,
+          commandCacheDir: tempDir,
+        };
+        expect(outWidget.render({ id: "out", type: "output-speed" }, ctx2, DEFAULT_SETTINGS)).toBe("Out: 50.0 t/s");
+
+        // Idle for 10 minutes: run_state "ready"
+        const ctxIdle: RenderContext = {
+          data: {
+            payload_version: 1,
+            session: { id: sessionId, started_at: startTime.toISOString(), run_state: "ready" },
+            usage: { input_tokens: 1300, output_tokens: 200 },
+          },
+          now: new Date("2026-09-23T12:10:00Z"),
+          terminalWidth: 120,
+          isPreview: false,
+          commandCacheDir: tempDir,
+        };
+        expect(outWidget.render({ id: "out", type: "output-speed" }, ctxIdle, DEFAULT_SETTINGS)).toBe("Out: 50.0 t/s");
+
+        // Turn 2 begins: 2 seconds of generation, +300 input, +300 output (In: 150 t/s, Out: 150 t/s)
+        // Total active: 2s + 2s = 4s. Total input: 600 tokens (150 t/s). Total output: 400 tokens (100 t/s).
+        const ctx3: RenderContext = {
+          data: {
+            payload_version: 1,
+            session: { id: sessionId, started_at: startTime.toISOString(), run_state: "working" },
+            usage: { input_tokens: 1600, output_tokens: 500 },
+          },
+          now: new Date("2026-09-23T12:10:02Z"),
+          terminalWidth: 120,
+          isPreview: false,
+          commandCacheDir: tempDir,
+        };
+        expect(outWidget.render({ id: "out", type: "output-speed" }, ctx3, DEFAULT_SETTINGS)).toBe("Out: 100.0 t/s");
+        expect(inWidget.render({ id: "in", type: "input-speed" }, ctx3, DEFAULT_SETTINGS)).toBe("In: 150.0 t/s");
+        expect(totalWidget.render({ id: "tot", type: "total-speed" }, ctx3, DEFAULT_SETTINGS)).toBe("Total: 250.0 t/s");
       } finally {
         rmSync(tempDir, { recursive: true, force: true });
       }
