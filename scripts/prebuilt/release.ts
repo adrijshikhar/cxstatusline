@@ -62,6 +62,7 @@ export type ExpectedReleaseInput = {
   readonly codexVersion: string;
   readonly platforms?: readonly Platform[];
   readonly platform?: Platform;
+  readonly allowLegacySchema?: boolean;
 };
 
 export interface ExpectedIdentity {
@@ -90,13 +91,19 @@ export async function verifyReleaseDir(dir: string, expected: ExpectedReleaseInp
   const manifestFile = join(dir, "manifest.json");
   if (!existsSync(manifestFile)) throw new Error(`manifest.json is missing from ${dir}`);
   const raw = JSON.parse(readFileSync(manifestFile, "utf8"));
+  const rawSchema = typeof raw === "object" && raw !== null ? (raw as { schema?: unknown }).schema : undefined;
+  const isLegacy = typeof rawSchema === "number" && rawSchema < 3;
   let manifest!: ReleaseManifest;
-  for (const platform of platforms) {
-    manifest = validateManifest(raw, {
-      cxVersion: expected.cxVersion,
-      codexVersion: expected.codexVersion,
-      platform,
-    });
+  if (isLegacy && expected.allowLegacySchema) {
+    manifest = raw as ReleaseManifest;
+  } else {
+    for (const platform of platforms) {
+      manifest = validateManifest(raw, {
+        cxVersion: expected.cxVersion,
+        codexVersion: expected.codexVersion,
+        platform,
+      });
+    }
   }
 
   const sums = parseChecksums(readFileSync(join(dir, "SHA256SUMS"), "utf8"));
@@ -272,13 +279,15 @@ export async function backupPublishedRelease(run: GhRunner, tag: string, codexVe
   const platforms = raw.artifacts?.map((artifact) => artifact.platform)
     .filter((platform): platform is Platform => typeof platform === "string" && validPlatforms.includes(platform)) ?? [];
   if (platforms.length === 0 || platforms.length !== (raw.artifacts?.length ?? 0)) throw new Error(`release ${tag} has no valid platform manifest`);
-  let releaseManifest!: ReleaseManifest;
-  for (const platform of platforms) releaseManifest = validateManifest(raw, { codexVersion, platform });
-  const names = [...releaseManifest.artifacts.map((artifact) => artifact.filename), "manifest.json", "SHA256SUMS"].sort();
+  const names = [
+    ...(raw.artifacts?.map((artifact) => String((artifact as { filename?: unknown }).filename)) ?? []),
+    "manifest.json",
+    "SHA256SUMS",
+  ].sort();
   const publishedNames = view.assets.map((asset) => asset.name).sort();
   if (JSON.stringify(names) !== JSON.stringify(publishedNames)) throw new Error(`release ${tag} contains assets outside its verified manifest`);
   for (const name of names) if (name !== "manifest.json") downloadAsset(run, tag, name, assetsDir, repo);
-  const verified = await verifyReleaseDir(assetsDir, { codexVersion, platforms });
+  const verified = await verifyReleaseDir(assetsDir, { codexVersion, platforms, allowLegacySchema: true });
   const backup: ReleaseBackup = { schema: 1, state: "published", tag, view, manifestSha256: verified.manifestSha256 };
   writeFileSync(join(dir, "backup.json"), `${JSON.stringify(backup, null, 2)}\n`);
   return backup;
@@ -294,7 +303,7 @@ export async function verifyReleaseBackup(run: GhRunner, tag: string, dir: strin
     };
     if (typeof raw.codexVersion !== "string") throw new Error("backup manifest has no Codex version");
     const platforms = raw.artifacts?.map((artifact) => artifact.platform).filter((p): p is Platform => typeof p === "string") ?? [];
-    const verified = await verifyReleaseDir(join(dir, "assets"), { codexVersion: raw.codexVersion, platforms });
+    const verified = await verifyReleaseDir(join(dir, "assets"), { codexVersion: raw.codexVersion, platforms, allowLegacySchema: true });
     if (verified.manifestSha256 !== backup.manifestSha256) throw new Error("release backup manifest digest changed");
     const current = inspectRelease(run, tag, repo);
     if (!backup.view || current.state !== "published" || releaseSnapshot(current) !== releaseSnapshot(backup.view)) {
@@ -303,7 +312,7 @@ export async function verifyReleaseBackup(run: GhRunner, tag: string, dir: strin
     const currentDir = join(dir, "current-check");
     rmSync(currentDir, { recursive: true, force: true });
     for (const asset of current.assets) downloadAsset(run, tag, asset.name, currentDir, repo);
-    const currentSet = await verifyReleaseDir(currentDir, { codexVersion: raw.codexVersion, platforms });
+    const currentSet = await verifyReleaseDir(currentDir, { codexVersion: raw.codexVersion, platforms, allowLegacySchema: true });
     if (currentSet.manifestSha256 !== backup.manifestSha256) throw new Error(`release ${tag} asset bytes changed after backup; refusing replacement`);
   } else {
     const current = inspectRelease(run, tag, repo);
