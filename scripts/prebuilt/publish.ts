@@ -123,7 +123,7 @@ async function restorePublishedBackup(o: PublishOptions, backup: ReleaseBackup):
   const backupAssets = join(o.backupDir!, "assets");
   const manifest = JSON.parse(readFileSync(join(backupAssets, "manifest.json"), "utf8")) as ReleaseManifest;
   const platforms = manifest.artifacts.map((artifact) => artifact.platform);
-  const verified = await verifyReleaseDir(backupAssets, { codexVersion: o.codexVersion, platforms });
+  const verified = await verifyReleaseDir(backupAssets, { codexVersion: o.codexVersion, platforms, allowLegacySchema: true });
   const current = inspectRelease(o.run, o.tag, repository(o));
   if (current.state !== "absent") ghText(o.run, ["release", "delete", o.tag, "--yes", "--repo", repository(o)]);
   const notesFile = join(o.tmpRoot, "restore-release-notes.md");
@@ -142,7 +142,7 @@ async function restorePublishedBackup(o: PublishOptions, backup: ReleaseBackup):
   for (const name of names) ghText(o.run, ["release", "upload", o.tag, join(backupAssets, name), "--clobber", "--repo", repository(o)]);
   const checkDir = join(o.tmpRoot, "restored-release-check");
   for (const name of names) downloadAsset(o.run, o.tag, name, checkDir, repository(o));
-  const checked = await verifyReleaseDir(checkDir, { codexVersion: o.codexVersion, platforms });
+  const checked = await verifyReleaseDir(checkDir, { codexVersion: o.codexVersion, platforms, allowLegacySchema: true });
   if (checked.manifestSha256 !== verified.manifestSha256) throw new Error("restored release manifest did not verify");
   const publishArgs = ["release", "edit", o.tag, "--draft=false", "--repo", repository(o)];
   if (backup.view.isPrerelease) publishArgs.push("--prerelease");
@@ -159,6 +159,7 @@ export async function restoreReleaseBackup(o: PublishOptions): Promise<void> {
   const verified = await verifyReleaseDir(join(o.backupDir, "assets"), {
     codexVersion: o.codexVersion,
     platforms: manifest.artifacts.map((artifact) => artifact.platform),
+    allowLegacySchema: true,
   });
   if (verified.manifestSha256 !== backup.manifestSha256) throw new Error("backup manifest digest does not match backup metadata");
   await restorePublishedBackup(o, backup);

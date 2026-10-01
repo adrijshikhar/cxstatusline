@@ -283,6 +283,33 @@ describe("publishRelease", () => {
     expect(handles0.draft.value).toBe(false);
   });
 
+  test("backs up and replaces a legacy schema 2 published release", async () => {
+    const oldDir = await releaseDir(SOURCE, "d".repeat(64));
+    const manifestPath = join(oldDir, "manifest.json");
+    const m = JSON.parse(readFileSync(manifestPath, "utf8"));
+    m.schema = 2;
+    writeFileSync(manifestPath, `${JSON.stringify(m, null, 2)}\n`);
+    const sha = createHash("sha256").update(readFileSync(manifestPath)).digest("hex");
+    const archiveSha = createHash("sha256").update(readFileSync(join(oldDir, ARCHIVE))).digest("hex");
+    writeFileSync(join(oldDir, "SHA256SUMS"), `${archiveSha}  ${ARCHIVE}\n${sha}  manifest.json\n`);
+
+    const h = handles();
+    const fake = releaseServer(h);
+    fake.run(["release", "upload", TAG, join(oldDir, ARCHIVE)]);
+    fake.run(["release", "upload", TAG, manifestPath]);
+    fake.run(["release", "upload", TAG, join(oldDir, "SHA256SUMS")]);
+    h.draft.value = false;
+    h.body.value = "old release notes";
+
+    const backupDir = tmp("legacy-schema-backup");
+    const backup = await backupPublishedRelease(fake.run, TAG, CODEX, backupDir);
+    expect(backup.state).toBe("published");
+
+    const newDir = await releaseDir(SOURCE, "e".repeat(64));
+    const outcome = await publishRelease({ ...publishArgs(newDir, fake.run), backupDir });
+    expect(outcome.kind).toBe("published");
+  });
+
   test("does not mutate a published set when its complete backup cannot be downloaded", async () => {
     const fake = fakeGh({
       "release view": () => ok(JSON.stringify({ isDraft: false, url: RELEASE_URL, body: "old", assets: [ARCHIVE, "manifest.json", "SHA256SUMS"].map((name) => ({ name, size: 10 })) })),
