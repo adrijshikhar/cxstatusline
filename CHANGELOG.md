@@ -3,6 +3,21 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.12.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.11.0...v0.12.0) (2026-10-01)
+
+
+### Features
+
+* support Codex 0.159.3 ([#127](https://github.com/adrijshikhar/cxstatusline/issues/127)) ([d618615](https://github.com/adrijshikhar/cxstatusline/commit/d6186157b4dc096cf2f26619ba0e2fe4a558f043))
+
+
+### Bug Fixes
+
+* allow backing up legacy schema prebuilts during release replacement ([#137](https://github.com/adrijshikhar/cxstatusline/issues/137)) ([1ae73ce](https://github.com/adrijshikhar/cxstatusline/commit/1ae73cef7c6dd7f92461137df471866a1c769ba6))
+* allow superseding legacy non-arm64 platforms during prebuilt replacement ([#134](https://github.com/adrijshikhar/cxstatusline/issues/134)) ([414d26d](https://github.com/adrijshikhar/cxstatusline/commit/414d26dc29078fa6d7bb9dae2fdc6928a936e257))
+* default Codex installation to latest supported release ([#135](https://github.com/adrijshikhar/cxstatusline/issues/135)) ([05d52ef](https://github.com/adrijshikhar/cxstatusline/commit/05d52ef878b246d0ec607114829e3688b8ec8afe))
+* skip daemon start smoke probe for Codex versions prior to 0.156.0 ([#139](https://github.com/adrijshikhar/cxstatusline/issues/139)) ([c2e5f89](https://github.com/adrijshikhar/cxstatusline/commit/c2e5f89b8382026496d38d8d9ed237b1a35389e0))
+
 ## [0.11.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.10.1...v0.11.0) (2026-10-01)
 
 
