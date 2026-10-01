@@ -30,7 +30,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CODEX_VERSION="0.155.0"
 PLATFORM=""
 REMOTE_HOST=""
-SKIP_TESTS=false
+SKIP_TESTS="${SKIP_TESTS:-false}"
 IMAGE_NAME="cxstatusline-builder:latest"
 
 show_help() {
