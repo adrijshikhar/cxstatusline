@@ -3,6 +3,21 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.10.1...v0.11.0) (2026-10-01)
+
+
+### Features
+
+* ship Codex generations as upstream's package directory (app-server daemon support) ([#124](https://github.com/adrijshikhar/cxstatusline/issues/124)) ([79d3973](https://github.com/adrijshikhar/cxstatusline/commit/79d3973490ae8864d7d13cabd46373365e4adec4))
+* support Codex 0.157.0, 0.157.1, and 0.158.0 ([#117](https://github.com/adrijshikhar/cxstatusline/issues/117)) ([ab1df91](https://github.com/adrijshikhar/cxstatusline/commit/ab1df912fd47fa44c5c96979978d9acb268e02b2))
+* support Codex 0.159.0 ([#123](https://github.com/adrijshikhar/cxstatusline/issues/123)) ([7f76a42](https://github.com/adrijshikhar/cxstatusline/commit/7f76a423785c48725843b83e5d4dfb8f21c9569a))
+
+
+### Bug Fixes
+
+* **patches:** update rate limit test setup for Codex 0.157+ app-server network policy ([#120](https://github.com/adrijshikhar/cxstatusline/issues/120)) ([9d8974e](https://github.com/adrijshikhar/cxstatusline/commit/9d8974e0558f2b92c2cd302d8e08f80df4d49fb4))
+* persist session-average token speed across idle periods ([#130](https://github.com/adrijshikhar/cxstatusline/issues/130)) ([91d52f0](https://github.com/adrijshikhar/cxstatusline/commit/91d52f0bedd5cde2f1699e638ce8d8b567745dae))
+
 ## [0.10.1](https://github.com/adrijshikhar/cxstatusline/compare/v0.10.0...v0.10.1) (2026-09-25)
 
 
