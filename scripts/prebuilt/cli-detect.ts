@@ -309,7 +309,10 @@ export async function runDetect(flags: Record<string, string>): Promise<void> {
   const expected = { sourceCommit: source.sourceCommit, patchSha256, patchVersion: detection.patchVersion };
   const existing = await releaseState(execGh, detection, expected, platforms);
   if (existing.publishedPlatforms.length > 0) {
-    platforms = unionReleasePlatforms(platforms, existing.publishedPlatforms);
+    const supportedPublished = existing.publishedPlatforms.filter((p) => p.endsWith("-arm64"));
+    if (supportedPublished.length > 0) {
+      platforms = unionReleasePlatforms(platforms, supportedPublished);
+    }
   }
   const finalMatrix = buildMatrix(platforms);
   const finalExisting = await releaseState(execGh, detection, expected, platforms);

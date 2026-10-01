@@ -169,7 +169,9 @@ async function replacePublished(o: PublishOptions, set: VerifiedSet, backup: Rel
   if (backup.state !== "published" || !o.backupDir) throw new Error("a complete published-release backup is required before replacement");
   const previous = JSON.parse(readFileSync(join(o.backupDir, "assets", "manifest.json"), "utf8")) as ReleaseManifest;
   const built = new Set(set.manifest.artifacts.map((artifact) => artifact.platform));
-  const omitted = previous.artifacts.map((artifact) => artifact.platform).filter((platform) => !built.has(platform));
+  const omitted = previous.artifacts
+    .map((artifact) => artifact.platform)
+    .filter((platform) => platform.endsWith("-arm64") && !built.has(platform));
   if (omitted.length) throw new Error(`replacement build omits already-published platform(s) ${omitted.join(", ")}`);
   // A failed delete must not trigger another destructive delete during restoration.
   // The verified backup remains available if GitHub applied an ambiguously failed request.
@@ -265,7 +267,9 @@ export async function publishRelease(o: PublishOptions): Promise<PublishOutcome>
     const previousFile = downloadAsset(o.run, o.tag, "manifest.json", join(o.tmpRoot, "published-platforms"), repository(o));
     const previous = JSON.parse(readFileSync(previousFile, "utf8")) as ReleaseManifest;
     const built = new Set(set.manifest.artifacts.map((artifact) => artifact.platform));
-    const omitted = previous.artifacts.map((artifact) => artifact.platform).filter((platform) => !built.has(platform));
+    const omitted = previous.artifacts
+      .map((artifact) => artifact.platform)
+      .filter((platform) => platform.endsWith("-arm64") && !built.has(platform));
     if (omitted.length > 0) {
       throw new BlockedError(
         blockedIssueTitle(o.codexVersion),
