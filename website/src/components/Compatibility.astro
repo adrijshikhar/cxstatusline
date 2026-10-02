@@ -1,7 +1,13 @@
 ---
+import { ChevronDown } from "lucide-react";
 import { supportedCodexReleases } from "../release-info";
 import { Card } from "./ui/card";
 import CopyFlagButton from "./CopyFlagButton";
+
+const VISIBLE_COUNT = 6;
+const primaryReleases = supportedCodexReleases.slice(0, VISIBLE_COUNT);
+const olderReleases = supportedCodexReleases.slice(VISIBLE_COUNT);
+const hasOlderReleases = olderReleases.length > 0;
 
 const issueBody = [
   "### Requested Codex version",
@@ -45,7 +51,7 @@ const requestVersionIssueUrl = `https://github.com/adrijshikhar/cxstatusline/iss
       <span class="text-right">Status</span>
     </div>
     <ul class="compatibility-rows">
-      {supportedCodexReleases.map((release) => (
+      {primaryReleases.map((release) => (
         <li class="compatibility-row">
           <div class="flex items-center gap-2">
             <code>{release.version}</code>
@@ -86,6 +92,67 @@ const requestVersionIssueUrl = `https://github.com/adrijshikhar/cxstatusline/iss
         </li>
       ))}
     </ul>
+
+    {hasOlderReleases && (
+      <div id="compatibility-older" class="compatibility-older-wrapper" data-expanded="false">
+        <div class="compatibility-older-inner">
+          <ul class="compatibility-rows compatibility-older-rows">
+            {olderReleases.map((release) => (
+              <li class="compatibility-row">
+                <div class="flex items-center gap-2">
+                  <code>{release.version}</code>
+                  {release.isLatest && (
+                    <span class="rounded border border-[var(--line)] bg-[var(--surface-strong)] px-2 py-0.5 text-xs text-[var(--accent)]" title="Latest supported Codex CLI release">
+                      Latest
+                    </span>
+                  )}
+                </div>
+                <div class="compatibility-platforms">
+                  <div class="platform-badges">
+                    {release.platforms.map((platform) => (
+                      <span
+                        class="platform-badge"
+                        title={`${platform.name} (${platform.arch})`}
+                      >
+                        {platform.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div class="compatibility-flag">
+                  <code>--codex-version {release.version}</code>
+                  <CopyFlagButton client:load text={`--codex-version ${release.version}`} />
+                </div>
+                <div class="compatibility-status">
+                  <a
+                    href={release.releaseUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class={`compatibility-badge compatibility-badge-${release.type}`}
+                    title={`View ${release.version} release on GitHub`}
+                  >
+                    <span>{release.status}</span>
+                    <span aria-hidden="true" class="release-arrow">↗</span>
+                  </a>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+      <button
+        type="button"
+        id="compatibility-toggle"
+        class="compatibility-toggle-btn"
+        aria-expanded="false"
+        aria-controls="compatibility-older"
+        data-count={olderReleases.length}
+      >
+        <span class="compatibility-toggle-label">Show {olderReleases.length} older versions</span>
+        <span class="compatibility-toggle-range">({olderReleases[0]?.version} – {olderReleases[olderReleases.length - 1]?.version})</span>
+        <ChevronDown aria-hidden="true" size={14} className="compatibility-toggle-icon" />
+      </button>
+    )}
     <div class="compatibility-footer">
       <a
         class="compatibility-link"
@@ -101,3 +168,35 @@ const requestVersionIssueUrl = `https://github.com/adrijshikhar/cxstatusline/iss
     </div>
   </Card>
 </section>
+
+<script>
+  function setupCompatibilityToggle() {
+    const toggleBtn = document.getElementById("compatibility-toggle");
+    const olderSection = document.getElementById("compatibility-older");
+    if (!toggleBtn || !olderSection) return;
+
+    const count = toggleBtn.getAttribute("data-count") || "";
+    const labelSpan = toggleBtn.querySelector(".compatibility-toggle-label");
+    const rangeSpan = toggleBtn.querySelector(".compatibility-toggle-range");
+
+    toggleBtn.addEventListener("click", () => {
+      const isExpanded = toggleBtn.getAttribute("aria-expanded") === "true";
+      const nextState = !isExpanded;
+
+      toggleBtn.setAttribute("aria-expanded", String(nextState));
+      olderSection.setAttribute("data-expanded", String(nextState));
+
+      if (labelSpan) {
+        labelSpan.textContent = nextState
+          ? "Show fewer versions"
+          : `Show ${count} older versions`;
+      }
+      if (rangeSpan) {
+        rangeSpan.style.display = nextState ? "none" : "";
+      }
+    });
+  }
+
+  setupCompatibilityToggle();
+  document.addEventListener("astro:page-load", setupCompatibilityToggle);
+</script>
