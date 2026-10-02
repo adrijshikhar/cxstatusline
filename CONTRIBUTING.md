@@ -79,3 +79,26 @@ It does not start or patch Codex. Temporary demo settings remain under
 Edit `docs/demo.tape` when menu navigation changes, regenerate `docs/demo.gif`, and
 watch the animation before committing both. Open it in a browser (macOS Preview shows
 individual frames). Keep sample data in recordings; do not record personal sessions.
+
+## Patch Versioning & Manifest Architecture
+
+Rust patch versions are independent of Codex and cxstatusline package versions. Each supported Codex version belongs to exactly one patch version:
+
+- **v1**: Codex 0.152.1 – 0.155.1
+- **v2**: Codex 0.156.0 – 0.159.x
+
+`patches/manifest.json` records that ownership with `patchVersion` on each compatibility entry. Its `version: 2` is the manifest format schema, not the Rust patch version. Entries can describe inclusive ranges, but exact tested versions are maintained.
+
+Add newly tested Codex versions to the existing patch version while it continues to work. When a newer Codex needs a changed Rust integration, introduce the next patch version for that Codex version and future compatible releases. Do not backport it or reassign older Codex versions. Overlapping entries are rejected.
+
+### Rebuilding and Asset Replacement
+
+Rebuilding an existing Codex tag replaces its complete release asset set. The workflow verifies the new build, downloads and verifies every old asset, and saves a 90-day workflow artifact before mutation. The Git tag remains; the release may be briefly unavailable while the replacement is uploaded and verified. If automatic recovery fails, download the matching `release-backup-<tag>-<run-id>` artifact and restore it with:
+
+```sh
+bun scripts/prebuilt.ts restore --tag codex-v0.156.1 --codex-version 0.156.1 --backup-dir ./release-backup --repo adrijshikhar/cxstatusline
+```
+
+### Upstream Watcher & Watchdog
+
+The daily upstream watcher audits every stable release in the newest Codex major.minor series and only the `.0` baseline of older series, at or above the support floor. It updates the `Codex release coverage gaps` issue and uploads a machine-readable report. A separate watchdog checks for scheduled watcher runs. Enable repository **Settings → Notifications → Actions** and select failed workflow runs to receive alerts.
