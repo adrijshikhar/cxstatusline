@@ -106,6 +106,17 @@ button:disabled { cursor: wait; opacity: .55; }
 .compatibility-badge-patch { color: var(--status-patch); }
 .compatibility-badge-patch:hover { color: #ffe194; text-decoration: underline; }
 .compatibility-badge .release-arrow { font-size: 10px; opacity: .75; }
+.compatibility-older-wrapper { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+.compatibility-older-wrapper[data-expanded="true"] { grid-template-rows: 1fr; }
+.compatibility-older-inner { overflow: hidden; }
+.compatibility-older-rows .compatibility-row:first-child { border-top: 1px solid var(--line-soft); }
+.compatibility-toggle-btn { display: flex; align-items: center; justify-content: center; gap: 0.5rem; width: 100%; padding: 0.75rem 1.25rem; background: var(--surface); border: 0; border-top: 1px solid var(--line-soft); color: var(--muted); font: 12px/1.4 var(--font-mono); cursor: pointer; transition: background-color 0.15s ease, color 0.15s ease; }
+.compatibility-toggle-btn:hover { background: var(--surface-strong); color: var(--text); }
+.compatibility-toggle-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.compatibility-toggle-range { color: var(--dim); font-size: 11px; }
+.compatibility-toggle-icon { transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1); color: var(--muted); }
+.compatibility-toggle-btn:hover .compatibility-toggle-icon { color: var(--accent-strong); }
+.compatibility-toggle-btn[aria-expanded="true"] .compatibility-toggle-icon { transform: rotate(180deg); }
 .compatibility-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem 1.5rem; padding: 0.875rem 1.25rem; background: var(--surface-strong); border-top: 1px solid var(--line); }
 .compatibility-link { width: max-content; color: var(--accent-strong); font: 13px/1.5 var(--font-mono); text-decoration: none; }
 .compatibility-link:hover { text-decoration: underline; }
@@ -172,6 +183,7 @@ button:disabled { cursor: wait; opacity: .55; }
 }
 @media (prefers-reduced-motion: reduce) {
   [data-slot="accordion-trigger"], [data-slot="accordion-panel"], [data-slot="accordion-indicator"] { transition: none; }
+  .compatibility-older-wrapper, .compatibility-toggle-icon { transition: none; }
   html { scroll-behavior: auto; }
   button { transition: none; }
 }
