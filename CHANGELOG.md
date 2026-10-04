@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.13.1](https://github.com/adrijshikhar/cxstatusline/compare/v0.13.0...v0.13.1) (2026-10-04)
+
+
+### Bug Fixes
+
+* update last-release-sha in release-please config ([#149](https://github.com/adrijshikhar/cxstatusline/issues/149)) ([46f3e9f](https://github.com/adrijshikhar/cxstatusline/commit/46f3e9f31c710af5effd78fdac20ca1d2376c48d))
+
 ## [0.13.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.12.0...v0.13.0) (2026-10-02)
 
 
