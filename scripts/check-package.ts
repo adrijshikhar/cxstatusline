@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -16,24 +16,34 @@ export function assertPackageFiles(files: string[]): void {
 
 if (import.meta.main) {
   const temporary = mkdtempSync(join(tmpdir(), "cx-package-"));
-  function run(command: string, args: string[], input?: string, expected = 0): string {
-    const result = spawnSync(command, args, { cwd: temporary, input, encoding: "utf8", timeout: 120_000,
+  function run(command: string, args: string[], cwd = temporary, input?: string, expected = 0): string {
+    const result = spawnSync(command, args, { cwd, input, encoding: "utf8", timeout: 120_000,
       env: { ...process.env, HOME: temporary, XDG_CONFIG_HOME: join(temporary, "config"), XDG_STATE_HOME: join(temporary, "state") } });
     if (result.error || result.status !== expected) throw new Error(`${command} failed: ${result.error ?? result.stderr}`);
     return result.stdout;
   }
   try {
-    const [packed] = JSON.parse(run("npm", ["pack", root, "--ignore-scripts", "--json", "--pack-destination", temporary])) as
-      Array<{ filename: string; files: Array<{ path: string }> }>;
-    if (!packed) throw new Error("npm produced no package");
-    assertPackageFiles(packed.files.map(file => file.path));
+    run("bun", ["pm", "pack", "--destination", temporary], root);
+    const tarball = join(temporary, `cxstatusline-${pkg.version}.tgz`);
+    const filesOutput = run("tar", ["-tf", tarball]);
+    const files = filesOutput.trim().split("\n").map(f => f.replace(/^package\//, ""));
+    assertPackageFiles(files);
     const prefix = join(temporary, "installed");
-    run("npm", ["install", "--prefix", prefix, "--ignore-scripts", "--no-package-lock", "--no-audit", "--no-fund", join(temporary, packed.filename)]);
+    mkdirSync(prefix, { recursive: true });
+    run("bun", ["init", "-y"], prefix);
+    run("bun", ["add", tarball], prefix);
     const cli = join(prefix, "node_modules/cxstatusline/dist/cxstatusline.js");
-    if (run("node", [cli, "--version"]).trim() !== `cxstatusline ${pkg.version}`) throw new Error("packed version mismatch");
-    const output = run("node", [cli, "render"], '{"payload_version":1}');
+    if (run("bun", [cli, "--version"]).trim() !== `cxstatusline ${pkg.version}`) throw new Error("packed version mismatch");
+    const output = run("bun", [cli, "render"], temporary, '{"payload_version":1}');
     if (!output.trim() || output.trimEnd().split("\n").length > 3) throw new Error("invalid packed renderer output");
-    run("node", [cli], "", 2);
-    console.log(`Package smoke passed on ${run("node", ["--version"]).trim()}: version, renderer, non-TTY, license files`);
+    run("bun", [cli], temporary, "", 2);
+    const nodeTest = spawnSync("node", ["--version"], { encoding: "utf8" });
+    if (nodeTest.status === 0) {
+      if (run("node", [cli, "--version"], temporary).trim() !== `cxstatusline ${pkg.version}`) throw new Error("node packed version mismatch");
+      const nodeOutput = run("node", [cli, "render"], temporary, '{"payload_version":1}');
+      if (!nodeOutput.trim() || nodeOutput.trimEnd().split("\n").length > 3) throw new Error("invalid node packed renderer output");
+      run("node", [cli], temporary, "", 2);
+    }
+    console.log(`Package smoke passed on Bun ${Bun.version}${nodeTest.status === 0 ? ` and Node ${nodeTest.stdout?.trim()}` : ""}: version, renderer, non-TTY, license files`);
   } finally { rmSync(temporary, { recursive: true, force: true }); }
 }
