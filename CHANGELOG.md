@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.13.2](https://github.com/adrijshikhar/cxstatusline/compare/v0.13.1...v0.13.2) (2026-10-05)
+
+
+### Bug Fixes
+
+* **watch:** add retry mechanism and gh api fallback for upstream release fetching ([#151](https://github.com/adrijshikhar/cxstatusline/issues/151)) ([d1ae61a](https://github.com/adrijshikhar/cxstatusline/commit/d1ae61a0a31873b779a12cf0153e28eba55fd944))
+
 ## [0.13.1](https://github.com/adrijshikhar/cxstatusline/compare/v0.13.0...v0.13.1) (2026-10-04)
 
 
