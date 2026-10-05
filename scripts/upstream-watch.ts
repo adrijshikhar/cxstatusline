@@ -93,37 +93,104 @@ export function updatePackageTestContent(content: string, patchFile: string): st
   return content.slice(0, insertPos) + `, ${fullRef}` + content.slice(insertPos);
 }
 
-export async function defaultFetchReleases(token?: string): Promise<string> {
+export class NonRetryableHttpError extends Error {
+  constructor(readonly status: number) {
+    super(`upstream API failed: HTTP ${status}`);
+  }
+}
+
+export async function fetchWithRetry(
+  url: string,
+  headers: Record<string, string>,
+  maxRetries = 3,
+  retryDelayMs = 1000,
+): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          ...headers,
+          connection: "close",
+        },
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (res.ok) return res;
+      if (res.status >= 500 || res.status === 429) {
+        lastError = new Error(`upstream API failed: HTTP ${res.status}`);
+      } else {
+        throw new NonRetryableHttpError(res.status);
+      }
+    } catch (err) {
+      if (err instanceof NonRetryableHttpError) throw err;
+      lastError = err;
+    }
+    if (attempt < maxRetries) {
+      await new Promise((resolve) => setTimeout(resolve, attempt * retryDelayMs));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
+export async function defaultFetchReleases(
+  token?: string,
+  gh?: GhRunner,
+  retryOptions?: { maxRetries?: number; retryDelayMs?: number },
+): Promise<string> {
   const headers: Record<string, string> = {
     accept: "application/vnd.github+json",
     "user-agent": "cxstatusline-upstream-watch",
   };
   if (token) headers.authorization = `Bearer ${token}`;
-  const res = await fetch("https://api.github.com/repos/openai/codex/releases?per_page=100", {
-    headers,
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!res.ok) throw new Error(`upstream releases API failed: HTTP ${res.status}`);
-  const releases = await res.json();
+
+  let releases: unknown;
+  try {
+    const res = await fetchWithRetry(
+      "https://api.github.com/repos/openai/codex/releases?per_page=100",
+      headers,
+      retryOptions?.maxRetries ?? 3,
+      retryOptions?.retryDelayMs ?? 1000,
+    );
+    releases = await res.json();
+  } catch (fetchErr) {
+    const runner = gh ?? execGh;
+    try {
+      releases = ghJson<unknown>(runner, ["api", "repos/openai/codex/releases?per_page=100"]);
+    } catch {
+      throw fetchErr;
+    }
+  }
   return selectStableVersion(releases);
 }
 
-export async function defaultFetchReleaseNotes(tag: string, token?: string): Promise<string | null> {
+export async function defaultFetchReleaseNotes(
+  tag: string,
+  token?: string,
+  gh?: GhRunner,
+  retryOptions?: { maxRetries?: number; retryDelayMs?: number },
+): Promise<string | null> {
   const headers: Record<string, string> = {
     accept: "application/vnd.github+json",
     "user-agent": "cxstatusline-upstream-watch",
   };
   if (token) headers.authorization = `Bearer ${token}`;
   try {
-    const res = await fetch(`https://api.github.com/repos/openai/codex/releases/tags/${encodeURIComponent(tag)}`, {
+    const res = await fetchWithRetry(
+      `https://api.github.com/repos/openai/codex/releases/tags/${encodeURIComponent(tag)}`,
       headers,
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!res.ok) return null;
+      retryOptions?.maxRetries ?? 3,
+      retryOptions?.retryDelayMs ?? 1000,
+    );
     const release = (await res.json()) as { body?: string | null };
     return release.body ?? null;
   } catch {
-    return null;
+    const runner = gh ?? execGh;
+    try {
+      const release = ghJson<{ body?: string | null }>(runner, ["api", `repos/openai/codex/releases/tags/${encodeURIComponent(tag)}`]);
+      return release.body ?? null;
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -237,8 +304,8 @@ export interface WatchOptions {
   dryRun?: boolean;
   repoDir?: string;
   token?: string;
-  fetchReleases?: (token?: string) => Promise<string>;
-  fetchReleaseNotes?: (tag: string, token?: string) => Promise<string | null>;
+  fetchReleases?: (token?: string, gh?: GhRunner) => Promise<string>;
+  fetchReleaseNotes?: (tag: string, token?: string, gh?: GhRunner) => Promise<string | null>;
   git?: GitRunner;
   gh?: GhRunner;
 }
@@ -259,7 +326,7 @@ export async function runUpstreamWatch(options: WatchOptions = {}): Promise<Watc
 
   const targetVersion = options.version && options.version !== "auto"
     ? options.version
-    : await fetcher(token);
+    : await fetcher(token, gh);
 
   const manifest = loadManifest(join(repoDir, "patches"));
   const parsed = parseSemver(targetVersion);
@@ -298,13 +365,13 @@ export async function runUpstreamWatch(options: WatchOptions = {}): Promise<Watc
       if (options.dryRun) {
         return { action: "dry_run", version: targetVersion, detail: "Patch applies cleanly; dry run completed." };
       }
-      const changelog = await fetchNotes(upstreamTag, token);
+      const changelog = await fetchNotes(upstreamTag, token, gh);
       return applyCleanSupport(repoDir, git, gh, targetVersion, newPatchName, newPatchPath, latestPatchPath, branchName, upstreamTag, changelog, latestPatchRange.patchVersion);
     } else {
       if (options.dryRun) {
         return { action: "dry_run", version: targetVersion, detail: `Conflicts detected: ${patchTest.error}` };
       }
-      const changelog = await fetchNotes(upstreamTag, token);
+      const changelog = await fetchNotes(upstreamTag, token, gh);
       return reportConflictIssue(gh, targetVersion, upstreamTag, latestPatchRange.file, patchTest.error ?? "unknown conflict", changelog);
     }
   } finally {

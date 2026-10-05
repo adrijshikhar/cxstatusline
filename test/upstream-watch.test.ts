@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   bumpMinor,
+  defaultFetchReleaseNotes,
+  defaultFetchReleases,
   extractRelevantChanges,
+  fetchWithRetry,
   formatConflictIssueBody,
   reportConflictIssue,
   runUpstreamWatch,
@@ -334,3 +337,126 @@ describe("changelog analysis and issue formatting", () => {
     expect(sentBody).toContain("#999 TUI widget fix");
   });
 });
+
+describe("network resilience and retry", () => {
+  const originalFetch = globalThis.fetch;
+
+  test("fetchWithRetry succeeds on first attempt", async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    try {
+      const res = await fetchWithRetry("https://example.com/test", {}, 3, 10);
+      expect(calls).toBe(1);
+      expect(res.ok).toBe(true);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("fetchWithRetry retries on network error and succeeds on subsequent attempt", async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      if (calls === 1) {
+        const err = new TypeError("The socket connection was closed unexpectedly.");
+        (err as unknown as { code: string }).code = "ECONNRESET";
+        throw err;
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    try {
+      const res = await fetchWithRetry("https://example.com/test", {}, 3, 10);
+      expect(calls).toBe(2);
+      expect(res.ok).toBe(true);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("fetchWithRetry does not retry on 404 client error", async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      return new Response("Not Found", { status: 404 });
+    }) as unknown as typeof fetch;
+
+    try {
+      await expect(fetchWithRetry("https://example.com/test", {}, 3, 10)).rejects.toThrow(/HTTP 404/);
+      expect(calls).toBe(1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("fetchWithRetry throws when maxRetries exhausted", async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      throw new Error("connection reset");
+    }) as unknown as typeof fetch;
+
+    try {
+      await expect(fetchWithRetry("https://example.com/test", {}, 2, 10)).rejects.toThrow(/connection reset/);
+      expect(calls).toBe(2);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("defaultFetchReleases falls back to gh api when fetch fails", async () => {
+    globalThis.fetch = (async () => {
+      throw new Error("network down");
+    }) as unknown as typeof fetch;
+
+    const mockGh: GhRunner = (args) => {
+      if (args[0] === "api" && args[1] === "repos/openai/codex/releases?per_page=100") {
+        return {
+          status: 0,
+          stdout: JSON.stringify([
+            { tag_name: "rust-v0.160.0", draft: false, prerelease: false },
+            { tag_name: "rust-v0.159.0", draft: false, prerelease: false },
+          ]),
+          stderr: "",
+        };
+      }
+      return { status: 1, stdout: "", stderr: "unknown" };
+    };
+
+    try {
+      const ver = await defaultFetchReleases(undefined, mockGh, { maxRetries: 2, retryDelayMs: 5 });
+      expect(ver).toBe("0.160.0");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("defaultFetchReleaseNotes falls back to gh api when fetch fails", async () => {
+    globalThis.fetch = (async () => {
+      throw new Error("network down");
+    }) as unknown as typeof fetch;
+
+    const mockGh: GhRunner = (args) => {
+      if (args[0] === "api" && args[1]?.includes("releases/tags/rust-v0.160.0")) {
+        return {
+          status: 0,
+          stdout: JSON.stringify({ body: "Codex 0.160.0 release notes" }),
+          stderr: "",
+        };
+      }
+      return { status: 1, stdout: "", stderr: "unknown" };
+    };
+
+    try {
+      const notes = await defaultFetchReleaseNotes("rust-v0.160.0", undefined, mockGh, { maxRetries: 2, retryDelayMs: 5 });
+      expect(notes).toBe("Codex 0.160.0 release notes");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
