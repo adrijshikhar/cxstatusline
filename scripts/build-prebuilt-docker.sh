@@ -23,6 +23,9 @@ if [[ -z "${DOCKER_CONFIG:-}" && -f "$HOME/.docker/config.json" ]]; then
 
     # Provide fallback shims for credential helpers in headless/CI sessions where macOS Keychain
     # access is denied. When access is denied, exit 1 with "not found" so Docker falls back to anonymous pulls.
+    # ~/.docker/bin contains symlinks into /Applications/Docker.app (which is read-only).
+    # Clear copied symlinks before writing custom shims so we don't attempt to overwrite the app bundle.
+    rm -rf "$_CLEAN_DOCKER_DIR/bin"
     mkdir -p "$_CLEAN_DOCKER_DIR/bin"
     cat << 'SHIM' > "$_CLEAN_DOCKER_DIR/bin/docker-credential-desktop"
 #!/bin/sh
