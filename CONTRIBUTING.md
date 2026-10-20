@@ -40,6 +40,12 @@ Direct pushes to `main` are strictly blocked. All contributions—whether from h
 
 ## Adding a new Codex version
 
+### Version Support Policy
+
+- **Baseline Series Coverage**: The `.0` baseline release of each Codex minor line (e.g., `0.161.0`, `0.162.0`, `0.163.0`) is supported.
+- **Active Series Coverage**: In the newest/active minor series (currently `0.163.x`), all stable releases including the latest patch release are supported.
+- **Excluded Releases**: Intermediate patch releases in older minor series (e.g., `0.162.1`, `0.161.1`) are intentionally omitted once a newer minor series is available.
+
 To add support for a newly released upstream Codex version:
 
 1. Check if the existing candidate patch applies cleanly to the new tag:

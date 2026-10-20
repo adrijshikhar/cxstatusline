@@ -23,3 +23,9 @@
 - A different build machine requires an explicit new user instruction. General permission to continue or release does not authorize a runner change.
 
 - Preserve the existing rebuilder toolchain/setup. Do not add hosted-runner bootstrap actions, Python installers, or new environment dependencies without an explicit user request. Run the existing build/test flow on the M5; keep supplemental footer smoke checks separate from builder setup.
+
+## Codex Version Support Policy
+
+- **Supported Baseline Versions**: Support the baseline `.0` release of each Codex minor line (e.g., `0.161.0`, `0.162.0`, `0.163.0`).
+- **Active Series Coverage**: In the newest/active minor series (currently `0.163.x`), support all stable releases including the latest patch release.
+- **Skipping Intermediate Patch Releases**: Intermediate patch releases in older minor series (such as `0.162.1` or `0.161.1`) are intentionally skipped and not ported once a newer minor series is released.
