@@ -1,6 +1,7 @@
 import { Box, Text, useInput } from "ink";
 import React, { useState } from "react";
 import type { Settings } from "../../types/Settings";
+import { getPlainInput } from "../../utils/input-guards";
 
 export type PowerlineEditorMode = "separator" | "startCap" | "endCap";
 
@@ -48,7 +49,9 @@ function acceptsText(input: string, key: { ctrl: boolean; meta: boolean; tab: bo
 export function PowerlineSeparatorEditor({ settings, mode, onUpdate, onBack }: PowerlineSeparatorEditorProps): React.JSX.Element {
   const items = itemsFor(settings, mode);
   const presets = PRESETS[mode];
-  const inversions = mode === "separator" ? settings.powerline.separatorInvertBackground : [];
+  const inversions = mode === "separator"
+    ? items.map((_, i) => settings.powerline.separatorInvertBackground[i] ?? false)
+    : [];
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [hexInput, setHexInput] = useState<string | null>(null);
 
@@ -78,6 +81,7 @@ export function PowerlineSeparatorEditor({ settings, mode, onUpdate, onBack }: P
       else if (acceptsText(input, key) && /^[0-9a-f]$/i.test(input) && hexInput.length < 6) setHexInput(hexInput + input.toUpperCase());
       return;
     }
+    const shortcut = getPlainInput(input, key);
     if (key.escape) onBack();
     else if (key.upArrow && items.length) setSelectedIndex((index) => index === 0 ? items.length - 1 : index - 1);
     else if (key.downArrow && items.length) setSelectedIndex((index) => index === items.length - 1 ? 0 : index + 1);
@@ -95,24 +99,24 @@ export function PowerlineSeparatorEditor({ settings, mode, onUpdate, onBack }: P
       const nextInversions = [...inversions];
       if (mode === "separator") nextInversions[selected] = isLeftFacing(char);
       update(next, nextInversions);
-    } else if (input.toLowerCase() === "a" || input.toLowerCase() === "i") {
+    } else if (shortcut.toLowerCase() === "a" || shortcut.toLowerCase() === "i") {
       const next = [...items];
       const char = presets[0]?.char ?? "\uE0B0";
-      const index = input.toLowerCase() === "a" ? selected + 1 : selected;
+      const index = shortcut.toLowerCase() === "a" ? selected + 1 : selected;
       next.splice(items.length ? index : 0, 0, char);
       const nextInversions = [...inversions];
       if (mode === "separator") nextInversions.splice(items.length ? index : 0, 0, isLeftFacing(char));
       update(next, nextInversions);
       setSelectedIndex(items.length ? index : 0);
-    } else if (input.toLowerCase() === "d" && (mode !== "separator" || items.length > 1)) {
+    } else if (shortcut.toLowerCase() === "d" && (mode !== "separator" || items.length > 1)) {
       const next = items.filter((_, index) => index !== selected);
       update(next, inversions.filter((_, index) => index !== selected));
       setSelectedIndex(Math.min(selected, Math.max(0, next.length - 1)));
-    } else if (input.toLowerCase() === "c") {
+    } else if (shortcut.toLowerCase() === "c") {
       update(mode === "separator" ? ["\uE0B0"] : [], mode === "separator" ? [false] : []);
       setSelectedIndex(0);
-    } else if (input.toLowerCase() === "h") setHexInput("");
-    else if (input.toLowerCase() === "t" && mode === "separator" && items.length) {
+    } else if (shortcut.toLowerCase() === "h") setHexInput("");
+    else if (shortcut.toLowerCase() === "t" && mode === "separator" && items.length) {
       const next = [...inversions];
       next[selected] = !next[selected];
       update(items, next);

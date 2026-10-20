@@ -6,6 +6,7 @@ import React, { useMemo, useState } from "react";
 import type { PowerlineConfig } from "../../types/PowerlineConfig";
 import type { Settings } from "../../types/Settings";
 import { buildEnabledPowerlineSettings } from "../../utils/powerline-settings";
+import { getPlainInput } from "../../utils/input-guards";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { List, type ListEntry } from "./List";
 import { PowerlineSeparatorEditor, type PowerlineEditorMode } from "./PowerlineSeparatorEditor";
@@ -92,14 +93,15 @@ export function PowerlineSetup({ settings, onUpdate, onBack }: PowerlineSetupPro
 
   useInput((input, key) => {
     if (confirmEnable || screen !== "menu") return;
+    const shortcut = getPlainInput(input, key);
     if (key.escape) onBack();
-    else if (input.toLowerCase() === "t") {
+    else if (shortcut.toLowerCase() === "t") {
       if (powerline.enabled) onUpdate({ ...settings, powerline: { ...powerline, enabled: false } });
       else if (manualSeparators) setConfirmEnable(true);
       else onUpdate(buildEnabledPowerlineSettings(settings, false));
-    } else if (input.toLowerCase() === "a" && powerline.enabled) {
+    } else if (shortcut.toLowerCase() === "a" && powerline.enabled) {
       onUpdate({ ...settings, powerline: { ...powerline, autoAlign: !powerline.autoAlign } });
-    } else if (input.toLowerCase() === "c" && powerline.enabled) {
+    } else if (shortcut.toLowerCase() === "c" && powerline.enabled) {
       onUpdate({ ...settings, powerline: { ...powerline, continueThemeAcrossLines: !powerline.continueThemeAcrossLines } });
     }
   });

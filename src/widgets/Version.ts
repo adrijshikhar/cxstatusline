@@ -1,6 +1,9 @@
 import type { RenderContext } from '../types/RenderContext';
 import type { Settings } from '../types/Settings';
 import type { Widget, WidgetEditorDisplay, WidgetItem } from '../types/Widget';
+import { formatRawOrLabeledValue } from './shared/raw-or-labeled';
+
+const LABEL = 'v';
 
 export class VersionWidget implements Widget {
   getDefaultColor(): string { return 'gray'; }
@@ -8,10 +11,11 @@ export class VersionWidget implements Widget {
   getDisplayName(): string { return 'Version'; }
   getCategory(): string { return 'Core'; }
   getEditorDisplay(_item: WidgetItem): WidgetEditorDisplay { return { displayText: this.getDisplayName() }; }
+  getLabelPrefix(): string { return LABEL; }
   render(item: WidgetItem, context: RenderContext, _settings: Settings): string | null {
     const version = context.isPreview ? '0.152.1' : context.data.session?.codex_version;
     if (!version) return null;
-    return item.rawValue ? version : 'v' + version;
+    return formatRawOrLabeledValue(item, this.getLabelPrefix(), version);
   }
   supportsRawValue(): boolean { return true; }
   supportsColors(_item: WidgetItem): boolean { return true; }

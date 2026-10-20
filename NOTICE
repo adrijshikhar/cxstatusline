@@ -1,16 +1,19 @@
 cxstatusline
 
-Portions of src/utils/{ansi,colors,gradient,powerline-settings,powerline-theme-index,renderer,separator-index,terminal}.ts
-are derived from ccstatusline at commit 05554cd087249167d570aed3c869915b6a18d4d2 (v2.2.30).
+Portions of src/utils/{ansi,colors,executable-path,git-hardening,gradient,no-proxy,powerline-settings,powerline-theme-index,renderer,separator-index,terminal,terminal-sanitize,windows-code-page}.ts
+are derived from ccstatusline at commit 19c6665ecf14309a5ffcfcda5e31972833dd821a (v2.2.32).
 
 Portions of src/{types/{RenderContext.ts,SpeedMetrics.ts},utils/{widget-manifest.ts,widgets.ts,speed-metrics.ts,speed-window.ts},widgets/}
-are derived from ccstatusline at commit 05554cd087249167d570aed3c869915b6a18d4d2 (v2.2.30).
+are derived from ccstatusline at commit 19c6665ecf14309a5ffcfcda5e31972833dd821a (v2.2.32).
+
+Portions of src/widgets/shared/text-cursor.ts
+are derived from ccstatusline at commit 19c6665ecf14309a5ffcfcda5e31972833dd821a (v2.2.32).
 
 Portions of src/tui/components/{PowerlineSetup,PowerlineSeparatorEditor,PowerlineThemeSelector,GlobalOverridesMenu}.tsx
-are derived from ccstatusline at commit 05554cd087249167d570aed3c869915b6a18d4d2 (v2.2.30).
+are derived from ccstatusline at commit 19c6665ecf14309a5ffcfcda5e31972833dd821a (v2.2.32).
 
-Portions of src/tui/components/{ExportConfigDialog,ImportConfigDialog,ImportPreviewDialog}.tsx
-are derived from ccstatusline at commit 05554cd087249167d570aed3c869915b6a18d4d2 (v2.2.30).
+Portions of src/tui/components/{ExportConfigDialog,ImportConfigDialog,ImportPreviewDialog,LabelEditor}.tsx
+are derived from ccstatusline at commit 19c6665ecf14309a5ffcfcda5e31972833dd821a (v2.2.32).
 
 Copyright (c) 2025 Matthew Breedlove (https://github.com/sirmalloc)
 Original repository: https://github.com/sirmalloc/ccstatusline

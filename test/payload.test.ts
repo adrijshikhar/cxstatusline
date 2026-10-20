@@ -34,6 +34,11 @@ describe("parsePayload", () => {
     expect(p.git?.pr).toBeUndefined();
   });
 
+  test("accepts null model, git, usage, session objects", () => {
+    const p = parsePayload('{"payload_version":1,"model":null,"git":null,"usage":null,"session":null}');
+    expect(p).toEqual({ payload_version: 1 });
+  });
+
   test("ignores unknown keys at every level", () => {
     const p = parsePayload('{"payload_version":1,"future":true,"model":{"name":"x","vibe":"y"}}');
     expect(p.model?.name).toBe("x");

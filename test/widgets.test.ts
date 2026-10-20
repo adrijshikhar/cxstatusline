@@ -188,3 +188,31 @@ test("cache-hit-rate without zero state enabled renders 'Cache Hit: n/a'", () =>
   const showItem: WidgetItem = { id: "c", type: "cache-hit-rate" };
   expect(w.render(showItem, emptyContext, DEFAULT_SETTINGS)).toBe("Cache Hit: n/a");
 });
+
+test("widgets declaring hideable states leave 'h' unbound in getCustomKeybinds", () => {
+  for (const { type } of WIDGET_MANIFEST) {
+    if (type === "separator" || type === "flex-separator") continue;
+    const widget = getWidget(type);
+    if ((widget.getHideableStates?.().length ?? 0) > 0) {
+      const keys = (widget.getCustomKeybinds?.({ id: "x", type }) ?? []).map((k) => k.key);
+      expect(keys, `${type} binds 'h'`).not.toContain("h");
+    }
+  }
+});
+
+test("widgets declaring getLabelPrefix leave 'e' unbound in getCustomKeybinds", () => {
+  for (const { type } of WIDGET_MANIFEST) {
+    if (type === "separator" || type === "flex-separator") continue;
+    const widget = getWidget(type);
+    if (widget.getLabelPrefix) {
+      const keys = (widget.getCustomKeybinds?.({ id: "x", type }) ?? []).map((k) => k.key);
+      expect(keys, `${type} binds 'e'`).not.toContain("e");
+    }
+  }
+});
+
+test("widgets with getLabelPrefix render custom label override from metadata", () => {
+  const item: WidgetItem = { id: "m", type: "model", metadata: { label: "MyModel: " } };
+  const widget = getWidget("model");
+  expect(widget.render(item, fullContext, DEFAULT_SETTINGS)).toBe("MyModel: gpt-5-codex");
+});

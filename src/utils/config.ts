@@ -1,4 +1,4 @@
-import { lstat, mkdir, readFile, readlink, realpath, rename, unlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readlink, realpath, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import { CURRENT_VERSION, DEFAULT_SETTINGS, SettingsSchema, type Settings } from "../types/Settings";
 import { migrateSettings } from "./migrations";
@@ -36,13 +36,24 @@ async function resolveAtomicWriteTarget(file: string): Promise<AtomicWriteTarget
   }
 }
 
+// The permissions of the file a save replaces, so a private settings file
+// stays private; a new file gets the usual default
+async function getReplacedFileMode(filePath: string): Promise<number> {
+  try {
+    return (await stat(filePath)).mode & 0o777;
+  } catch {
+    return 0o666;
+  }
+}
+
 async function writeSettingsJson(file: string, settings: Settings): Promise<void> {
   await mkdir(dirname(file), { recursive: true });
   const target = await resolveAtomicWriteTarget(file);
   await mkdir(target.tempDir, { recursive: true });
   const tempPath = resolve(target.tempDir, `${basename(target.targetPath)}.${process.pid}.${Date.now()}.tmp`);
+  const mode = await getReplacedFileMode(target.targetPath);
   try {
-    await writeFile(tempPath, JSON.stringify(settings, null, 2), "utf8");
+    await writeFile(tempPath, JSON.stringify(settings, null, 2), { encoding: "utf8", mode });
     await rename(tempPath, target.targetPath);
   } catch (error) {
     await unlink(tempPath).catch(() => undefined);

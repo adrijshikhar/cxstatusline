@@ -70,6 +70,7 @@ export interface Widget {
   supportsRawValue(): boolean;
   supportsColors(item: WidgetItem): boolean;
   supportsNumberFormat?(): boolean;
+  getLabelPrefix?(item: WidgetItem): string;
   getCustomKeybinds?(item?: WidgetItem): CustomKeybind[];
   getHideableStates?(): HideableState[];
   renderEditor?(props: WidgetEditorProps): React.ReactElement | null;

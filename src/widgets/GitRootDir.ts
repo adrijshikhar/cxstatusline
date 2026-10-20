@@ -23,7 +23,10 @@ export class GitRootDirWidget implements Widget {
     return { displayText: this.getDisplayName(), modifierText: makeModifierText(modifiers) };
   }
   render(item: WidgetItem, context: RenderContext, _settings: Settings): string | null {
-    if (context.isPreview) return 'my-repo';
+    if (context.isPreview) {
+      const sample = item.maxWidth ? 'my-long-repository-name' : 'my-repo';
+      return applyMaxWidth(sample, item.maxWidth);
+    }
     const root = context.data.session?.project_root;
     if (!root) return isHideStateEnabled(item, NO_GIT_HIDEABLE_STATE) ? null : 'no git';
     return applyMaxWidth(baseName(root), item.maxWidth);

@@ -18,17 +18,19 @@ export class TokensCachedWidget implements Widget {
   getCategory(): string { return 'Tokens'; }
   getEditorDisplay(_item: WidgetItem): WidgetEditorDisplay { return { displayText: this.getDisplayName() }; }
 
+  getLabelPrefix(): string { return 'Cached: '; }
+
   getHideableStates(): HideableState[] {
     return [ZERO_HIDEABLE_STATE];
   }
 
   render(item: WidgetItem, context: RenderContext, settings: Settings): string | null {
     const format = resolveNumberFormat('token', item, settings);
-    if (context.isPreview) return formatRawOrLabeledValue(item, 'Cached: ', formatTokens(12000, format, 0));
+    if (context.isPreview) return formatRawOrLabeledValue(item, this.getLabelPrefix(), formatTokens(12000, format, 0));
     const value = context.data.usage?.cached_input_tokens ?? null;
     if (value === null) return null;
     if (value === 0 && isHideStateEnabled(item, ZERO_HIDEABLE_STATE)) return null;
-    return formatRawOrLabeledValue(item, 'Cached: ', formatTokens(value, format));
+    return formatRawOrLabeledValue(item, this.getLabelPrefix(), formatTokens(value, format));
   }
   supportsRawValue(): boolean { return true; }
   supportsColors(_item: WidgetItem): boolean { return true; }

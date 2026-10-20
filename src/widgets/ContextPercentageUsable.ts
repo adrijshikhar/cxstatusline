@@ -17,6 +17,7 @@ export class ContextPercentageUsableWidget implements Widget {
     const modifiers = [getContextInverseModifierText(item), getContextSliderModifierText(item)].filter((value): value is string => value !== undefined);
     return { displayText: this.getDisplayName(), modifierText: modifiers.length ? '(' + modifiers.map(value => value.replace(/^\(|\)$/g, '')).join(', ') + ')' : undefined };
   }
+  getLabelPrefix(item: WidgetItem): string { return isContextInverse(item) ? 'Ctx(u) Left: ' : 'Ctx(u) Used: '; }
   handleEditorAction(action: string, item: WidgetItem): WidgetItem | null {
     if (action === 'toggle-slider') return cycleContextSliderMode(item);
     return handleContextInverseAction(action, item);
@@ -29,7 +30,7 @@ export class ContextPercentageUsableWidget implements Widget {
     const used = Math.min(100, metrics.contextLengthTokens / config.usableTokens * 100);
     const percentage = isContextInverse(item) ? 100 - used : used;
     const slider = renderContextSlider(getContextSliderMode(item), percentage, format);
-    return formatRawOrLabeledValue(item, isContextInverse(item) ? 'Ctx(u) Left: ' : 'Ctx(u) Used: ', slider ?? formatPercent(percentage, format));
+    return formatRawOrLabeledValue(item, this.getLabelPrefix(item), slider ?? formatPercent(percentage, format));
   }
   getCustomKeybinds(): CustomKeybind[] { return [{ key: 'u', label: '(u)sed/remaining', action: 'toggle-inverse' }, ...getContextSliderKeybinds()]; }
   supportsRawValue(): boolean { return true; }

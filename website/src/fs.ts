@@ -9,4 +9,5 @@ export const renameSync = unavailable;
 export const lstatSync = unavailable;
 export const readdirSync = unavailable;
 export const statSync = unavailable;
-export default { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync, renameSync, lstatSync, readdirSync, statSync };
+export const realpathSync = unavailable;
+export default { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync, renameSync, lstatSync, readdirSync, statSync, realpathSync };

@@ -3,6 +3,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { getColorLevelString } from "../../types/ColorLevel";
 import type { Settings } from "../../types/Settings";
 import { getPowerlineTheme, getPowerlineThemes } from "../../utils/colors";
+import { assignPowerlineThemeSlots } from "../../utils/powerline-theme-index";
+import { getPlainInput } from "../../utils/input-guards";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { List, type ListEntry } from "./List";
 
@@ -26,18 +28,35 @@ export function applyCustomPowerlineTheme(settings: Settings, themeName: string)
   if (level === "none") return null;
   const colors = theme[level === "ansi16" ? "1" : level === "ansi256" ? "2" : "3"];
   if (!colors) return null;
+
+  let nextLineSlot = 0;
+  const lines = settings.lines.map((line) => {
+    const { slots, nextSlot } = assignPowerlineThemeSlots(
+      line,
+      settings.powerline.continueThemeAcrossLines ? nextLineSlot : 0
+    );
+    nextLineSlot = nextSlot;
+
+    return line.map((widget, index) => {
+      const slot = slots[index];
+      if (typeof slot !== "number") {
+        return widget;
+      }
+
+      const color = colors.fg[slot % colors.fg.length];
+      const backgroundColor = colors.bg[slot % colors.bg.length];
+
+      return {
+        ...widget,
+        ...(color && { color }),
+        ...(backgroundColor && { backgroundColor }),
+      };
+    });
+  });
+
   return {
     ...settings,
-    lines: settings.lines.map((line) => {
-      let index = 0;
-      return line.map((widget) => {
-      if (widget.type === "separator" || widget.type === "flex-separator") return widget;
-      const color = colors.fg[index % colors.fg.length];
-      const backgroundColor = colors.bg[index % colors.bg.length];
-      index += 1;
-      return { ...widget, ...(color && { color }), ...(backgroundColor && { backgroundColor }) };
-      });
-    }),
+    lines,
     powerline: { ...settings.powerline, theme: "custom" },
   };
 }
@@ -70,10 +89,11 @@ export function PowerlineThemeSelector({ settings, onUpdate, onBack }: Powerline
 
   useInput((input, key) => {
     if (confirmCustom) return;
+    const shortcut = getPlainInput(input, key);
     if (key.escape) {
       onUpdate(originalSettings.current);
       onBack();
-    } else if (input.toLowerCase() === "c") {
+    } else if (shortcut.toLowerCase() === "c") {
       const theme = themes[selectedIndex];
       if (theme && theme !== "custom") setConfirmCustom(true);
     }
