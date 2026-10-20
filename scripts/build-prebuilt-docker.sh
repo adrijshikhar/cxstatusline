@@ -20,6 +20,35 @@ if [[ -z "${DOCKER_CONFIG:-}" && -f "$HOME/.docker/config.json" ]]; then
       } catch {}
     ' "$_CLEAN_DOCKER_DIR"
     export DOCKER_CONFIG="$_CLEAN_DOCKER_DIR"
+
+    # Provide fallback shims for credential helpers in headless/CI sessions where macOS Keychain
+    # access is denied. When access is denied, exit 1 with "not found" so Docker falls back to anonymous pulls.
+    mkdir -p "$_CLEAN_DOCKER_DIR/bin"
+    cat << 'SHIM' > "$_CLEAN_DOCKER_DIR/bin/docker-credential-desktop"
+#!/bin/sh
+for p in /usr/local/bin/docker-credential-desktop /Applications/Docker.app/Contents/Resources/bin/docker-credential-desktop; do
+  if [ -x "$p" ]; then
+    out=$("$p" "$@" 2>&1)
+    status=$?
+    if [ $status -eq 0 ]; then
+      printf '%s\n' "$out"
+      exit 0
+    fi
+    if printf '%s\n' "$out" | grep -q "keychain cannot be accessed"; then
+      echo "credentials not found in native keychain" >&2
+      exit 1
+    fi
+    printf '%s\n' "$out" >&2
+    exit $status
+  fi
+done
+echo "credentials not found in native keychain" >&2
+exit 1
+SHIM
+    chmod +x "$_CLEAN_DOCKER_DIR/bin/docker-credential-desktop"
+    cp "$_CLEAN_DOCKER_DIR/bin/docker-credential-desktop" "$_CLEAN_DOCKER_DIR/bin/docker-credential-osxkeychain"
+    export PATH="$_CLEAN_DOCKER_DIR/bin:$PATH"
+
     trap 'rm -rf "$_CLEAN_DOCKER_DIR"' EXIT
   fi
 fi
@@ -136,13 +165,17 @@ echo " Docker Target: $DOCKER_PLATFORM"
 echo " Skip Tests:    $SKIP_TESTS"
 echo "=========================================="
 
-# 1. Build builder image
-echo "==> Building Docker image ($IMAGE_NAME)..."
-"${DOCKER_CMD[@]}" build \
-  --platform "$DOCKER_PLATFORM" \
-  -t "$IMAGE_NAME" \
-  -f "$REPO_ROOT/docker/Dockerfile.prebuilt" \
-  "$REPO_ROOT"
+# 1. Build builder image if not already present
+if "${DOCKER_CMD[@]}" image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
+  echo "==> Docker image ($IMAGE_NAME) already exists locally, skipping build"
+else
+  echo "==> Building Docker image ($IMAGE_NAME)..."
+  "${DOCKER_CMD[@]}" build \
+    --platform "$DOCKER_PLATFORM" \
+    -t "$IMAGE_NAME" \
+    -f "$REPO_ROOT/docker/Dockerfile.prebuilt" \
+    "$REPO_ROOT"
+fi
 
 # Ensure output directory exists
 mkdir -p "$REPO_ROOT/out"
