@@ -88,6 +88,12 @@
       "patchVersion": 2
     },
     {
+      "min": "0.161.0",
+      "max": "0.161.0",
+      "file": "codex-0.161.0.patch",
+      "patchVersion": 2
+    },
+    {
       "min": "0.163.0",
       "max": "0.163.0",
       "file": "codex-0.163.0.patch",
