@@ -110,4 +110,49 @@ describe("renderer flex separator collapse", () => {
 
     expect(out).toBe("AAAAA C...");
   });
+
+  it("keeps uncolored widget text that reads FLEX instead of treating it as a flex separator", () => {
+    const widgets: WidgetItem[] = [
+      { id: "left", type: "custom-text", customText: "left" },
+      { id: "flex", type: "flex-separator" },
+      { id: "literal", type: "custom-text", customText: "FLEX" },
+      { id: "right", type: "custom-text", customText: "right" },
+    ];
+    const settings = createSettings({ colorLevel: 0, flexMode: "full" });
+    const preRendered = makePreRendered(widgets, { 0: "left", 2: "FLEX", 3: "right" });
+
+    const knownContext: RenderContext = {
+      data: { payload_version: 1 },
+      now: new Date(),
+      terminalWidth: 40,
+      isPreview: false,
+    };
+    const known = stripSgrCodes(renderStatusLine(widgets, settings, knownContext, preRendered, []));
+    expect(known).toBe(`left${" ".repeat(21)}FLEXright`);
+
+    const unknownContext: RenderContext = {
+      data: { payload_version: 1 },
+      now: new Date(),
+      terminalWidth: null,
+      isPreview: false,
+    };
+    const unknown = stripSgrCodes(renderStatusLine(widgets, settings, unknownContext, preRendered, []));
+    expect(unknown).toBe("left | FLEXright");
+  });
+
+  it("keeps truncating when the reserved columns take the whole terminal", () => {
+    const widgets: WidgetItem[] = [
+      { id: "text", type: "custom-text", customText: "abcdefghijklmnopqrstuvwxyz" },
+    ];
+    const settings = createSettings({ colorLevel: 0, flexMode: "full-minus-40" });
+    const preRendered = makePreRendered(widgets, { 0: "abcdefghijklmnopqrstuvwxyz" });
+    const context: RenderContext = {
+      data: { payload_version: 1 },
+      now: new Date(),
+      terminalWidth: 40,
+      isPreview: false,
+    };
+    const out = renderStatusLine(widgets, settings, context, preRendered, []);
+    expect(out).toBe("");
+  });
 });

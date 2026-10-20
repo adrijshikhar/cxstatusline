@@ -1,6 +1,11 @@
 import type { CustomKeybind, Widget, WidgetItem, WidgetType } from "../../../types/Widget";
 import { EDIT_HIDE_STATES_ACTION, getHideKeybind } from "../../../widgets/shared/hideable";
 import {
+  EDIT_LABEL_ACTION,
+  getLabelKeybind,
+} from "../../../widgets/shared/raw-or-labeled";
+import { getPlainInput } from "../../../utils/input-guards";
+import {
   CYCLE_NUMBER_STYLE_ACTION,
   cycleNumberStyle,
   getNumberFormatKeybind,
@@ -41,6 +46,9 @@ export function customKeybindsFor(impl: Widget | null, item: WidgetItem | undefi
   }
   if ((impl.getHideableStates?.().length ?? 0) > 0 && !keybinds.some((k) => k.action === EDIT_HIDE_STATES_ACTION)) {
     keybinds.push(getHideKeybind());
+  }
+  if (impl.getLabelPrefix && !item.rawValue) {
+    keybinds.push(getLabelKeybind());
   }
   return keybinds;
 }
@@ -252,6 +260,7 @@ export function handleNormalInputMode({
   getWidgetImpl,
   setCustomEditorWidget,
 }: HandleNormalInputModeArgs): void {
+  const shortcut = getPlainInput(input, key);
   if (key.upArrow && widgets.length) {
     setSelectedIndex(selectedIndex === 0 ? widgets.length - 1 : selectedIndex - 1);
   } else if (key.downArrow && widgets.length) {
@@ -260,15 +269,15 @@ export function handleNormalInputMode({
     openWidgetPicker("change");
   } else if (key.return && widgets.length) {
     setMoveMode(true);
-  } else if (input === "a") {
+  } else if (shortcut === "a") {
     openWidgetPicker("add");
-  } else if (input === "i") {
+  } else if (shortcut === "i") {
     openWidgetPicker("insert");
-  } else if (input === "d" && widgets.length) {
+  } else if (shortcut === "d" && widgets.length) {
     const next = widgets.filter((_, index) => index !== selectedIndex);
     onUpdate(next);
     if (selectedIndex >= next.length && selectedIndex > 0) setSelectedIndex(selectedIndex - 1);
-  } else if (input === "k" && widgets.length) {
+  } else if (shortcut === "k" && widgets.length) {
     const current = widgets[selectedIndex];
     if (!current) return;
     const clone: WidgetItem = {
@@ -279,32 +288,38 @@ export function handleNormalInputMode({
     const index = selectedIndex + 1;
     onUpdate([...widgets.slice(0, index), clone, ...widgets.slice(index)]);
     setSelectedIndex(index);
-  } else if (input === "c" && widgets.length) {
+  } else if (shortcut === "c" && widgets.length) {
     setShowClearConfirm(true);
-  } else if (input === " " && widgets[selectedIndex]?.type === "separator") {
+  } else if (shortcut === " " && widgets[selectedIndex]?.type === "separator") {
     const current = widgets[selectedIndex]!;
     const index = Math.max(0, separatorChars.indexOf(current.character ?? "|"));
     const character = separatorChars[(index + 1) % separatorChars.length];
     onUpdate(widgets.map((widget, itemIndex) => itemIndex === selectedIndex ? { ...widget, character } : widget));
-  } else if (input === "r" && widgets.length) {
+  } else if (shortcut === "r" && widgets.length) {
     const current = widgets[selectedIndex];
     if (current && current.type !== "separator" && current.type !== "flex-separator") {
       onUpdate(widgets.map((widget, index) => index === selectedIndex ? { ...widget, rawValue: !widget.rawValue } : widget));
     }
-  } else if (input === "m" && widgets.length) {
+  } else if (shortcut === "m" && widgets.length) {
     const current = widgets[selectedIndex];
-    if (current && selectedIndex < widgets.length - 1 && current.type !== "separator" && current.type !== "flex-separator") {
-      const merge = current.merge === undefined ? true : current.merge === true ? "no-padding" : undefined;
-      onUpdate(widgets.map((widget, index) => {
-        if (index !== selectedIndex) return widget;
-        if (merge === undefined) {
-          const { merge: _, ...withoutMerge } = widget;
-          return withoutMerge;
-        }
-        return { ...widget, merge };
-      }));
+    if (current && current.type !== "separator" && current.type !== "flex-separator") {
+      const isLastWidget = selectedIndex === widgets.length - 1;
+      if (isLastWidget && current.merge) {
+        const { merge: _, ...withoutMerge } = current;
+        onUpdate(widgets.map((w, i) => i === selectedIndex ? withoutMerge : w));
+      } else if (!isLastWidget) {
+        const merge = current.merge === undefined ? true : current.merge === true ? "no-padding" : undefined;
+        onUpdate(widgets.map((widget, index) => {
+          if (index !== selectedIndex) return widget;
+          if (merge === undefined) {
+            const { merge: _, ...withoutMerge } = widget;
+            return withoutMerge;
+          }
+          return { ...widget, merge };
+        }));
+      }
     }
-  } else if (input === "x" && widgets.length) {
+  } else if (shortcut === "x" && widgets.length) {
     const current = widgets[selectedIndex];
     if (current && current.type !== "separator" && current.type !== "flex-separator") {
       onUpdate(widgets.map((widget, index) => {
@@ -316,14 +331,14 @@ export function handleNormalInputMode({
         return { ...widget, excludeFromAutoAlign: true };
       }));
     }
-  } else if (input && !key.ctrl && !key.meta && widgets.length) {
+  } else if (shortcut && widgets.length) {
     // Widget-specific keys come last so reserved keys always win.
     const current = widgets[selectedIndex];
     if (!current) return;
     const impl = getWidgetImpl(current.type);
-    const keybind = customKeybindsFor(impl, current).find((entry) => entry.key === input);
+    const keybind = customKeybindsFor(impl, current).find((entry) => entry.key === shortcut);
     if (!impl || !keybind) return;
-    if (keybind.action === EDIT_HIDE_STATES_ACTION) {
+    if (keybind.action === EDIT_HIDE_STATES_ACTION || keybind.action === EDIT_LABEL_ACTION) {
       setCustomEditorWidget({ widget: current, impl, action: keybind.action });
       return;
     }

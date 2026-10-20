@@ -6,6 +6,7 @@ import { DefaultPaddingSideSchema, type Settings } from "../../types/Settings";
 import { applyColors, getAvailableBackgroundColorsForUI, getAvailableColorsForUI } from "../../utils/colors";
 import { GRADIENT_PRESET_NAMES } from "../../utils/gradient";
 import { getNextNumberStyle } from "../../utils/number-format";
+import { getPlainInput } from "../../utils/input-guards";
 import { ConfirmDialog } from "./ConfirmDialog";
 
 export interface GlobalOverridesMenuProps {
@@ -144,19 +145,20 @@ export function GlobalOverridesMenu({ settings, onUpdate, onBack }: GlobalOverri
       }
       return;
     }
+    const shortcut = getPlainInput(input, key);
     if (key.escape) onBack();
-    else if (input.toLowerCase() === "n") { setNumberFormatMode(true); setNumberFormatKindIndex(0); }
-    else if (input.toLowerCase() === "p") { setValue(settings.defaultPadding ?? ""); setEditing("padding"); }
-    else if (input.toLowerCase() === "s" && !powerline) { setValue(settings.defaultSeparator ?? ""); setEditing("separator"); }
-    else if (input.toLowerCase() === "i" && !powerline) onUpdate({ ...settings, inheritSeparatorColors: !settings.inheritSeparatorColors });
-    else if (input.toLowerCase() === "o") onUpdate({ ...settings, globalBold: !settings.globalBold });
-    else if (input.toLowerCase() === "m") onUpdate({ ...settings, minimalistMode: !settings.minimalistMode });
-    else if (input.toLowerCase() === "f") onUpdate({ ...settings, overrideForegroundColor: cycle(foregrounds, settings.overrideForegroundColor) });
-    else if (input.toLowerCase() === "g") { setGradientMode(true); setGradientIndex(0); }
-    else if (input.toLowerCase() === "x") onUpdate({ ...settings, overrideForegroundColor: undefined });
-    else if (input.toLowerCase() === "b" && !powerline) onUpdate({ ...settings, overrideBackgroundColor: cycle(backgrounds, settings.overrideBackgroundColor) });
-    else if (input.toLowerCase() === "c" && !powerline) onUpdate({ ...settings, overrideBackgroundColor: undefined });
-    else if (input.toLowerCase() === "d") {
+    else if (shortcut.toLowerCase() === "n") { setNumberFormatMode(true); setNumberFormatKindIndex(0); }
+    else if (shortcut.toLowerCase() === "p") { setValue(settings.defaultPadding ?? ""); setEditing("padding"); }
+    else if (shortcut.toLowerCase() === "s" && !powerline) { setValue(settings.defaultSeparator ?? ""); setEditing("separator"); }
+    else if (shortcut.toLowerCase() === "i" && !powerline) onUpdate({ ...settings, inheritSeparatorColors: !settings.inheritSeparatorColors });
+    else if (shortcut.toLowerCase() === "o") onUpdate({ ...settings, globalBold: !settings.globalBold });
+    else if (shortcut.toLowerCase() === "m") onUpdate({ ...settings, minimalistMode: !settings.minimalistMode });
+    else if (shortcut.toLowerCase() === "f") onUpdate({ ...settings, overrideForegroundColor: cycle(foregrounds, settings.overrideForegroundColor) });
+    else if (shortcut.toLowerCase() === "g") { setGradientMode(true); setGradientIndex(0); }
+    else if (shortcut.toLowerCase() === "x") onUpdate({ ...settings, overrideForegroundColor: undefined });
+    else if (shortcut.toLowerCase() === "b" && !powerline) onUpdate({ ...settings, overrideBackgroundColor: cycle(backgrounds, settings.overrideBackgroundColor) });
+    else if (shortcut.toLowerCase() === "c" && !powerline) onUpdate({ ...settings, overrideBackgroundColor: undefined });
+    else if (shortcut.toLowerCase() === "d") {
       const options = DefaultPaddingSideSchema.options;
       const index = Math.max(0, options.indexOf(settings.defaultPaddingSide));
       onUpdate({ ...settings, defaultPaddingSide: options[(index + 1) % options.length] ?? "both" });

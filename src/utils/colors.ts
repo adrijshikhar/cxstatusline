@@ -240,6 +240,9 @@ export function getColorAnsiCode(colorName: string | undefined, colorLevel: Colo
 
     // Handle ansi256:X format
     if (colorName.startsWith('ansi256:')) {
+        if (colorLevel === 'ansi16') {
+            return '';
+        }
         const code = parseInt(colorName.substring(8), 10);
         if (!isNaN(code) && code >= 0 && code <= 255) {
             return isBackground ? `\x1b[48;5;${code}m` : `\x1b[38;5;${code}m`;
@@ -249,6 +252,9 @@ export function getColorAnsiCode(colorName: string | undefined, colorLevel: Colo
 
     // Handle hex:XXXXXX format
     if (colorName.startsWith('hex:')) {
+        if (colorLevel === 'ansi16') {
+            return '';
+        }
         const hex = colorName.substring(4);
         if (/^[0-9A-Fa-f]{6}$/.test(hex)) {
             const r = parseInt(hex.substring(0, 2), 16);

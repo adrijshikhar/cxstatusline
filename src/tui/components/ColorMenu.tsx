@@ -4,6 +4,7 @@ import { getColorLevelString } from "../../types/ColorLevel";
 import type { Settings } from "../../types/Settings";
 import type { WidgetItem } from "../../types/Widget";
 import { getAvailableBackgroundColorsForUI, getAvailableColorsForUI, applyColors } from "../../utils/colors";
+import { getPlainInput } from "../../utils/input-guards";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { displayWidgetType } from "./ItemsEditor";
 import {
@@ -60,6 +61,7 @@ export function ColorMenu({ widgets, lineIndex, settings, onUpdate, onBack }: Co
       else if (isTextInput(input, key) && /^[0-9]$/.test(input) && ansiInput.length < 3) setAnsiInput(ansiInput + input);
       return;
     }
+    const shortcut = getPlainInput(input, key);
     if (key.escape) {
       onBack();
     } else if (key.upArrow && colorable.length) {
@@ -68,22 +70,25 @@ export function ColorMenu({ widgets, lineIndex, settings, onUpdate, onBack }: Co
       setSelectedIndex((index) => index === colorable.length - 1 ? 0 : index + 1);
     } else if (key.leftArrow || key.rightArrow) {
       if (selected) onUpdate(cycleWidgetColor({ widgets, widgetId: selected.id, direction: key.rightArrow ? "right" : "left", editingBackground, colors, backgroundColors: backgrounds }));
-    } else if (input.toLowerCase() === "f") {
+    } else if (shortcut.toLowerCase() === "f") {
       setEditingBackground((value) => !value);
-    } else if (input.toLowerCase() === "b" && selected) {
+    } else if (shortcut.toLowerCase() === "b" && selected) {
       onUpdate(toggleWidgetBold(widgets, selected.id));
-    } else if (input.toLowerCase() === "d" && selected) {
+    } else if (shortcut.toLowerCase() === "d" && selected) {
       onUpdate(cycleWidgetDim(widgets, selected.id));
-    } else if (input.toLowerCase() === "r" && selected) {
+    } else if (shortcut.toLowerCase() === "r" && selected) {
       onUpdate(resetWidgetStyling(widgets, selected.id));
-    } else if (input.toLowerCase() === "c") {
+    } else if (shortcut.toLowerCase() === "c") {
       setClearConfirm(true);
-    } else if (input.toLowerCase() === "s" && !settings.powerline.enabled && !settings.defaultSeparator) {
+    } else if (shortcut.toLowerCase() === "s" && !settings.powerline.enabled && !settings.defaultSeparator) {
+      const highlightedWidget = colorable[selectedIndex];
       setShowSeparators((value) => !value);
-      setSelectedIndex(0);
-    } else if (input.toLowerCase() === "h" && settings.colorLevel === 3 && selected) {
+      if (showSeparators && highlightedWidget?.type === "separator") {
+        setSelectedIndex(0);
+      }
+    } else if (shortcut.toLowerCase() === "h" && settings.colorLevel === 3 && selected) {
       setHexInput("");
-    } else if (input.toLowerCase() === "a" && settings.colorLevel === 2 && selected) {
+    } else if (shortcut.toLowerCase() === "a" && settings.colorLevel === 2 && selected) {
       setAnsiInput("");
     }
   });

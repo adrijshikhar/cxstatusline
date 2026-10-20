@@ -46,7 +46,7 @@ describe("upstream-ccstatusline", () => {
   it("loads config file properly", () => {
     const config = loadUpstreamConfig();
     expect(config.repo).toBe("sirmalloc/ccstatusline");
-    expect(config.baseCommit).toBe("05554cd087249167d570aed3c869915b6a18d4d2");
+    expect(config.baseCommit).toBe("19c6665ecf14309a5ffcfcda5e31972833dd821a");
   });
 
   it("formats parity issue body with release details and commit list", () => {

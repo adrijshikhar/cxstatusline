@@ -21,7 +21,10 @@ export class GitBranchWidget implements Widget {
   }
   render(item: WidgetItem, context: RenderContext, _settings: Settings): string | null {
     const prefix = formatSymbolPrefix(item, DEFAULT_SYMBOL);
-    if (context.isPreview) return item.rawValue ? 'main' : prefix + 'main';
+    if (context.isPreview) {
+      const sample = item.maxWidth ? 'feature/long-branch-name' : 'main';
+      return applyMaxWidth(item.rawValue ? sample : prefix + sample, item.maxWidth);
+    }
     const branch = context.data.git?.branch;
     if (!branch) return isHideStateEnabled(item, NO_GIT_HIDEABLE_STATE) ? null : prefix + 'no git';
     return applyMaxWidth(item.rawValue ? branch : prefix + branch, item.maxWidth);

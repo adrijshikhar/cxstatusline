@@ -1,6 +1,7 @@
 import { Box, Text, useInput } from "ink";
 import React, { useEffect, useState } from "react";
 import type { WidgetItem } from "../../types/Widget";
+import { getPlainInput } from "../../utils/input-guards";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { List } from "./List";
 
@@ -68,7 +69,8 @@ export function LineSelector({
       return;
     }
 
-    if (input === "a" && allowEditing) {
+    const shortcut = getPlainInput(input, key);
+    if (shortcut === "a" && allowEditing) {
       if (localLines.length >= 3) {
         setLimitMessage("Maximum of 3 lines");
       } else {
@@ -79,11 +81,11 @@ export function LineSelector({
       }
       return;
     }
-    if (input === "d" && allowEditing && localLines.length > 1) {
+    if (shortcut === "d" && allowEditing && localLines.length > 1) {
       setConfirmDelete(true);
       return;
     }
-    if (input === "m" && allowEditing && localLines.length > 1) {
+    if (shortcut === "m" && allowEditing && localLines.length > 1) {
       setMoveMode(true);
       return;
     }

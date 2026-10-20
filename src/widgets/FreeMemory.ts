@@ -3,6 +3,9 @@ import type { RenderContext } from '../types/RenderContext';
 import type { Settings } from '../types/Settings';
 import type { Widget, WidgetEditorDisplay, WidgetItem } from '../types/Widget';
 import { renderMagnitude, resolveNumberFormat } from '../utils/number-format';
+import { formatRawOrLabeledValue } from './shared/raw-or-labeled';
+
+const LABEL = 'Mem: ';
 
 function formatBytes(bytes: number, format: NumberFormat): string {
   const value = Math.max(0, bytes);
@@ -18,19 +21,20 @@ export class FreeMemoryWidget implements Widget {
   getDisplayName(): string { return 'Memory Usage'; }
   getCategory(): string { return 'Environment'; }
   getEditorDisplay(_item: WidgetItem): WidgetEditorDisplay { return { displayText: this.getDisplayName() }; }
+  getLabelPrefix(): string { return LABEL; }
   render(item: WidgetItem, context: RenderContext, settings: Settings): string | null {
     const format = resolveNumberFormat('memory', item, settings);
     if (context.isPreview) {
       const value = formatBytes(12.4 * 1024 ** 3, format) + '/' + formatBytes(16 * 1024 ** 3, format);
-      return item.rawValue ? value : 'Mem: ' + value;
+      return formatRawOrLabeledValue(item, this.getLabelPrefix(), value);
     }
     const usage = context.memoryUsage;
     if (usage) {
       const value = formatBytes(usage.used, format) + '/' + formatBytes(usage.total, format);
-      return item.rawValue ? value : 'Mem: ' + value;
+      return formatRawOrLabeledValue(item, this.getLabelPrefix(), value);
     }
     if (context.freeMemoryBytes !== undefined) {
-      return item.rawValue ? formatBytes(context.freeMemoryBytes, format) : 'Mem: ' + formatBytes(context.freeMemoryBytes, format);
+      return formatRawOrLabeledValue(item, this.getLabelPrefix(), formatBytes(context.freeMemoryBytes, format));
     }
     return null;
   }

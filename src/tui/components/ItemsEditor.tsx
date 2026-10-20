@@ -6,7 +6,13 @@ import { WIDGET_MANIFEST } from "../../utils/widget-manifest";
 import { getWidget } from "../../utils/widgets";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { HideStatesEditor } from "./HideStatesEditor";
+import { LabelEditor } from "./LabelEditor";
 import { EDIT_HIDE_STATES_ACTION, getHideModifierText } from "../../widgets/shared/hideable";
+import {
+  EDIT_LABEL_ACTION,
+  clearLabel,
+  getLabelModifierText,
+} from "../../widgets/shared/raw-or-labeled";
 import { getNumberFormatModifierText } from "../../utils/number-format";
 import {
   customKeybindsFor,
@@ -63,10 +69,12 @@ function rowLabel(widget: WidgetItem): string {
   const impl = isLayout(widget.type) ? null : getWidgetImpl(widget.type);
   if (!impl) return displayWidgetType(widget.type);
   const { displayText, modifierText } = impl.getEditorDisplay(widget);
+  const labelModifierText = impl?.getLabelPrefix && !widget.rawValue ? getLabelModifierText(widget) : undefined;
   const numberFormatModifierText = impl.supportsNumberFormat?.() ? getNumberFormatModifierText(widget) : undefined;
   const hideModifierText = impl ? getHideModifierText(widget, impl.getHideableStates?.() ?? []) : undefined;
   const parts = [displayText];
   if (modifierText) parts.push(modifierText);
+  if (labelModifierText) parts.push(labelModifierText);
   if (numberFormatModifierText) parts.push(numberFormatModifierText);
   if (hideModifierText) parts.push(hideModifierText);
   return parts.join(" ");
@@ -105,7 +113,7 @@ export function ItemsEditor({ widgets, onUpdate, onBack, lineNumber, settings: _
     if (!widgetPicker) return;
     if (widgetPicker.action === "change") {
       const current = widgets[selectedIndex];
-      if (current) onUpdate(widgets.map((widget, index) => index === selectedIndex ? { ...widget, type } : widget));
+      if (current) onUpdate(widgets.map((widget, index) => index === selectedIndex ? (widget.type === type ? widget : { ...clearLabel(widget), type }) : widget));
     } else {
       const insertIndex = widgetPicker.action === "add" ? selectedIndex + 1 : selectedIndex;
       const index = widgets.length ? insertIndex : 0;
@@ -148,6 +156,20 @@ export function ItemsEditor({ widgets, onUpdate, onBack, lineNumber, settings: _
       <HideStatesEditor
         widget={customEditor.widget}
         states={customEditor.impl.getHideableStates?.() ?? []}
+        onComplete={(updated) => {
+          onUpdate(widgets.map((widget, index) => index === selectedIndex ? updated : widget));
+          setCustomEditor(null);
+        }}
+        onCancel={() => setCustomEditor(null)}
+      />
+    );
+  }
+
+  if (customEditor?.action === EDIT_LABEL_ACTION && customEditor.impl.getLabelPrefix) {
+    return (
+      <LabelEditor
+        widget={customEditor.widget}
+        defaultLabel={customEditor.impl.getLabelPrefix(customEditor.widget)}
         onComplete={(updated) => {
           onUpdate(widgets.map((widget, index) => index === selectedIndex ? updated : widget));
           setCustomEditor(null);

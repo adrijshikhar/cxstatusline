@@ -7,7 +7,9 @@ import type {
   WidgetItem,
 } from '../types/Widget';
 import { isHideStateEnabled } from './shared/hideable';
+import { formatRawOrLabeledValue } from './shared/raw-or-labeled';
 
+const LABEL = 'Session: ';
 const ZERO_HIDEABLE_STATE: HideableState = { key: 'zero', label: 'when under 1 minute' };
 
 function formatDuration(ms: number): string {
@@ -25,6 +27,7 @@ export class SessionClockWidget implements Widget {
   getDisplayName(): string { return 'Session Clock'; }
   getCategory(): string { return 'Session'; }
   getEditorDisplay(_item: WidgetItem): WidgetEditorDisplay { return { displayText: this.getDisplayName() }; }
+  getLabelPrefix(): string { return LABEL; }
 
   getHideableStates(): HideableState[] {
     return [ZERO_HIDEABLE_STATE];
@@ -36,7 +39,7 @@ export class SessionClockWidget implements Widget {
     const elapsedMs = context.now.getTime() - started;
     if (elapsedMs < 60000 && isHideStateEnabled(item, ZERO_HIDEABLE_STATE)) return null;
     const value = formatDuration(elapsedMs);
-    return item.rawValue ? value : 'Session: ' + value;
+    return formatRawOrLabeledValue(item, this.getLabelPrefix(), value);
   }
   supportsRawValue(): boolean { return true; }
   supportsColors(_item: WidgetItem): boolean { return true; }

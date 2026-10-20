@@ -1,4 +1,8 @@
 import { spawnSync } from "node:child_process";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { GIT_HARDENING_ARGS } from "./git-hardening";
+import { resolveExecutable } from "./executable-path";
 
 export interface GitChangeCounts {
   readonly additions: number;
@@ -20,7 +24,8 @@ export function parseDiffShortStat(stat: string): GitChangeCounts {
 export const GIT_EXEC_TIMEOUT = 5_000;
 
 export const defaultGitRunner: GitRunner = (args: string[], cwd: string): string => {
-  const result = spawnSync("git", args, {
+  const gitExecutable = resolveExecutable("git");
+  const result = spawnSync(gitExecutable, [...GIT_HARDENING_ARGS, ...args], {
     cwd,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
@@ -36,12 +41,52 @@ export const defaultGitRunner: GitRunner = (args: string[], cwd: string): string
   return result.stdout ?? "";
 };
 
+// True only when git is certain to fail with "not a git repository" in cwd,
+// so getGitDiffChanges can skip spawning git.
+export function isDefinitelyOutsideGitRepository(cwd: string): boolean {
+  if (
+    process.env.GIT_DIR !== undefined
+    || process.env.GIT_WORK_TREE !== undefined
+    || process.env.GIT_COMMON_DIR !== undefined
+  ) {
+    return false;
+  }
+
+  let current: string;
+  try {
+    current = fs.realpathSync(cwd);
+    if (!fs.statSync(current).isDirectory()) {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+
+  for (;;) {
+    for (const marker of [".git", "HEAD"]) {
+      try {
+        fs.lstatSync(path.join(current, marker));
+        return false;
+      } catch {
+        // Not present; keep looking.
+      }
+    }
+
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return true;
+    }
+    current = parent;
+  }
+}
+
 export function getGitDiffChanges(cwd?: string, runner: GitRunner = defaultGitRunner): GitChangeCounts | null {
   if (!cwd) return null;
+  if (isDefinitelyOutsideGitRepository(cwd)) return null;
 
   try {
-    const unstaged = runner(["diff", "--no-ext-diff", "--shortstat"], cwd);
-    const staged = runner(["diff", "--cached", "--no-ext-diff", "--shortstat"], cwd);
+    const unstaged = runner(["diff", "--no-ext-diff", "--no-textconv", "--ignore-submodules=dirty", "--shortstat"], cwd);
+    const staged = runner(["diff", "--cached", "--no-ext-diff", "--no-textconv", "--ignore-submodules=dirty", "--shortstat"], cwd);
 
     const unstagedCounts = parseDiffShortStat(unstaged);
     const stagedCounts = parseDiffShortStat(staged);

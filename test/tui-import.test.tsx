@@ -7,6 +7,7 @@ import { act } from "react";
 import type { ReactNode } from "react";
 import { DEFAULT_SETTINGS, type Settings } from "../src/types/Settings";
 import { App } from "../src/tui/App";
+import { escapeControlCharacters } from "../src/tui/components/ImportPreviewDialog";
 import { exportPreset } from "../src/utils/presets";
 import { tmpEnv } from "./helpers";
 
@@ -205,4 +206,9 @@ test("import preview lists cached commands separately with their interval", asyn
   } finally {
     app.cleanup();
   }
+});
+
+test("shows control characters as text instead of sending them to the terminal", () => {
+  expect(escapeControlCharacters("a\u001b]52;c;AAAA\u0007b\u009b")).toBe("a\\u001b]52;c;AAAA\\u0007b\\u009b");
+  expect(escapeControlCharacters("plain ✓")).toBe("plain ✓");
 });

@@ -36,28 +36,30 @@ export class CacheHitRateWidget implements Widget {
         return handleCacheScopeAction(action, item);
     }
 
+    getLabelPrefix(): string { return 'Cache Hit: '; }
+
     render(item: WidgetItem, context: RenderContext, settings: Settings): string | null {
         const format = resolveNumberFormat('percent', item, settings);
         if (context.isPreview) {
-            return formatRawOrLabeledValue(item, 'Cache Hit: ', formatPercent(87, format));
+            return formatRawOrLabeledValue(item, this.getLabelPrefix(), formatPercent(87, format));
         }
 
         const hideWhenEmpty = isHideStateEnabled(item, ZERO_HIDEABLE_STATE);
         const tokens = getCacheTokens(context, isCacheSessionScope(item));
         if (!tokens) {
-            return hideWhenEmpty ? null : formatRawOrLabeledValue(item, 'Cache Hit: ', 'n/a');
+            return hideWhenEmpty ? null : formatRawOrLabeledValue(item, this.getLabelPrefix(), 'n/a');
         }
 
         const hitRate = getCacheHitRate(tokens);
         if (hitRate === null) {
-            return hideWhenEmpty ? null : formatRawOrLabeledValue(item, 'Cache Hit: ', formatPercent(0, format));
+            return hideWhenEmpty ? null : formatRawOrLabeledValue(item, this.getLabelPrefix(), formatPercent(0, format));
         }
 
         if (hitRate === 0 && hideWhenEmpty) {
             return null;
         }
 
-        return formatRawOrLabeledValue(item, 'Cache Hit: ', formatPercent(hitRate, format));
+        return formatRawOrLabeledValue(item, this.getLabelPrefix(), formatPercent(hitRate, format));
     }
 
     getCustomKeybinds(item?: WidgetItem): CustomKeybind[] {

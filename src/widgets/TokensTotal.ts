@@ -18,17 +18,19 @@ export class TokensTotalWidget implements Widget {
   getCategory(): string { return 'Tokens'; }
   getEditorDisplay(_item: WidgetItem): WidgetEditorDisplay { return { displayText: this.getDisplayName() }; }
 
+  getLabelPrefix(): string { return 'Total: '; }
+
   getHideableStates(): HideableState[] {
     return [ZERO_HIDEABLE_STATE];
   }
 
   render(item: WidgetItem, context: RenderContext, settings: Settings): string | null {
     const format = resolveNumberFormat('token', item, settings);
-    if (context.isPreview) return formatRawOrLabeledValue(item, 'Total: ', formatTokens(30600, format));
+    if (context.isPreview) return formatRawOrLabeledValue(item, this.getLabelPrefix(), formatTokens(30600, format));
     const value = context.data.usage && context.data.usage.input_tokens !== undefined && context.data.usage.output_tokens !== undefined ? context.data.usage.input_tokens + context.data.usage.output_tokens : null;
     if (value === null) return null;
     if (value === 0 && isHideStateEnabled(item, ZERO_HIDEABLE_STATE)) return null;
-    return formatRawOrLabeledValue(item, 'Total: ', formatTokens(value, format));
+    return formatRawOrLabeledValue(item, this.getLabelPrefix(), formatTokens(value, format));
   }
   supportsRawValue(): boolean { return true; }
   supportsColors(_item: WidgetItem): boolean { return true; }

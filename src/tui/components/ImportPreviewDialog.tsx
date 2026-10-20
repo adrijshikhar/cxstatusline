@@ -13,6 +13,14 @@ export interface ImportPreviewDialogProps {
   onCancel: () => void;
 }
 
+/**
+ * Control characters as `\uXXXX`: an imported file's text is shown, never sent
+ * to the terminal as escape sequences, and hidden characters stay visible.
+ */
+export function escapeControlCharacters(text: string): string {
+  return text.replace(/[\x00-\x1f\x7f-\x9f]/g, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
+
 /** Adapted from ccstatusline's import review, without merge or external widgets. */
 export function ImportPreviewDialog({ preview, terminalWidth, busy = false, onConfirm, onCancel }: ImportPreviewDialogProps): React.JSX.Element {
   const rows = renderStatusLines(preview.settings, { ...PREVIEW_CONTEXT, isPreview: true, terminalWidth });
@@ -20,10 +28,10 @@ export function ImportPreviewDialog({ preview, terminalWidth, busy = false, onCo
     .filter((item) => item.type === "custom-command");
   const uncachedCommands = allCustomCommands
     .filter((item) => item.refreshMs === undefined)
-    .map((item) => item.commandPath ?? "(no command)");
+    .map((item) => escapeControlCharacters(item.commandPath ?? "(no command)"));
   const cachedCommands = allCustomCommands
     .filter((item) => item.refreshMs !== undefined)
-    .map((item) => `${item.commandPath ?? "(no command)"} (every ${item.refreshMs}ms)`);
+    .map((item) => `${escapeControlCharacters(item.commandPath ?? "(no command)")} (every ${item.refreshMs}ms)`);
   return (
     <Box flexDirection="column">
       <Text bold>Import Preview</Text>

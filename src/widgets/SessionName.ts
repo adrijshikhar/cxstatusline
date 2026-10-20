@@ -1,6 +1,9 @@
 import type { RenderContext } from '../types/RenderContext';
 import type { Settings } from '../types/Settings';
 import type { Widget, WidgetEditorDisplay, WidgetItem } from '../types/Widget';
+import { formatRawOrLabeledValue } from './shared/raw-or-labeled';
+
+const LABEL = 'Session: ';
 
 export class SessionNameWidget implements Widget {
   getDefaultColor(): string { return 'cyan'; }
@@ -8,10 +11,11 @@ export class SessionNameWidget implements Widget {
   getDisplayName(): string { return 'Session Name'; }
   getCategory(): string { return 'Session'; }
   getEditorDisplay(_item: WidgetItem): WidgetEditorDisplay { return { displayText: this.getDisplayName() }; }
+  getLabelPrefix(): string { return LABEL; }
   render(item: WidgetItem, context: RenderContext, _settings: Settings): string | null {
     const name = context.isPreview ? 'my-session' : context.data.session?.thread_title;
     if (!name) return null;
-    return item.rawValue ? name : 'Session: ' + name;
+    return formatRawOrLabeledValue(item, this.getLabelPrefix(), name);
   }
   supportsRawValue(): boolean { return true; }
   supportsColors(_item: WidgetItem): boolean { return true; }

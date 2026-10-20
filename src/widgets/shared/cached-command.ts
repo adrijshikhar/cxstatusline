@@ -13,7 +13,7 @@ import { dirname, join } from 'node:path';
 import { writeFileAtomic } from '../../atomic';
 import type { RenderContext } from '../../types/RenderContext';
 import type { WidgetItem } from '../../types/Widget';
-import { getVisibleText, keepSgrOnly } from '../../utils/ansi';
+import { getVisibleText, keepSgrOnly, stripSgrCodes } from '../../utils/ansi';
 import {
     describeFailure,
     refundBudget,
@@ -178,7 +178,10 @@ export function processResult(
 
     const line = firstLine(result.stdout);
     const cleaned = item.preserveColors ? keepSgrOnly(line) : keepSgrOnly(getVisibleText(line));
-    const text = applyMaxWidth(cleaned, item.maxWidth);
+    const truncated = applyMaxWidth(cleaned, item.maxWidth);
+    const text = truncated !== cleaned && stripSgrCodes(truncated) !== truncated
+        ? `${truncated}\x1b[0m`
+        : truncated;
     return getVisibleText(text).trim().length > 0 ? text : null;
 }
 
