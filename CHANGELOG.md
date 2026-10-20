@@ -3,6 +3,24 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.14.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.13.1...v0.14.0) (2026-10-20)
+
+
+### Features
+
+* support Codex 0.160.1 ([#153](https://github.com/adrijshikhar/cxstatusline/issues/153)) ([31abea4](https://github.com/adrijshikhar/cxstatusline/commit/31abea486984cf7176ec2d66ba671a8a582d1ae4))
+* support Codex 0.161.0 ([#164](https://github.com/adrijshikhar/cxstatusline/issues/164)) ([b89e93f](https://github.com/adrijshikhar/cxstatusline/commit/b89e93fc1bdfdabe5e00a5278fa1923198502f3f))
+* support Codex 0.162.0 ([#165](https://github.com/adrijshikhar/cxstatusline/issues/165)) ([8c10d1e](https://github.com/adrijshikhar/cxstatusline/commit/8c10d1e6b9001da0f44f5e74087e8d7a7fa1de49))
+* support Codex 0.163.0 ([#161](https://github.com/adrijshikhar/cxstatusline/issues/161)) ([37ef38f](https://github.com/adrijshikhar/cxstatusline/commit/37ef38fdab0b8a2bf1368ec73139714e88d70262))
+
+
+### Bug Fixes
+
+* add recursion_limit to codex-0.162.0 tui main.rs ([#168](https://github.com/adrijshikhar/cxstatusline/issues/168)) ([ba42ac3](https://github.com/adrijshikhar/cxstatusline/commit/ba42ac37b7ce04b97d9028ab91325d97c53b37b9))
+* handle macOS keychain access in headless Docker prebuilt builds ([#162](https://github.com/adrijshikhar/cxstatusline/issues/162)) ([dcb6b69](https://github.com/adrijshikhar/cxstatusline/commit/dcb6b698a3c6abd0c757896205bffa4088b847a8))
+* remove copied bin symlinks before creating docker credential shims ([#163](https://github.com/adrijshikhar/cxstatusline/issues/163)) ([f878657](https://github.com/adrijshikhar/cxstatusline/commit/f8786576cd1f5b6e08db591f9f0e199c3ba73c22))
+* **watch:** add retry mechanism and gh api fallback for upstream release fetching ([#151](https://github.com/adrijshikhar/cxstatusline/issues/151)) ([d1ae61a](https://github.com/adrijshikhar/cxstatusline/commit/d1ae61a0a31873b779a12cf0153e28eba55fd944))
+
 ## [0.13.1](https://github.com/adrijshikhar/cxstatusline/compare/v0.13.0...v0.13.1) (2026-10-04)
 
 
