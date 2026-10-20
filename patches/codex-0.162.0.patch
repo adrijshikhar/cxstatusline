@@ -1585,6 +1585,15 @@ index 301b55c2c..ddfd7351f 100644
  fn enable_test_ambient_pet(chat: &mut ChatWidget) {
      chat.set_pet_image_support_for_tests(crate::pets::PetImageSupport::Supported(
          crate::pets::ImageProtocol::Kitty,
+diff --git a/codex-rs/tui/src/main.rs b/codex-rs/tui/src/main.rs
+index 5a196d6..2a1e758 100644
+--- a/codex-rs/tui/src/main.rs
++++ b/codex-rs/tui/src/main.rs
+@@ -1,3 +1,4 @@
++#![recursion_limit = "256"]
+ use clap::Parser;
+ use codex_arg0::Arg0DispatchPaths;
+ use codex_arg0::arg0_dispatch_or_else;
 diff --git a/codex-rs/tui/src/status/rate_limits.rs b/codex-rs/tui/src/status/rate_limits.rs
 index c22868b62..df65a54aa 100644
 --- a/codex-rs/tui/src/status/rate_limits.rs
