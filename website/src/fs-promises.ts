@@ -5,4 +5,5 @@ export async function mkdir(): Promise<never> { throw new Error("Filesystem acce
 export async function readlink(): Promise<never> { throw new Error("Filesystem access is unavailable in the browser."); }
 export async function realpath(): Promise<never> { throw new Error("Filesystem access is unavailable in the browser."); }
 export async function rename(): Promise<never> { throw new Error("Filesystem access is unavailable in the browser."); }
+export async function stat(): Promise<never> { throw new Error("Filesystem access is unavailable in the browser."); }
 export async function unlink(): Promise<never> { throw new Error("Filesystem access is unavailable in the browser."); }
