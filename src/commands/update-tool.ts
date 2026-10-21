@@ -136,13 +136,13 @@ export async function runUpdateTool(
       return 1;
     }
 
-    const install = exec("bun", ["--cwd", installInfo.repoDir, "install", "--frozen-lockfile"]);
+    const install = exec("bun", ["install", "--cwd", installInfo.repoDir, "--frozen-lockfile"]);
     if (install.status !== 0) {
       io.stderr(`Failed to run bun install in repo:\n${install.stderr || install.stdout}\n`);
       return 1;
     }
 
-    const build = exec("bun", ["--cwd", installInfo.repoDir, "run", "build"]);
+    const build = exec("bun", ["run", "--cwd", installInfo.repoDir, "build"]);
     if (build.status !== 0) {
       io.stderr(`Failed to build cxstatusline in repo:\n${build.stderr || build.stdout}\n`);
       return 1;
