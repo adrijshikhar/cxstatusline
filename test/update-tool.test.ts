@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { describe, expect, test } from "bun:test";
 import { runUpdateTool, detectInstallType, type UpdateToolDeps } from "../src/commands/update-tool";
 
@@ -109,8 +110,8 @@ describe("update-tool", () => {
     expect(code).toBe(0);
     expect(commandsRun).toEqual([
       "git -C /path/to/repo pull origin main",
-      "bun --cwd /path/to/repo install --frozen-lockfile",
-      "bun --cwd /path/to/repo run build",
+      "bun install --cwd /path/to/repo --frozen-lockfile",
+      "bun run --cwd /path/to/repo build",
     ]);
     expect(out.join("")).toContain("Successfully updated cxstatusline from git checkout");
   });
@@ -138,5 +139,45 @@ describe("update-tool", () => {
     expect(code).toBe(1);
     expect(err.join("")).toContain("Failed to update cxstatusline");
     expect(err.join("")).toContain("EACCES permission denied");
+  });
+
+  test("bun command argument ordering places subcommand before --cwd", async () => {
+    const { io } = mockIo();
+    const commandsRun: { cmd: string; args: string[] }[] = [];
+    const deps: UpdateToolDeps = {
+      fetchLatestVersion: async () => "0.9.2",
+      currentVersion: "0.9.1",
+      detectInstallType: () => ({ type: "git", repoDir: "/path/to/repo" }),
+      execCommand: (cmd, args) => {
+        commandsRun.push({ cmd, args });
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    };
+    const code = await runUpdateTool([], io, deps);
+    expect(code).toBe(0);
+
+    const installCmd = commandsRun.find((c) => c.cmd === "bun" && c.args.includes("install"));
+    expect(installCmd?.args[0]).toBe("install");
+    expect(installCmd?.args[1]).toBe("--cwd");
+
+    const buildCmd = commandsRun.find((c) => c.cmd === "bun" && c.args.includes("build"));
+    expect(buildCmd?.args[0]).toBe("run");
+    expect(buildCmd?.args[1]).toBe("--cwd");
+  });
+
+  test("bun install and run args are accepted by real bun cli without script-not-found error", () => {
+    // Proves that 'bun install --cwd <dir>' and 'bun run --cwd <dir>' are valid syntax for the real Bun runtime
+    const installCheck = spawnSync("bun", ["install", "--cwd", process.cwd(), "--help"], { encoding: "utf8" });
+    expect(installCheck.status).toBe(0);
+    expect(installCheck.stdout).toContain("--cwd");
+
+    const runCheck = spawnSync("bun", ["run", "--cwd", process.cwd(), "--help"], { encoding: "utf8" });
+    expect(runCheck.status).toBe(0);
+    expect(runCheck.stdout).toContain("--cwd");
+
+    // Conversely, proves that the previous buggy order fails in the real Bun runtime
+    const buggyCheck = spawnSync("bun", ["--cwd", process.cwd(), "install", "--help"], { encoding: "utf8" });
+    expect(buggyCheck.status).not.toBe(0);
+    expect(buggyCheck.stderr).toContain('Script not found "install"');
   });
 });

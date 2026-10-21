@@ -5,6 +5,7 @@ import { DEFAULT_SETTINGS, type Settings } from "../types/Settings";
 import type { WidgetItem } from "../types/Widget";
 import { loadSettings, saveSettings } from "../utils/config";
 import { exportPreset, previewImport, type ImportPreview } from "../utils/presets";
+import { VERSION } from "../version-info";
 import { ColorMenu } from "./components/ColorMenu";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { ExportConfigDialog } from "./components/ExportConfigDialog";
@@ -248,7 +249,7 @@ export function App({ initialSettings, settingsPath, readImportFile = readImport
 
   return (
     <Box flexDirection="column">
-      <Text bold>cxstatusline Configuration</Text>
+      <Text bold>cxstatusline Configuration | v{VERSION}</Text>
       {flash && <Text color="yellow">{flash}</Text>}
       <Box marginTop={1} flexDirection="column">
         <Text dimColor>&gt; Preview</Text>
