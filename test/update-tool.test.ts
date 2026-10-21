@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { describe, expect, test } from "bun:test";
 import { runUpdateTool, detectInstallType, type UpdateToolDeps } from "../src/commands/update-tool";
 
@@ -162,5 +163,21 @@ describe("update-tool", () => {
     const buildCmd = commandsRun.find((c) => c.cmd === "bun" && c.args.includes("build"));
     expect(buildCmd?.args[0]).toBe("run");
     expect(buildCmd?.args[1]).toBe("--cwd");
+  });
+
+  test("bun install and run args are accepted by real bun cli without script-not-found error", () => {
+    // Proves that 'bun install --cwd <dir>' and 'bun run --cwd <dir>' are valid syntax for the real Bun runtime
+    const installCheck = spawnSync("bun", ["install", "--cwd", process.cwd(), "--help"], { encoding: "utf8" });
+    expect(installCheck.status).toBe(0);
+    expect(installCheck.stdout).toContain("--cwd");
+
+    const runCheck = spawnSync("bun", ["run", "--cwd", process.cwd(), "--help"], { encoding: "utf8" });
+    expect(runCheck.status).toBe(0);
+    expect(runCheck.stdout).toContain("--cwd");
+
+    // Conversely, proves that the previous buggy order fails in the real Bun runtime
+    const buggyCheck = spawnSync("bun", ["--cwd", process.cwd(), "install", "--help"], { encoding: "utf8" });
+    expect(buggyCheck.status).not.toBe(0);
+    expect(buggyCheck.stderr).toContain('Script not found "install"');
   });
 });
