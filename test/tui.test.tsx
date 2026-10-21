@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import { tmpEnv } from "./helpers";
 import { DEFAULT_SETTINGS } from "../src/types/Settings";
 import { App } from "../src/tui/App";
+import { VERSION } from "../src/version-info";
 
 interface TuiHarness {
   readonly instance: Instance;
@@ -75,6 +76,7 @@ describe("configuration TUI", () => {
     );
 
     try {
+      expect(app.lastFrame()).toContain(`cxstatusline Configuration | v${VERSION}`);
       expect(app.lastFrame()).toContain("Main Menu");
       expect(app.lastFrame()).toContain("codex");
 
