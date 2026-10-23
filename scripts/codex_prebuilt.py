@@ -203,8 +203,8 @@ def cmd_verify_release(args: argparse.Namespace) -> int:
     assets = {a.get("name"): a for a in data.get("assets", [])}
 
     required_assets = [
-        f"codex-v{target_ver}-darwin-arm64.tar.gz",
-        f"codex-v{target_ver}-linux-arm64.tar.gz",
+        f"cxstatusline-codex-{target_ver}-darwin-arm64.tar.gz",
+        f"cxstatusline-codex-{target_ver}-linux-arm64.tar.gz",
         "manifest.json",
         "SHA256SUMS",
     ]
