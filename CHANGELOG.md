@@ -3,6 +3,20 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.16.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.15.0...v0.16.0) (2026-10-23)
+
+
+### Features
+
+* support Codex 0.164.0 ([#173](https://github.com/adrijshikhar/cxstatusline/issues/173)) ([62b8c89](https://github.com/adrijshikhar/cxstatusline/commit/62b8c891d9af60df82b1977ab14116d84e756912))
+
+
+### Bug Fixes
+
+* **prebuilt:** use cxstatusline asset naming prefix in release verification ([#176](https://github.com/adrijshikhar/cxstatusline/issues/176)) ([3925ebb](https://github.com/adrijshikhar/cxstatusline/commit/3925ebb58d03a0dff88063aed11f19f8e8dde6ec))
+* resolve Codex 0.164.0 TUI test compilation in statusline patch ([#175](https://github.com/adrijshikhar/cxstatusline/issues/175)) ([b28e7b5](https://github.com/adrijshikhar/cxstatusline/commit/b28e7b5b889da89791720f71368e7bbc50a8ca6e))
+* update tool bun argument order and display version in tui header ([#171](https://github.com/adrijshikhar/cxstatusline/issues/171)) ([9b7bc9e](https://github.com/adrijshikhar/cxstatusline/commit/9b7bc9ea93cb0befd70db84031ac27f4b9f6fd2b))
+
 ## [0.15.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.14.0...v0.15.0) (2026-10-20)
 
 
