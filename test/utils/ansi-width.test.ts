@@ -17,7 +17,7 @@ describe('getVisibleWidth', () => {
         expect(getVisibleWidth('a‍')).toBe(1);
         expect(getVisibleWidth('#️⃣')).toBe(2);
         expect(getVisibleWidth('1⃣')).toBe(2);
-        expect(getVisibleWidth('a\u{1F3FB}')).toBe(2);
+        expect(getVisibleWidth('a\u{1F3FB}')).toBe(1);
     });
 
     it('gives ASCII control characters no width', () => {

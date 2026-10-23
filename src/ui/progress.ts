@@ -71,8 +71,7 @@ export function createInstallProgressTracker(
       stdout: io.stdout ?? process.stdout,
       exitOnCtrlC: false,
       patchConsole: false,
-      preserveScrollback: true,
-      isCI: false,
+      interactive: true,
     });
   };
 

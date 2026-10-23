@@ -13,8 +13,8 @@ const noJust = (): string | null => null;
 test("release bundle contains the TUI and attribution", () => {
   expect(pkg.type).toBe("module");
   expect(pkg.version).toBe(VERSION);
-  expect(pkg.devDependencies?.ink).toBe("6.2.0");
-  expect(pkg.devDependencies?.["react-devtools-core"]).toBe("^4.19.1");
+  expect(pkg.devDependencies?.ink).toBe("^8.0.0");
+  expect(pkg.devDependencies?.["react-devtools-core"]).toBe("^8.0.0");
   expect(readFileSync("THIRD_PARTY_NOTICES.md", "utf8")).toContain("6a3d855b82faf75b249155dcfa1624780f89cbbd");
   expect(readFileSync("THIRD_PARTY_NOTICES.md", "utf8")).toContain("Matthew Breedlove");
 });

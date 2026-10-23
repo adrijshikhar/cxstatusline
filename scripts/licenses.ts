@@ -17,6 +17,7 @@ export function bundledLicenses(inputs: string[], root: string): string {
       // These npm tarballs omit their license files; exact-version upstream copies are reviewed.
       const supplements: Record<string, string> = {
         "@alcalzone/ansi-tokenize@0.1.3": "ansi-tokenize-0.1.3.txt",
+        "react-devtools-core@8.0.0": "react-devtools-core-8.0.0.txt",
         "yoga-layout@3.2.1": "yoga-layout-3.2.1.txt",
       };
       const supplement = supplements[`${pkg.name}@${pkg.version}`];

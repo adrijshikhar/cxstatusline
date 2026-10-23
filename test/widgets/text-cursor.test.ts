@@ -13,6 +13,8 @@ function makeKey(overrides: Partial<Key> = {}): Key {
         rightArrow: false,
         pageDown: false,
         pageUp: false,
+        home: false,
+        end: false,
         return: false,
         escape: false,
         ctrl: false,
@@ -21,6 +23,10 @@ function makeKey(overrides: Partial<Key> = {}): Key {
         backspace: false,
         delete: false,
         meta: false,
+        super: false,
+        hyper: false,
+        capsLock: false,
+        numLock: false,
         ...overrides
     };
 }
