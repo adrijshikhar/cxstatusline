@@ -8,7 +8,7 @@ import pkg from "../package.json";
 const root = resolve(import.meta.dir, "..");
 export function assertPackageFiles(files: string[]): void {
   const required = ["package.json", "README.md", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md",
-    "dist/cxstatusline.js", "dist/THIRD_PARTY_LICENSES.txt", "patches/manifest.json", "patches/ink@6.2.0.patch",
+    "dist/cxstatusline.js", "dist/THIRD_PARTY_LICENSES.txt", "patches/manifest.json",
     ...loadManifest(join(root, "patches")).patches.map(patch => `patches/${patch.file}`)];
   for (const file of required) if (!files.includes(file)) throw new Error(`package missing ${file}`);
   for (const file of files) if (!required.includes(file)) throw new Error(`unexpected packaged file: ${file}`);

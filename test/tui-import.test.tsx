@@ -52,7 +52,7 @@ function createTui(node: ReactNode): TuiHarness {
       try {
         await act(async () => {
           stdin.write(input);
-          await new Promise<void>((resolve) => setTimeout(resolve, 10));
+          await new Promise<void>((resolve) => setTimeout(resolve, 50));
         });
       } finally {
         if (previous === undefined) delete environment.IS_REACT_ACT_ENVIRONMENT;

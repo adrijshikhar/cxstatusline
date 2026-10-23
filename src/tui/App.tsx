@@ -70,14 +70,15 @@ export function App({ initialSettings, settingsPath, readImportFile = readImport
   const [importError, setImportError] = useState<string | null>(null);
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [importApplying, setImportApplying] = useState(false);
-  const [terminalWidth, setTerminalWidth] = useState(() => stdout.columns || 80);
+  const tty = stdout as NodeJS.WriteStream;
+  const [terminalWidth, setTerminalWidth] = useState(() => tty.columns || 80);
   const importGeneration = useRef(0);
   const importApplyPending = useRef(false);
 
   useEffect(() => {
-    const updateWidth = (): void => setTerminalWidth(stdout.columns || 80);
-    stdout.on("resize", updateWidth);
-    return () => { stdout.off("resize", updateWidth); };
+    const updateWidth = (): void => setTerminalWidth(tty.columns || 80);
+    tty.on?.("resize", updateWidth);
+    return () => { tty.off?.("resize", updateWidth); };
   }, [stdout]);
 
   useEffect(() => {

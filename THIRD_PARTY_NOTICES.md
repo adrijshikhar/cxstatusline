@@ -6,10 +6,11 @@ The Ink patch and selected renderer/configuration components are adapted from
 [`sirmalloc/ccstatusline`](https://github.com/sirmalloc/ccstatusline), pinned to upstream commit
 `6a3d855b82faf75b249155dcfa1624780f89cbbd`.
 
-Included patch:
+Historical patch:
 
-- `patches/ink@6.2.0.patch` — the Ink macOS backspace fix, copied byte-for-byte from that pinned
-  upstream checkout.
+- `patches/ink@6.2.0.patch` — originally adapted for Ink 6.2.0 from that pinned upstream checkout.
+  With the upgrade to Ink 8, the macOS backspace fix and scrollback preservation are supported
+  natively upstream, and the patch has been retired.
 
 The settings, rendering, widget, and configuration TUI ports derive selected behavior from
 `src/types/`, `src/utils/`, `src/widgets/`, and `src/tui/` at that pinned commit. In particular,

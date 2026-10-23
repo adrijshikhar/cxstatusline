@@ -14,11 +14,12 @@ export function menuItemsForRows(rows: number): number {
 
 export function useTerminalSize() {
   const { stdout } = useStdout();
-  const [size, setSize] = useState({ columns: stdout.columns || 80, rows: stdout.rows || 24 });
+  const tty = stdout as NodeJS.WriteStream;
+  const [size, setSize] = useState({ columns: tty.columns || 80, rows: tty.rows || 24 });
   useEffect(() => {
-    const update = () => setSize({ columns: stdout.columns || 80, rows: stdout.rows || 24 });
-    stdout.on("resize", update);
-    return () => { stdout.off("resize", update); };
+    const update = () => setSize({ columns: tty.columns || 80, rows: tty.rows || 24 });
+    tty.on?.("resize", update);
+    return () => { tty.off?.("resize", update); };
   }, [stdout]);
   return { ...size, usable: isUsableMenuSize(size.columns, size.rows), maxVisibleItems: menuItemsForRows(size.rows) };
 }
