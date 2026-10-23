@@ -7,8 +7,8 @@ explicit coverage gap.
 
 ## Version Support Policy
 
-- **Baseline Series Coverage**: The `.0` baseline release of each Codex minor series (e.g. `0.161.0`, `0.162.0`, `0.163.0`) is supported.
-- **Active Series Coverage**: In the newest/active minor series (currently `0.163.x`), all stable releases and the latest patch release are supported.
+- **Baseline Series Coverage**: The `.0` baseline release of each Codex minor series (e.g. `0.161.0`, `0.162.0`, `0.163.0`, `0.164.0`) is supported.
+- **Active Series Coverage**: In the newest/active minor series (currently `0.164.x`), all stable releases and the latest patch release are supported.
 - **Excluded Releases**: Intermediate patch releases in older minor series (e.g. `0.162.1`, `0.161.1`) are intentionally omitted and not ported once a newer minor series is available.
 
 ## Intermediate upstream releases
