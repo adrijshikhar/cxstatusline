@@ -6,7 +6,8 @@ coverage/
 .worktrees/
 .catalyst/
 
-.agents/
+.agents/*
+!.agents/skills/
 .codex/
 .playwright-mcp/
 __pycache__/
