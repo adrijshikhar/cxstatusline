@@ -1,5 +1,5 @@
 diff --git a/codex-rs/tui/src/app/background_requests.rs b/codex-rs/tui/src/app/background_requests.rs
-index 13daf6a..2c0a8ab 100644
+index 13daf6a..8eb4224 100644
 --- a/codex-rs/tui/src/app/background_requests.rs
 +++ b/codex-rs/tui/src/app/background_requests.rs
 @@ -131,7 +131,8 @@ impl App {
@@ -12,7 +12,7 @@ index 13daf6a..2c0a8ab 100644
                      tokio::time::timeout(RATE_LIMIT_RESET_REQUEST_TIMEOUT, request)
                          .await
                          .map_err(|_| "account/rateLimits/read timed out in TUI".to_string())
-@@ -1362,7 +1363,92 @@ mod tests {
+@@ -1362,7 +1363,93 @@ mod tests {
      use codex_config::types::AuthCredentialsStoreMode;
      use codex_protocol::mcp::Tool;
      use codex_utils_absolute_path::AbsolutePathBuf;
@@ -58,6 +58,7 @@ index 13daf6a..2c0a8ab 100644
 +            .mount(&server)
 +            .await;
 +        let app_server = crate::start_app_server_for_picker(
++            crate::backend_id::BackendId::new(),
 +            &app.config,
 +            &crate::AppServerTarget::Embedded,
 +            app.cli_kv_overrides.clone(),
@@ -1326,7 +1327,7 @@ index d7340e5..7bd129a 100644
 +    })
 +}
 diff --git a/codex-rs/tui/src/chatwidget/tests/status_and_layout.rs b/codex-rs/tui/src/chatwidget/tests/status_and_layout.rs
-index 65d7739..38aa1f3 100644
+index 65d7739..01c796d 100644
 --- a/codex-rs/tui/src/chatwidget/tests/status_and_layout.rs
 +++ b/codex-rs/tui/src/chatwidget/tests/status_and_layout.rs
 @@ -1,5 +1,9 @@
@@ -1339,7 +1340,7 @@ index 65d7739..38aa1f3 100644
  use crate::bottom_pane::goal_status_indicator_line;
  use crate::chatwidget::ThreadUsageOutcome;
  use crate::chatwidget::rate_limits::NUDGE_MODEL_SLUG;
-@@ -40,6 +44,245 @@ async fn finalized_voice_transcript_renders_beside_the_streamed_cell() {
+@@ -40,6 +44,243 @@ async fn finalized_voice_transcript_renders_beside_the_streamed_cell() {
      }
  }
  
@@ -1371,9 +1372,7 @@ index 65d7739..38aa1f3 100644
 +            }
 +            let mut process = tokio::process::Command::new("git");
 +            process.args(&command.argv[1..]).kill_on_drop(true);
-+            if let Some(cwd) = command.cwd {
-+                process.current_dir(cwd);
-+            }
++            process.current_dir(command.cwd);
 +            for (key, value) in command.env {
 +                if let Some(value) = value {
 +                    process.env(key, value);
