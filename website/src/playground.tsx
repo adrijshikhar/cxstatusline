@@ -171,7 +171,7 @@ function mountView(element: React.ReactElement, onReady: () => void): void {
     termOptions: {
       fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
       fontSize: parseFloat(getComputedStyle(terminalElement).fontSize),
-      lineHeight: 1.35,
+      lineHeight: 1.2,
       ...(view === "preview" ? { rows: 3 } : {}),
       screenReaderMode: true,
       theme: {

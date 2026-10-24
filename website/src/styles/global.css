@@ -100,10 +100,10 @@ button:disabled { cursor: wait; opacity: .55; }
 .compatibility-hint { display: flex; align-items: center; padding: 0.5rem 0.875rem; border: 1px solid var(--line); border-radius: 0.5rem; background: var(--surface); font: 12px/1.4 var(--font-mono); }
 .compatibility-hint .hint-code { color: var(--accent-strong); }
 .compatibility-card { width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 0.75rem; font: 13px/1.4 var(--font-mono); box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25); }
-.compatibility-labels, .compatibility-row { display: grid; grid-template-columns: minmax(180px, 1.2fr) 1fr 120px; gap: 1.5rem; align-items: center; }
-.compatibility-labels { padding: 0.875rem 1.25rem; background: var(--surface-strong); border-bottom: 1px solid var(--line); color: var(--dim); font-size: 11px; letter-spacing: 0.03em; }
+.compatibility-labels, .compatibility-row { display: grid; grid-template-columns: 210px 1fr 110px; gap: 1rem; align-items: center; }
+.compatibility-labels { padding: 0.625rem 1.25rem; background: var(--surface-strong); border-bottom: 1px solid var(--line); color: var(--dim); font-size: 11px; letter-spacing: 0.03em; border-top-left-radius: calc(0.75rem - 1px); border-top-right-radius: calc(0.75rem - 1px); }
 .compatibility-rows { margin: 0; padding: 0; list-style: none; }
-.compatibility-row { min-height: 52px; padding-inline: 1.25rem; border-top: 1px solid var(--line-soft); transition: background-color 0.15s ease; }
+.compatibility-row { min-height: 44px; padding-inline: 1.25rem; border-top: 1px solid var(--line-soft); transition: background-color 0.15s ease; }
 .compatibility-row:first-child { border-top: 0; }
 .compatibility-row:hover { background: rgba(255, 255, 255, 0.02); }
 .compatibility-platforms { color: var(--muted); font: 12px/1.4 var(--font-mono); }
@@ -128,9 +128,12 @@ button:disabled { cursor: wait; opacity: .55; }
 .compatibility-toggle-icon { transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1); color: var(--muted); }
 .compatibility-toggle-btn:hover .compatibility-toggle-icon { color: var(--accent-strong); }
 .compatibility-toggle-btn[aria-expanded="true"] .compatibility-toggle-icon { transform: rotate(180deg); }
-.compatibility-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem 1.5rem; padding: 0.875rem 1.25rem; background: var(--surface-strong); border-top: 1px solid var(--line); }
+.compatibility-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem 1.5rem; padding: 0.875rem 1.25rem; background: var(--surface-strong); border-top: 1px solid var(--line); border-bottom-left-radius: calc(0.75rem - 1px); border-bottom-right-radius: calc(0.75rem - 1px); }
 .compatibility-link { width: max-content; color: var(--accent-strong); font: 13px/1.5 var(--font-mono); text-decoration: none; }
 .compatibility-link:hover { text-decoration: underline; }
+.shadcn-tooltip { position: absolute; z-index: 50; pointer-events: none; white-space: nowrap; border-radius: 6px; border: 1px solid var(--line); background: var(--surface-strong); padding: 0.25rem 0.625rem; font: 12px/1.4 var(--font-mono); color: var(--text); box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
+.shadcn-tooltip-top { bottom: 100%; left: 0; transform: none; margin-bottom: 6px; }
+.shadcn-tooltip-top::after { content: ""; position: absolute; top: 100%; left: 14px; transform: translateX(-50%); border: 4px solid transparent; border-top-color: var(--surface-strong); }
 #faq { border-bottom: 0; }
 .install-section { display: grid; grid-template-columns: .9fr 1.1fr; gap: 24px 64px; align-items: start; }
 .install-heading p { max-width: 44ch; color: var(--muted); line-height: 1.6; margin-bottom: 0.75rem; }
