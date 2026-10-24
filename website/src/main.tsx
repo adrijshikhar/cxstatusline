@@ -173,22 +173,27 @@ if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
   });
   animate(".ascii-wordmark", {
     opacity: [0, 1],
-    duration: 550,
-    delay: 100,
-    ease: "outSine",
+    translateY: [6, 0],
+    duration: 700,
+    delay: 300,
+    ease: "outQuart",
   });
   animate("[data-transcript-prompt]", {
     opacity: [0, 1],
-    duration: 550,
-    delay: 350,
-    ease: "outSine",
+    translateY: [6, 0],
+    duration: 700,
+    delay: 950,
+    ease: "outQuart",
   });
   const reply = document.querySelector<HTMLElement>("[data-transcript-reply]")!;
+  reply.inert = true;
   animate(reply, {
     opacity: [0, 1],
-    duration: 600,
-    delay: 600,
-    ease: "outSine",
+    translateY: [6, 0],
+    duration: 750,
+    delay: 1650,
+    ease: "outQuart",
+    onComplete: () => { reply.inert = false; },
   });
 
   const animations = new WeakMap<Element, ReturnType<typeof animate>>();
