@@ -7,17 +7,17 @@ export default function CopyFlagButton({ text }: { text: string }) {
   return (
     <Button
       variant="ghost"
-      className="h-7 w-7 min-w-7 p-0 text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-strong)] border-transparent bg-transparent"
-      title={isCopied ? "Copied!" : `Copy "${text}"`}
-      aria-label={isCopied ? "Copied to clipboard" : `Copy ${text}`}
+      className="h-7 w-7 min-w-7 p-0 text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-strong)] border-transparent bg-transparent rounded"
+      title={isCopied ? "Copied command!" : `Copy command (${text})`}
+      aria-label={isCopied ? "Copied install command to clipboard" : `Copy install command for ${text}`}
       onClick={() => copyToClipboard(text)}
     >
       {isCopied ? (
         <CheckIcon className="size-3.5 text-[var(--status-verified)]" strokeWidth={1.5} aria-hidden="true" />
       ) : (
-        <CopyIcon className="size-3.5 opacity-70 hover:opacity-100" strokeWidth={1.5} aria-hidden="true" />
+        <CopyIcon className="size-3.5 opacity-60 hover:opacity-100" strokeWidth={1.5} aria-hidden="true" />
       )}
-      <span className="sr-only">{isCopied ? "Copied" : "Copy"}</span>
+      <span className="sr-only">{isCopied ? "Copied" : "Copy install command"}</span>
     </Button>
   );
 }

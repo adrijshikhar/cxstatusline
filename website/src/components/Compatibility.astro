@@ -38,7 +38,6 @@ const requestVersionIssueUrl = `https://github.com/adrijshikhar/cxstatusline/iss
       </p>
     </div>
     <div class="compatibility-hint">
-      <span class="hint-label">Targeted install command:</span>
       <code class="hint-code">cxstatusline install --codex-version &lt;release&gt;</code>
     </div>
   </div>
@@ -47,14 +46,14 @@ const requestVersionIssueUrl = `https://github.com/adrijshikhar/cxstatusline/iss
     <div class="compatibility-labels" aria-hidden="true">
       <span>Codex Release</span>
       <span>Supported Platforms</span>
-      <span>Install Command</span>
       <span class="text-right">Status</span>
     </div>
     <ul class="compatibility-rows">
       {primaryReleases.map((release) => (
         <li class="compatibility-row">
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-1.5">
             <code>{release.version}</code>
+            <CopyFlagButton client:load text={`cxstatusline install --codex-version ${release.version}`} />
             {release.isLatest && (
               <span class="rounded border border-[var(--line)] bg-[var(--surface-strong)] px-2 py-0.5 text-xs text-[var(--accent)]" title="Latest supported Codex CLI release">
                 Latest
@@ -72,10 +71,6 @@ const requestVersionIssueUrl = `https://github.com/adrijshikhar/cxstatusline/iss
                 </span>
               ))}
             </div>
-          </div>
-          <div class="compatibility-flag">
-            <code>cxstatusline install --codex-version {release.version}</code>
-            <CopyFlagButton client:load text={`cxstatusline install --codex-version ${release.version}`} />
           </div>
           <div class="compatibility-status">
             <a
@@ -99,8 +94,9 @@ const requestVersionIssueUrl = `https://github.com/adrijshikhar/cxstatusline/iss
           <ul class="compatibility-rows compatibility-older-rows">
             {olderReleases.map((release) => (
               <li class="compatibility-row">
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-1.5">
                   <code>{release.version}</code>
+                  <CopyFlagButton client:load text={`cxstatusline install --codex-version ${release.version}`} />
                   {release.isLatest && (
                     <span class="rounded border border-[var(--line)] bg-[var(--surface-strong)] px-2 py-0.5 text-xs text-[var(--accent)]" title="Latest supported Codex CLI release">
                       Latest
@@ -118,10 +114,6 @@ const requestVersionIssueUrl = `https://github.com/adrijshikhar/cxstatusline/iss
                       </span>
                     ))}
                   </div>
-                </div>
-                <div class="compatibility-flag">
-                  <code>cxstatusline install --codex-version {release.version}</code>
-                  <CopyFlagButton client:load text={`cxstatusline install --codex-version ${release.version}`} />
                 </div>
                 <div class="compatibility-status">
                   <a
