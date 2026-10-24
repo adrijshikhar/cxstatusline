@@ -171,6 +171,25 @@ if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
     delay: stagger(50),
     ease: "outExpo",
   });
+  animate(".ascii-wordmark", {
+    opacity: [0, 1],
+    duration: 550,
+    delay: 100,
+    ease: "outSine",
+  });
+  animate("[data-transcript-prompt]", {
+    opacity: [0, 1],
+    duration: 550,
+    delay: 350,
+    ease: "outSine",
+  });
+  const reply = document.querySelector<HTMLElement>("[data-transcript-reply]")!;
+  animate(reply, {
+    opacity: [0, 1],
+    duration: 600,
+    delay: 600,
+    ease: "outSine",
+  });
 
   const animations = new WeakMap<Element, ReturnType<typeof animate>>();
   const reveal = new IntersectionObserver((entries) => {

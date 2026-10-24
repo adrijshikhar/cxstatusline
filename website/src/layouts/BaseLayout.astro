@@ -41,6 +41,7 @@ const {
       bingSiteVerification={bingSiteVerification}
     />
     <script is:inline>
+      document.documentElement.classList.add("js");
       window.process ??= {
         env: { CXSTATUSLINE_WEB: "1" },
         platform: "browser",

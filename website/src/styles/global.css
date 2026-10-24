@@ -58,21 +58,24 @@ p { margin: 0 0 1rem; }
     overflow: hidden;
   }
 }
-@keyframes transcriptEntrance {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: none; }
-}
-
 .intro { display: grid; gap: 0.875rem; padding: clamp(1.5rem, 3.4vw, 2.625rem) var(--terminal-inset) 1.5rem; font-family: var(--font-mono); }
-.ascii-wordmark, .prompt-line, .response-line { animation: transcriptEntrance .5s ease-out both; }
-.ascii-wordmark { display: block; width: min(100%, 720px); text-decoration: none; animation-delay: .05s; }
-.ascii-wordmark img { display: block; width: 100%; height: auto; }
-.prompt-line { display: flex; align-items: center; gap: 0.625rem; margin: 0.25rem 0 0; color: var(--text); font-size: 0.875rem; animation-delay: .25s; }
-.prompt-line svg { color: var(--accent); }
-.response-line { display: grid; grid-template-columns: 0.625rem minmax(0, 1fr); gap: 0.625rem; max-width: 68ch; animation-duration: .6s; animation-delay: .55s; }
-@media (prefers-reduced-motion: reduce) {
-  .ascii-wordmark, .prompt-line, .response-line { animation: none !important; }
+html.js .ascii-wordmark,
+html.js .prompt-line,
+html.js .response-line {
+  opacity: 0;
 }
+@media (prefers-reduced-motion: reduce) {
+  html.js .ascii-wordmark,
+  html.js .prompt-line,
+  html.js .response-line {
+    opacity: 1 !important;
+  }
+}
+.ascii-wordmark { display: block; width: min(100%, 720px); text-decoration: none; }
+.ascii-wordmark img { display: block; width: 100%; height: auto; }
+.prompt-line { display: flex; align-items: center; gap: 0.625rem; margin: 0.25rem 0 0; color: var(--text); font-size: 0.875rem; }
+.prompt-line svg { color: var(--accent); }
+.response-line { display: grid; grid-template-columns: 0.625rem minmax(0, 1fr); gap: 0.625rem; max-width: 68ch; }
 
 .response-mark { padding-top: 0.4375rem; color: var(--positive); }
 .intro h1 { max-width: 42ch; font: 600 1.125rem/1.5 var(--font-mono); letter-spacing: normal; text-wrap: pretty; }
