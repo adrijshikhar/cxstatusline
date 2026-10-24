@@ -1,5 +1,5 @@
 ---
-import { ChevronDown } from "lucide-react";
+import { ArrowRight, ArrowUpRight, ChevronDown } from "lucide-react";
 import { supportedCodexReleases } from "../release-info";
 import { Card } from "./ui/card";
 import CopyFlagButton from "./CopyFlagButton";
@@ -38,23 +38,22 @@ const requestVersionIssueUrl = `https://github.com/adrijshikhar/cxstatusline/iss
       </p>
     </div>
     <div class="compatibility-hint">
-      <span class="hint-label">Targeted install command:</span>
       <code class="hint-code">cxstatusline install --codex-version &lt;release&gt;</code>
     </div>
   </div>
 
-  <Card className="compatibility-card p-0 overflow-hidden">
+  <Card className="compatibility-card p-0">
     <div class="compatibility-labels" aria-hidden="true">
       <span>Codex Release</span>
       <span>Supported Platforms</span>
-      <span>Install Flag</span>
       <span class="text-right">Status</span>
     </div>
     <ul class="compatibility-rows">
       {primaryReleases.map((release) => (
         <li class="compatibility-row">
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-1.5">
             <code>{release.version}</code>
+            <CopyFlagButton client:load text={`cxstatusline install --codex-version ${release.version}`} />
             {release.isLatest && (
               <span class="rounded border border-[var(--line)] bg-[var(--surface-strong)] px-2 py-0.5 text-xs text-[var(--accent)]" title="Latest supported Codex CLI release">
                 Latest
@@ -73,10 +72,6 @@ const requestVersionIssueUrl = `https://github.com/adrijshikhar/cxstatusline/iss
               ))}
             </div>
           </div>
-          <div class="compatibility-flag">
-            <code>--codex-version {release.version}</code>
-            <CopyFlagButton client:load text={`--codex-version ${release.version}`} />
-          </div>
           <div class="compatibility-status">
             <a
               href={release.releaseUrl}
@@ -86,7 +81,7 @@ const requestVersionIssueUrl = `https://github.com/adrijshikhar/cxstatusline/iss
               title={`View ${release.version} release on GitHub`}
             >
               <span>{release.status}</span>
-              <span aria-hidden="true" class="release-arrow">↗</span>
+              <ArrowUpRight aria-hidden="true" className="release-arrow size-3 stroke-[1.5]" />
             </a>
           </div>
         </li>
@@ -99,8 +94,9 @@ const requestVersionIssueUrl = `https://github.com/adrijshikhar/cxstatusline/iss
           <ul class="compatibility-rows compatibility-older-rows">
             {olderReleases.map((release) => (
               <li class="compatibility-row">
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-1.5">
                   <code>{release.version}</code>
+                  <CopyFlagButton client:load text={`cxstatusline install --codex-version ${release.version}`} />
                   {release.isLatest && (
                     <span class="rounded border border-[var(--line)] bg-[var(--surface-strong)] px-2 py-0.5 text-xs text-[var(--accent)]" title="Latest supported Codex CLI release">
                       Latest
@@ -119,10 +115,6 @@ const requestVersionIssueUrl = `https://github.com/adrijshikhar/cxstatusline/iss
                     ))}
                   </div>
                 </div>
-                <div class="compatibility-flag">
-                  <code>--codex-version {release.version}</code>
-                  <CopyFlagButton client:load text={`--codex-version ${release.version}`} />
-                </div>
                 <div class="compatibility-status">
                   <a
                     href={release.releaseUrl}
@@ -132,7 +124,7 @@ const requestVersionIssueUrl = `https://github.com/adrijshikhar/cxstatusline/iss
                     title={`View ${release.version} release on GitHub`}
                   >
                     <span>{release.status}</span>
-                    <span aria-hidden="true" class="release-arrow">↗</span>
+                    <ArrowUpRight aria-hidden="true" className="release-arrow size-3 stroke-[1.5]" />
                   </a>
                 </div>
               </li>
@@ -150,20 +142,25 @@ const requestVersionIssueUrl = `https://github.com/adrijshikhar/cxstatusline/iss
       >
         <span class="compatibility-toggle-label">Show {olderReleases.length} older versions</span>
         <span class="compatibility-toggle-range">({olderReleases[0]?.version} – {olderReleases[olderReleases.length - 1]?.version})</span>
-        <ChevronDown aria-hidden="true" size={14} className="compatibility-toggle-icon" />
+        <ChevronDown aria-hidden="true" size={14} strokeWidth={1.5} className="compatibility-toggle-icon" />
       </button>
     )}
     <div class="compatibility-footer">
       <a
-        class="compatibility-link"
+        class="compatibility-link inline-flex items-center gap-1.5"
         href={requestVersionIssueUrl}
         target="_blank"
         rel="noopener noreferrer"
       >
-        Request a version <span>→</span>
+        <span>Request a version</span>
+        <ArrowRight aria-hidden="true" className="size-3.5 stroke-[1.5]" />
       </a>
-      <a class="compatibility-link" href="https://github.com/adrijshikhar/cxstatusline/releases">
-        Browse all releases on GitHub <span>→</span>
+      <a
+        class="compatibility-link inline-flex items-center gap-1.5"
+        href="https://github.com/adrijshikhar/cxstatusline/releases"
+      >
+        <span>Browse all releases on GitHub</span>
+        <ArrowRight aria-hidden="true" className="size-3.5 stroke-[1.5]" />
       </a>
     </div>
   </Card>
