@@ -118,6 +118,7 @@ function showPreview(focus = true, rerender = true): void {
   terminalElement.inert = true;
   if (mounted) {
     mounted.term.options.disableStdin = true;
+    mounted.term.resize(mounted.term.cols, 3);
     if (rerender) {
       mounted.term.reset();
       mounted.rerender(<PreviewFooter settings={savedSettings} />);
@@ -170,6 +171,8 @@ function mountView(element: React.ReactElement, onReady: () => void): void {
     termOptions: {
       fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
       fontSize: parseFloat(getComputedStyle(terminalElement).fontSize),
+      lineHeight: 1.35,
+      ...(view === "preview" ? { rows: 3 } : {}),
       screenReaderMode: true,
       theme: {
         background: getComputedStyle(shell).getPropertyValue("--terminal").trim(),
