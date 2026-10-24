@@ -11,7 +11,7 @@ export default function CopyInstallButton({ commands }: { commands: string }) {
       aria-live="polite"
       onClick={() => copyToClipboard(commands)}
     >
-      {isCopied ? <CheckIcon aria-hidden="true" /> : <CopyIcon aria-hidden="true" />}
+      {isCopied ? <CheckIcon aria-hidden="true" className="size-4" strokeWidth={1.5} /> : <CopyIcon aria-hidden="true" className="size-4" strokeWidth={1.5} />}
       {isCopied ? "Copied" : "Copy"}
     </Button>
     {error && <p role="status" className="m-0 px-6 pb-4 text-xs text-[var(--signal-warning)]">{error}</p>}

@@ -1,5 +1,5 @@
 ---
-import { ChevronDown } from "lucide-react";
+import { ArrowRight, ArrowUpRight, ChevronDown } from "lucide-react";
 import { supportedCodexReleases } from "../release-info";
 import { Card } from "./ui/card";
 import CopyFlagButton from "./CopyFlagButton";
@@ -86,7 +86,7 @@ const requestVersionIssueUrl = `https://github.com/adrijshikhar/cxstatusline/iss
               title={`View ${release.version} release on GitHub`}
             >
               <span>{release.status}</span>
-              <span aria-hidden="true" class="release-arrow">↗</span>
+              <ArrowUpRight aria-hidden="true" className="release-arrow size-3 stroke-[1.5]" />
             </a>
           </div>
         </li>
@@ -132,7 +132,7 @@ const requestVersionIssueUrl = `https://github.com/adrijshikhar/cxstatusline/iss
                     title={`View ${release.version} release on GitHub`}
                   >
                     <span>{release.status}</span>
-                    <span aria-hidden="true" class="release-arrow">↗</span>
+                    <ArrowUpRight aria-hidden="true" className="release-arrow size-3 stroke-[1.5]" />
                   </a>
                 </div>
               </li>
@@ -150,20 +150,25 @@ const requestVersionIssueUrl = `https://github.com/adrijshikhar/cxstatusline/iss
       >
         <span class="compatibility-toggle-label">Show {olderReleases.length} older versions</span>
         <span class="compatibility-toggle-range">({olderReleases[0]?.version} – {olderReleases[olderReleases.length - 1]?.version})</span>
-        <ChevronDown aria-hidden="true" size={14} className="compatibility-toggle-icon" />
+        <ChevronDown aria-hidden="true" size={14} strokeWidth={1.5} className="compatibility-toggle-icon" />
       </button>
     )}
     <div class="compatibility-footer">
       <a
-        class="compatibility-link"
+        class="compatibility-link inline-flex items-center gap-1.5"
         href={requestVersionIssueUrl}
         target="_blank"
         rel="noopener noreferrer"
       >
-        Request a version <span>→</span>
+        <span>Request a version</span>
+        <ArrowRight aria-hidden="true" className="size-3.5 stroke-[1.5]" />
       </a>
-      <a class="compatibility-link" href="https://github.com/adrijshikhar/cxstatusline/releases">
-        Browse all releases on GitHub <span>→</span>
+      <a
+        class="compatibility-link inline-flex items-center gap-1.5"
+        href="https://github.com/adrijshikhar/cxstatusline/releases"
+      >
+        <span>Browse all releases on GitHub</span>
+        <ArrowRight aria-hidden="true" className="size-3.5 stroke-[1.5]" />
       </a>
     </div>
   </Card>

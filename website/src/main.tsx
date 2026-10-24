@@ -167,22 +167,9 @@ if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
   });
   animate(".terminal-window, .terminal-chrome > *, #playground", {
     opacity: [0, 1],
-    duration: 600,
-    delay: stagger(70),
+    duration: 500,
+    delay: stagger(50),
     ease: "outExpo",
-  });
-  animate(".ascii-wordmark", {
-    opacity: [0, 1],
-    duration: 700,
-    delay: 400,
-    ease: "outSine",
-  });
-  animate("[data-transcript-prompt]", { opacity: [0, 1], duration: 700, delay: 1_150, ease: "outSine" });
-  const reply = document.querySelector<HTMLElement>("[data-transcript-reply]")!;
-  reply.inert = true;
-  animate(reply, {
-    opacity: [0, 1], duration: 700, delay: 1_900, ease: "outSine",
-    onComplete: () => { reply.inert = false; },
   });
 
   const animations = new WeakMap<Element, ReturnType<typeof animate>>();

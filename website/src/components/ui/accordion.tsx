@@ -20,7 +20,7 @@ export function AccordionTrigger({ className, children, ...props }: AccordionPri
         {...props}
       >
         {children}
-        <ChevronDownIcon aria-hidden="true" className="pointer-events-none size-4 shrink-0 translate-y-0.5 opacity-80 transition-transform duration-200 ease-in-out" data-slot="accordion-indicator" />
+        <ChevronDownIcon aria-hidden="true" className="pointer-events-none size-4 shrink-0 translate-y-0.5 opacity-70 transition-transform duration-200 ease-in-out group-hover:opacity-100" strokeWidth={1.5} data-slot="accordion-indicator" />
       </AccordionPrimitive.Trigger>
     </AccordionPrimitive.Header>
   );

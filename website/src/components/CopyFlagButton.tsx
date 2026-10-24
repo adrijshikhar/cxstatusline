@@ -13,9 +13,9 @@ export default function CopyFlagButton({ text }: { text: string }) {
       onClick={() => copyToClipboard(text)}
     >
       {isCopied ? (
-        <CheckIcon className="size-3.5 text-[var(--status-verified)]" aria-hidden="true" />
+        <CheckIcon className="size-3.5 text-[var(--status-verified)]" strokeWidth={1.5} aria-hidden="true" />
       ) : (
-        <CopyIcon className="size-3.5 opacity-70 hover:opacity-100" aria-hidden="true" />
+        <CopyIcon className="size-3.5 opacity-70 hover:opacity-100" strokeWidth={1.5} aria-hidden="true" />
       )}
       <span className="sr-only">{isCopied ? "Copied" : "Copy"}</span>
     </Button>
