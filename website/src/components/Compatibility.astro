@@ -47,7 +47,7 @@ const requestVersionIssueUrl = `https://github.com/adrijshikhar/cxstatusline/iss
     <div class="compatibility-labels" aria-hidden="true">
       <span>Codex Release</span>
       <span>Supported Platforms</span>
-      <span>Install Flag</span>
+      <span>Install Command</span>
       <span class="text-right">Status</span>
     </div>
     <ul class="compatibility-rows">
@@ -74,8 +74,8 @@ const requestVersionIssueUrl = `https://github.com/adrijshikhar/cxstatusline/iss
             </div>
           </div>
           <div class="compatibility-flag">
-            <code>--codex-version {release.version}</code>
-            <CopyFlagButton client:load text={`--codex-version ${release.version}`} />
+            <code>cxstatusline install --codex-version {release.version}</code>
+            <CopyFlagButton client:load text={`cxstatusline install --codex-version ${release.version}`} />
           </div>
           <div class="compatibility-status">
             <a
@@ -120,8 +120,8 @@ const requestVersionIssueUrl = `https://github.com/adrijshikhar/cxstatusline/iss
                   </div>
                 </div>
                 <div class="compatibility-flag">
-                  <code>--codex-version {release.version}</code>
-                  <CopyFlagButton client:load text={`--codex-version ${release.version}`} />
+                  <code>cxstatusline install --codex-version {release.version}</code>
+                  <CopyFlagButton client:load text={`cxstatusline install --codex-version ${release.version}`} />
                 </div>
                 <div class="compatibility-status">
                   <a

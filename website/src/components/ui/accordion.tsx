@@ -33,7 +33,7 @@ export function AccordionPanel({ className, children, ...props }: AccordionPrimi
       data-slot="accordion-panel"
       {...props}
     >
-      <div className={cn("max-w-[65ch] pb-5 leading-7", className)}>{children}</div>
+      <div className={cn("max-w-[65ch] pb-5 leading-relaxed", className)}>{children}</div>
     </AccordionPrimitive.Panel>
   );
 }
