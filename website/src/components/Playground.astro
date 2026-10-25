@@ -1,46 +1,53 @@
 ---
+import { Download, Upload } from "lucide-react";
 import { Skeleton } from "./ui/skeleton";
 import { TerminalButton } from "./ui/terminal-button";
 ---
+
 <section id="playground" aria-labelledby="playground-title">
-<h2 id="playground-title" class="sr-only">Configure and preview your statusline</h2>
-<div id="desktop-playground">
-<div class="terminal-shell preview" aria-label="cxstatusline terminal">
-<div id="chat-preview">
-<span class="composer-prompt" aria-hidden="true">›</span>
-<div class="composer-input">
-<label for="demo-message" class="sr-only">Demo Codex prompt</label>
-<input id="demo-message" type="text" aria-label="Demo Codex prompt" autocomplete="off" placeholder="Ask Codex to do anything" />
-<span class="composer-cursor" aria-hidden="true"></span>
-</div>
-</div>
-<div class="terminal-output">
-<div id="playground-skeleton" aria-hidden="true">
-<div class="skeleton-status"><Skeleton className="w-[min(34rem,38%)]" /><Skeleton className="w-[min(26rem,30%)]" /><Skeleton className="w-[min(18rem,22%)]" /></div>
-</div>
-<div id="terminal">
-</div>
-</div>
-</div>
-<div class="playground-meta">
-<div>
-<p id="status" class="status" role="status" aria-live="polite"><span class="status-dot status-loading" aria-hidden="true">●</span> Loading default settings…</p>
-</div>
-<div class="actions">
-<TerminalButton id="boot" hidden>Retry</TerminalButton>
-<TerminalButton id="edit" hidden>Edit layout</TerminalButton>
-<div class="config-group" role="group" aria-label="Configuration actions">
-<span class="config-bracket" aria-hidden="true">[</span>
-<button type="button" id="import" class="config-btn" title="Import JSON settings">
-<span aria-hidden="true" class="config-icon">↑</span> Import
-</button>
-<span class="config-divider" aria-hidden="true">|</span>
-<button type="button" id="download" class="config-btn" title="Export JSON settings" disabled>
-<span aria-hidden="true" class="config-icon">↓</span> Export
-</button>
-<span class="config-bracket" aria-hidden="true">]</span>
-</div>
-</div>
-</div>
-</div>
+  <h2 id="playground-title" class="sr-only">Configure and preview your statusline</h2>
+  <div id="desktop-playground">
+    <div class="terminal-shell preview" aria-label="cxstatusline terminal">
+      <div id="chat-preview">
+        <span class="composer-prompt" aria-hidden="true">›</span>
+        <div class="composer-input">
+          <label for="demo-message" class="sr-only">Demo Codex prompt</label>
+          <input id="demo-message" type="text" aria-label="Demo Codex prompt" autocomplete="off" placeholder="Ask Codex to do anything" />
+          <span class="composer-cursor" aria-hidden="true"></span>
+        </div>
+      </div>
+      <div class="terminal-output">
+        <div id="playground-skeleton" aria-hidden="true">
+          <div class="skeleton-status">
+            <Skeleton className="w-[min(34rem,38%)]" />
+            <Skeleton className="w-[min(26rem,30%)]" />
+            <Skeleton className="w-[min(18rem,22%)]" />
+          </div>
+        </div>
+        <div id="terminal"></div>
+      </div>
+    </div>
+    <div class="playground-meta">
+      <div>
+        <p id="status" class="status" role="status" aria-live="polite">
+          <span class="status-dot status-loading" aria-hidden="true">●</span> Loading default settings…
+        </p>
+      </div>
+      <div class="actions">
+        <TerminalButton id="boot" hidden>Retry</TerminalButton>
+        <TerminalButton id="edit" hidden>Edit layout</TerminalButton>
+        <div class="config-group" role="group" aria-label="Configuration actions">
+          <span class="config-bracket" aria-hidden="true">[</span>
+          <button type="button" id="import" class="config-btn" title="Import JSON settings">
+            <Upload aria-hidden="true" className="size-3.5 stroke-[1.5]" /> Import
+          </button>
+          <span class="config-divider" aria-hidden="true">|</span>
+          <button type="button" id="download" class="config-btn" title="Export JSON settings" disabled>
+            <Download aria-hidden="true" className="size-3.5 stroke-[1.5]" /> Export
+          </button>
+          <span class="config-bracket" aria-hidden="true">]</span>
+        </div>
+      </div>
+    </div>
+  </div>
 </section>

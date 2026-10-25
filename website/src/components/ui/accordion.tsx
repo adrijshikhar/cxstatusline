@@ -20,7 +20,7 @@ export function AccordionTrigger({ className, children, ...props }: AccordionPri
         {...props}
       >
         {children}
-        <ChevronDownIcon aria-hidden="true" className="pointer-events-none size-4 shrink-0 translate-y-0.5 opacity-80 transition-transform duration-200 ease-in-out" data-slot="accordion-indicator" />
+        <ChevronDownIcon aria-hidden="true" className="pointer-events-none size-4 shrink-0 translate-y-0.5 opacity-70 transition-transform duration-200 ease-in-out group-hover:opacity-100" strokeWidth={1.5} data-slot="accordion-indicator" />
       </AccordionPrimitive.Trigger>
     </AccordionPrimitive.Header>
   );
@@ -33,7 +33,7 @@ export function AccordionPanel({ className, children, ...props }: AccordionPrimi
       data-slot="accordion-panel"
       {...props}
     >
-      <div className={cn("max-w-[65ch] pb-5 leading-7", className)}>{children}</div>
+      <div className={cn("max-w-[65ch] pb-5 leading-relaxed", className)}>{children}</div>
     </AccordionPrimitive.Panel>
   );
 }
