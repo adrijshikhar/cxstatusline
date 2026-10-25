@@ -51,7 +51,7 @@ const signalGroups = [
   <figure class="mb-14 max-md:mb-10">
     <div class="grid grid-cols-3 rounded-md border border-[var(--line)] bg-[var(--surface)] font-mono text-sm leading-[1.4] max-md:grid-cols-1" aria-label="Sample cxstatusline with model, thinking effort, context, Git branch, and Git changes">
       {signalGroups.map((group) => (
-        <div class={`flex min-h-13 items-center gap-3 px-4.5 max-md:min-h-11 max-md:px-3 max-md:text-xs ${group.borderClass}`}>
+        <div class={`flex min-h-13 items-center justify-center gap-3 px-4.5 max-md:min-h-11 max-md:justify-start max-md:px-3 max-md:text-xs ${group.borderClass}`}>
           {group.signals.map((sig, i) => (
             <>
               {i > 0 && <span class="text-[var(--muted)]" aria-hidden="true">|</span>}
@@ -65,10 +65,10 @@ const signalGroups = [
     </div>
     <div class="grid grid-cols-3 max-md:grid-cols-1" aria-label="What each statusline signal shows">
       {signalGroups.map(({ title, desc, pinClass, extraClass }) => (
-        <article class={`relative px-4.5 pt-11 max-md:grid max-md:grid-cols-[12px_1fr] max-md:gap-x-3 max-md:px-1 max-md:py-5 ${extraClass}`}>
-          <span class={`absolute left-4.5 top-0 h-8.5 w-px ${pinClass} after:absolute after:-bottom-px after:-left-1 after:size-2.25 after:rounded-full max-md:static max-md:mt-1.5 max-md:size-2.25 max-md:rounded-full max-md:after:hidden`}></span>
+        <article class={`relative px-4.5 pt-11 text-center max-md:grid max-md:grid-cols-[12px_1fr] max-md:gap-x-3 max-md:px-1 max-md:py-5 max-md:text-left ${extraClass}`}>
+          <span class={`absolute left-1/2 -translate-x-1/2 top-0 h-8.5 w-px ${pinClass} after:absolute after:-bottom-px after:-left-1 after:size-2.25 after:rounded-full max-md:static max-md:left-auto max-md:translate-x-0 max-md:mt-1.5 max-md:size-2.25 max-md:rounded-full max-md:after:hidden`}></span>
           <div>
-            <h3 class="mb-1 text-sm max-md:text-base">{title}</h3>
+            <h3 class="mb-1 text-sm font-semibold max-md:text-base">{title}</h3>
             <p class="m-0 text-[13px] leading-6 text-[var(--muted)] max-md:text-sm">{desc}</p>
           </div>
         </article>
