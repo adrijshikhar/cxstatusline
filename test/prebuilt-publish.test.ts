@@ -91,28 +91,22 @@ describe("planUploads", () => {
 });
 
 describe("compareIdentity", () => {
-  test("same bytes with a different revision are not the same release", () => {
-    const manifest = releaseFixture({ codexVersion: "0.153.0" }).manifest; // patchVersion 2
-    const expected = { sourceCommit: manifest.sourceCommit, patchSha256: manifest.patchSha256, patchVersion: 3 };
-    expect(compareIdentity(manifest, expected).identical).toBe(false);
-    expect(compareIdentity({ ...manifest, patchVersion: 3 }, expected).identical).toBe(true);
-  });
-  test("accepts a manifest built from the same commit and patch", async () => {
-    const manifest = JSON.parse(readFileSync(join(await releaseDir(), "manifest.json"), "utf8"));
-    expect(compareIdentity(manifest, { sourceCommit: SOURCE, patchSha256: PATCH_SHA, patchVersion: 2 }).identical).toBe(true);
+  test("accepts a manifest built from a different sourceCommit if patch and version match", async () => {
+    const manifest = JSON.parse(readFileSync(join(await releaseDir("d".repeat(40)), "manifest.json"), "utf8"));
+    const result = compareIdentity(manifest, { sourceCommit: SOURCE, patchSha256: PATCH_SHA, patchVersion: 2 });
+    expect(result.identical).toBe(true);
   });
 
-  test("reports a differing sourceCommit and names both values", async () => {
-    const manifest = JSON.parse(readFileSync(join(await releaseDir("d".repeat(40)), "manifest.json"), "utf8"));
-    const result = compareIdentity(manifest, { sourceCommit: SOURCE, patchSha256: PATCH_SHA });
-    expect(result.identical).toBe(false);
-    expect(result.detail).toContain("d".repeat(40));
-    expect(result.detail).toContain(SOURCE);
+  test("reports a differing patchVersion", () => {
+    const manifest = releaseFixture({ codexVersion: "0.153.0" }).manifest; // patchVersion 2
+    const expected = { patchSha256: manifest.patchSha256, patchVersion: 3 };
+    expect(compareIdentity(manifest, expected).identical).toBe(false);
+    expect(compareIdentity({ ...manifest, patchVersion: 3 }, expected).identical).toBe(true);
   });
 
   test("reports a differing patchSha256", async () => {
     const manifest = JSON.parse(readFileSync(join(await releaseDir(SOURCE, "e".repeat(64)), "manifest.json"), "utf8"));
-    expect(compareIdentity(manifest, { sourceCommit: SOURCE, patchSha256: PATCH_SHA }).identical).toBe(false);
+    expect(compareIdentity(manifest, { sourceCommit: SOURCE, patchSha256: PATCH_SHA, patchVersion: 2 }).identical).toBe(false);
   });
 });
 
@@ -393,7 +387,7 @@ describe("publishRelease", () => {
 
   test("allows superseding legacy non-arm64 platforms when replacing with supported arm64 platforms", async () => {
     const oldDir = await multiReleaseDir(["darwin-arm64", "linux-arm64", "linux-x64"], "d".repeat(40));
-    const newDir = await multiReleaseDir(["darwin-arm64", "linux-arm64"], SOURCE);
+    const newDir = await multiReleaseDir(["darwin-arm64", "linux-arm64"], SOURCE, "e".repeat(64));
     const fake = releaseServer(handles());
     await publishRelease({ ...publishArgs(oldDir, fake.run), sourceCommit: "d".repeat(40), platforms: ["darwin-arm64", "linux-arm64", "linux-x64"] });
     const backupDir = tmp("legacy-x64-backup");
@@ -405,7 +399,7 @@ describe("publishRelease", () => {
   test("rebuilds every retained platform from the new identity", async () => {
     const platforms = ["darwin-arm64", "linux-x64"] as const;
     const oldDir = await multiReleaseDir(platforms, "d".repeat(40));
-    const newDir = await multiReleaseDir(platforms, SOURCE);
+    const newDir = await multiReleaseDir(platforms, SOURCE, "e".repeat(64));
     const h = handles();
     const fake = releaseServer(h);
     await publishRelease({ ...publishArgs(oldDir, fake.run), sourceCommit: "d".repeat(40), platforms });

@@ -95,6 +95,7 @@ export async function releaseDir(sourceCommit = SOURCE, patchSha256 = PATCH_SHA)
 export async function multiReleaseDir(
   platforms: readonly Platform[] = ["darwin-arm64", "darwin-x64"],
   sourceCommit = SOURCE,
+  patchSha256 = PATCH_SHA,
 ): Promise<string> {
   const out = tmp("out-multi");
   const manifests = [];
@@ -110,7 +111,7 @@ export async function multiReleaseDir(
         codexVersion: CODEX,
         platform,
         upstreamCommit: "b".repeat(40),
-        patchSha256: PATCH_SHA,
+        patchSha256,
         sourceCommit,
         workflowUrl: RUN_URL,
         createdAt: "2026-09-07T00:00:00Z",
