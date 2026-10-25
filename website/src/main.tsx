@@ -165,24 +165,18 @@ if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
     loop: 3,
     ease: "inOutSine",
   });
-  animate(".terminal-window, .terminal-chrome > *, #playground", {
-    opacity: [0, 1],
-    duration: 500,
-    delay: stagger(50),
-    ease: "outExpo",
-  });
   animate(".ascii-wordmark", {
     opacity: [0, 1],
     translateY: [6, 0],
-    duration: 700,
-    delay: 300,
+    duration: 500,
+    delay: 100,
     ease: "outQuart",
   });
   animate("[data-transcript-prompt]", {
     opacity: [0, 1],
     translateY: [6, 0],
-    duration: 700,
-    delay: 950,
+    duration: 500,
+    delay: 300,
     ease: "outQuart",
   });
   const reply = document.querySelector<HTMLElement>("[data-transcript-reply]")!;
@@ -190,8 +184,8 @@ if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
   animate(reply, {
     opacity: [0, 1],
     translateY: [6, 0],
-    duration: 750,
-    delay: 1650,
+    duration: 600,
+    delay: 550,
     ease: "outQuart",
     onComplete: () => { reply.inert = false; },
   });
