@@ -1,9 +1,11 @@
 /**
  * Which cxstatusline commit a scheduled run builds.
  *
- * A scheduled build must never pick up whatever happens to be on `main`: it builds the highest
- * stable owner-published **source release** `v<CX>`, resolved to the exact commit that tag points
- * at. A manual dispatch builds its own dispatched commit and never comes through here.
+ * Prebuilt detection builds directly from `main` (`GITHUB_SHA` or working tree checkout),
+ * decoupled from npm source releases (`v<CX>`).
+ *
+ * Functions in this file are retained as deprecated utilities for backward compatibility
+ * with tests and API exports.
  */
 import { compareSemver, parseSemver, type SemVer } from "../../src/version";
 import { ghJson, type GhRunner } from "./gh";
@@ -31,6 +33,7 @@ function stableSourceVersion(entry: unknown): SemVer | null {
 }
 
 /**
+ * @deprecated Scheduled runs now build directly from checkout HEAD rather than crawling v<CX> releases.
  * The highest stable `v<X.Y.Z>` source release in a GitHub releases payload, or null when the
  * owner has published none. Semver comparison, not lexicographic and not publish order: GitHub
  * returns newest-first by date and `"0.9.0" > "0.11.0"` as strings.
@@ -48,12 +51,18 @@ function requireRepo(repo: string): string {
   return repo;
 }
 
-/** List the repository's own releases. Argument array only; the repo name is validated first. */
+/**
+ * @deprecated Scheduled runs now build directly from checkout HEAD rather than crawling v<CX> releases.
+ * List the repository's own releases. Argument array only; the repo name is validated first.
+ */
 export function listSourceReleases(run: GhRunner, repo: string): unknown {
   return ghJson<unknown>(run, ["api", "--paginate", `repos/${requireRepo(repo)}/releases?per_page=100`]);
 }
 
-/** Resolve a source release tag to the commit it points at, so the build is pinned to that commit. */
+/**
+ * @deprecated Scheduled runs now build directly from checkout HEAD rather than crawling v<CX> releases.
+ * Resolve a source release tag to the commit it points at, so the build is pinned to that commit.
+ */
 export function resolveTagCommit(run: GhRunner, repo: string, tag: string): string {
   requireRepo(repo);
   if (!SOURCE_TAG.test(tag)) throw new Error(`unusable source release tag ${JSON.stringify(tag)}`);

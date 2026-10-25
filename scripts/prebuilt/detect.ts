@@ -88,7 +88,7 @@ function requireStable(label: string, version: string): SemVer {
  */
 export function resolveDetection(m: Manifest, codexVersion: string, cxVersion?: string): Detection {
   const parsed = requireStable("upstream Codex version", codexVersion);
-  if (cxVersion !== undefined) {
+  if (cxVersion !== undefined && cxVersion !== "") {
     requireStable("cxstatusline version", cxVersion);
   }
   const patch = resolvePatch(m, parsed);
@@ -102,7 +102,7 @@ export function resolveDetection(m: Manifest, codexVersion: string, cxVersion?: 
   }
   return {
     codexVersion,
-    cxVersion,
+    ...(cxVersion ? { cxVersion } : {}),
     tag: releaseTag(codexVersion),
     upstreamTag: patch.tag,
     patchFile: patch.file,

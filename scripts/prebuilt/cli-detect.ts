@@ -16,7 +16,6 @@ import {
   type Detection,
 } from "./detect";
 import {
-  cxVersion,
   emit,
   oneLine,
   releasePlatforms,
@@ -29,7 +28,6 @@ import { execGh, type GhRunner } from "./gh";
 import { archiveFilename, sha256File } from "./pack";
 import { commitPatches, workingTreePatches, type PatchTree } from "./patch-tree";
 import { checkExistingRelease, type ReleaseState } from "./release";
-import { listSourceReleases, resolveTagCommit, selectSourceRelease } from "./source";
 
 const RELEASES_URL = "https://api.github.com/repos/openai/codex/releases?per_page=100";
 
@@ -45,8 +43,8 @@ async function fetchUpstreamReleases(): Promise<unknown> {
   return response.json();
 }
 
-/** Where a scheduled run's CX source comes from. */
-interface SourceSelection {
+/** Where a prebuilt run's CX source comes from. */
+export interface SourceSelection {
   readonly cxVersion: string;
   readonly sourceCommit: string;
   readonly sourceTag: string | null;
@@ -58,25 +56,16 @@ interface SourceSelection {
 }
 
 /**
- * A scheduled run builds the highest stable owner-published `v<CX>` source release, pinned to the
- * commit its tag points at - never whatever happens to be on the default branch. A manual dispatch
- * builds the dispatched commit. Null means "nothing to build", which is a success, not a failure.
+ * Resolves the source commit to build. Prebuilt detection builds directly from `main`
+ * (`GITHUB_SHA` or working tree checkout), decoupled from npm `v<CX>` releases.
  */
-function resolveSource(flags: Record<string, string>, run: GhRunner, event: string): SourceSelection | null {
-  if (event !== "schedule") {
-    return { cxVersion: cxVersion(), sourceCommit: sourceCommit(), sourceTag: null, frozen: false };
-  }
-  const repo = repoSlug(flags);
-  const payload = flags["source-releases-file"] !== undefined
-    ? (JSON.parse(readFileSync(flags["source-releases-file"], "utf8")) as unknown)
-    : listSourceReleases(run, repo);
-  const selected = selectSourceRelease(payload);
-  if (selected === null) return null;
+export function resolveSource(flags: Record<string, string>, event?: string): SourceSelection {
+  const commit = flags["source-commit"] || sourceCommit();
   return {
-    cxVersion: selected.version,
-    sourceCommit: resolveTagCommit(run, repo, selected.tag),
-    sourceTag: selected.tag,
-    frozen: true,
+    cxVersion: "",
+    sourceCommit: commit,
+    sourceTag: null,
+    frozen: false,
   };
 }
 
@@ -173,25 +162,6 @@ function blockedExit(outputs: Record<string, string>, title: string, message: st
   process.exit(UNCOVERED_EXIT_CODE);
 }
 
-/** The deliberate, successful no-op: a cron run with no `v<CX>` source release to build. */
-function skipNoSource(platforms: readonly Platform[], matrix: readonly MatrixEntry[]): void {
-  summary([
-    "## Prebuilt release: nothing to build",
-    "",
-    "no v<CX> source release published; nothing to build",
-    "",
-    "Scheduled runs build the highest stable owner-published `v<CX>` source release. Publish one,",
-    "or dispatch this workflow manually to build a specific commit.",
-  ]);
-  emit({
-    should_build: "false",
-    release_state: "absent",
-    skip_reason: "no-source-release",
-    platforms: platforms.join(","),
-    matrix: JSON.stringify(matrix),
-  });
-}
-
 /** Resolve the release identity, or exit 3 attributed to the version that is not covered. */
 function resolveOrBlock(
   manifest: Manifest,
@@ -201,7 +171,7 @@ function resolveOrBlock(
   matrix: readonly MatrixEntry[],
 ): Detection {
   try {
-    return resolveDetection(manifest, codexVersion, source.cxVersion);
+    return resolveDetection(manifest, codexVersion, source.cxVersion || undefined);
   } catch (e) {
     if (!(e instanceof UncoveredUpstreamError)) throw e;
     // The version *is* known here, so the issue belongs to it, not to "upstream detection".
@@ -283,6 +253,9 @@ function finish(
  */
 export async function runDetect(flags: Record<string, string>): Promise<void> {
   const event = flags["event"] ?? process.env.GITHUB_EVENT_NAME ?? "workflow_dispatch";
+  if (flags["repo"] !== undefined) {
+    repoSlug(flags);
+  }
   if (flags["self-hosted"] !== undefined && flags["self-hosted"] !== "true") {
     throw new Error("Codex prebuilt builds require the M5 self-hosted runner; hosted fallback is forbidden");
   }
@@ -297,11 +270,7 @@ export async function runDetect(flags: Record<string, string>): Promise<void> {
   }
   if (publishRequested) platforms = unionReleasePlatforms(platforms, DEFAULT_PREBUILT_PLATFORMS);
   const matrix = buildMatrix(platforms);
-  const source = resolveSource(flags, execGh, event);
-  if (source === null) {
-    skipNoSource(platforms, matrix);
-    return;
-  }
+  const source = resolveSource(flags, event);
   const { version: codexVersion, pinned } = await resolveCodexVersion(flags);
   const patches = patchTreeFor(source);
   const detection = resolveOrBlock(loadManifest(patches.manifestDir), codexVersion, source, platforms, matrix);
