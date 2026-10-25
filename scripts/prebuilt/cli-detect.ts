@@ -130,8 +130,8 @@ async function releaseState(
 }
 
 /**
- * The `patches/` tree this run must hash: the frozen source commit's for a scheduled run, the
- * working tree's for a manual dispatch (whose checkout *is* `github.sha`).
+ * The `patches/` tree this run must hash: working tree for both scheduled and manual runs,
+ * or an explicitly frozen commit when requested.
  */
 function patchTreeFor(source: SourceSelection): PatchTree {
   return source.frozen

@@ -84,7 +84,7 @@ build steps holds release-write or issue-write credentials.
   patch manifest without waiting for source releases.
 - **`validate`** installs frozen dependencies, typechecks, runs `bun test`, builds with
   `CXSTATUSLINE_RELEASE_BUILD=1` (which refuses a dirty or commit-less checkout) and asserts
-  the bundle prints the detected `cx_version`.
+  the bundle prints a valid version string (or `needs.detect.outputs.cx_version` when provided).
 - **`native`** runs as a matrix across the detected platforms (`needs.detect.outputs.matrix`).
   Each job clones the exact upstream tag, applies the exact patch with
   `git apply --index --check` before `git apply --index`, restores a Cargo build cache
