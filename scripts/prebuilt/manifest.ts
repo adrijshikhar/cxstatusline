@@ -26,10 +26,9 @@ export interface ManifestInput {
 
 /** Build a single-platform package manifest (schema 3). */
 export function buildManifest(input: ManifestInput): ReleaseManifest {
-  return {
+  const manifest: ReleaseManifest = {
     schema: 3,
     patchVersion: input.patchVersion,
-    cxVersion: input.cxVersion,
     codexVersion: input.codexVersion,
     upstreamTag: `rust-v${input.codexVersion}`,
     upstreamCommit: input.upstreamCommit,
@@ -48,6 +47,10 @@ export function buildManifest(input: ManifestInput): ReleaseManifest {
       },
     ],
   };
+  if (input.cxVersion) {
+    manifest.cxVersion = input.cxVersion;
+  }
+  return manifest;
 }
 
 /** The run URL recorded in the manifest, from the ambient workflow environment. */

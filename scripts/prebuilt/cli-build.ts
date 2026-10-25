@@ -92,8 +92,9 @@ export async function runPackage(flags: Record<string, string>): Promise<void> {
   const filename = archiveFilename(detection.codexVersion, platform);
   const archive = await packArchive(stagingDir, join(outDir, filename));
 
+  const cxVer = flags["cx-version"] || (detection.cxVersion ? detection.cxVersion : undefined);
   const manifest = buildManifest({
-    cxVersion: flags["cx-version"] ?? detection.cxVersion,
+    ...(cxVer ? { cxVersion: cxVer } : {}),
     codexVersion: detection.codexVersion,
     platform,
     upstreamCommit: upstreamCommit(upstream),

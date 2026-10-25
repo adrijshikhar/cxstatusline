@@ -14,6 +14,7 @@ import { packageFiles } from "../../src/patch/generation";
 import { appendRustNotices, appendToolNotices } from "./rust-licenses";
 
 export { sha256File };
+export { buildManifest } from "./manifest";
 
 /** The three files this repository adds at the package root. Everything else is upstream's. */
 export const LEGAL_FILES = ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"] as const;
