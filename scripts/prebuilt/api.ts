@@ -12,7 +12,13 @@ export {
   UNCOVERED_EXIT_CODE,
   type Detection,
 } from "./detect";
-export { buildMatrix, unionReleasePlatforms, type MatrixEntry } from "./cli-detect";
+export {
+  buildMatrix,
+  resolveSource,
+  unionReleasePlatforms,
+  type MatrixEntry,
+  type SourceSelection,
+} from "./cli-detect";
 export { execGh, ghJson, ghText, GhError, type GhResult, type GhRunner } from "./gh";
 export { buildManifest, workflowUrlFromEnv, type ManifestInput } from "./manifest";
 export { mergeManifests } from "./merge";

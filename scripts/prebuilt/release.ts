@@ -66,9 +66,9 @@ export type ExpectedReleaseInput = {
 };
 
 export interface ExpectedIdentity {
-  readonly sourceCommit: string;
   readonly patchSha256: string;
   readonly patchVersion?: number;
+  readonly sourceCommit?: string;
 }
 
 // ---- pure helpers ----
@@ -170,9 +170,6 @@ export function compareIdentity(
   const problems: string[] = [];
   if (manifest.patchVersion !== expected.patchVersion) {
     problems.push(`patchVersion ${manifest.patchVersion ?? "legacy"} (published) vs ${expected.patchVersion ?? "legacy"} (this run)`);
-  }
-  if (manifest.sourceCommit !== expected.sourceCommit) {
-    problems.push(`sourceCommit ${manifest.sourceCommit} (published) vs ${expected.sourceCommit} (this run)`);
   }
   if (manifest.patchSha256 !== expected.patchSha256) {
     problems.push(`patchSha256 ${manifest.patchSha256} (published) vs ${expected.patchSha256} (this run)`);

@@ -42,31 +42,34 @@ function runDetect(args: readonly string[], releases: unknown): CliRun {
 
 describe("detect on a schedule", () => {
   test("publication includes both baseline platforms even when only one is requested", () => {
-    const run = runDetect(["--event", "schedule", "--platforms", "linux-arm64", "--repo", "adrijshikhar/cxstatusline"], []);
-    expect(run.status).toBe(0);
+    const run = runDetect(["--event", "schedule", "--platforms", "linux-arm64", "--codex-version", "9.9.9", "--repo", "adrijshikhar/cxstatusline"], []);
+    expect(run.status).toBe(3);
     expect(run.outputs.platforms?.split(",").sort()).toEqual(["darwin-arm64", "linux-arm64"]);
-    const dry = runDetect(["--event", "schedule", "--publish-requested", "false", "--platforms", "linux-arm64", "--repo", "adrijshikhar/cxstatusline"], []);
+    const dry = runDetect(["--event", "schedule", "--publish-requested", "false", "--platforms", "linux-arm64", "--codex-version", "9.9.9", "--repo", "adrijshikhar/cxstatusline"], []);
     expect(dry.outputs.platforms).toBe("linux-arm64");
   });
 
-  test("skips successfully when no v<CX> source release has been published", () => {
-    const run = runDetect(["--event", "schedule", "--repo", "adrijshikhar/cxstatusline"], []);
-    expect(run.status).toBe(0);
+  test("resolves source commit from checkout HEAD on schedule without requiring v<CX> releases", () => {
+    const run = runDetect(["--event", "schedule", "--codex-version", "9.9.9", "--repo", "adrijshikhar/cxstatusline"], []);
+    expect(run.status).toBe(3);
+    expect(run.outputs["codex_version"]).toBe("9.9.9");
+    expect(run.outputs["cx_version"]).toBe("");
     expect(run.outputs["should_build"]).toBe("false");
-    expect(run.outputs["skip_reason"]).toBe("no-source-release");
-    expect(run.stderr).toContain("no v<CX> source release published; nothing to build");
+    expect(run.outputs["blocked_reason"]).toContain("not covered by patches/manifest.json");
+    expect(run.stderr).toContain("Prebuilt blocked: Codex 9.9.9");
   });
 
-  test("treats a draft-only or prerelease-only source listing as nothing to build", () => {
+  test("draft or prerelease source listings do not gate scheduled detection", () => {
     const releases = [
       { tag_name: "v0.9.0", draft: true, prerelease: false },
       { tag_name: "v0.8.0", draft: false, prerelease: true },
       { tag_name: "0.7.0", draft: false, prerelease: false },
     ];
-    const run = runDetect(["--event", "schedule", "--repo", "adrijshikhar/cxstatusline"], releases);
-    expect(run.status).toBe(0);
-    expect(run.outputs["should_build"]).toBe("false");
     expect(selectSourceRelease(releases)).toBeNull();
+    const run = runDetect(["--event", "schedule", "--codex-version", "9.9.9", "--repo", "adrijshikhar/cxstatusline"], releases);
+    expect(run.status).toBe(3);
+    expect(run.outputs["codex_version"]).toBe("9.9.9");
+    expect(run.outputs["cx_version"]).toBe("");
   });
 
   test("refuses a repository slug that is not owner/name before any API call", () => {
@@ -169,7 +172,7 @@ describe("detect on a manual dispatch", () => {
     const run = runDetect(["--event", "workflow_dispatch", "--codex-version", "9.9.9"], []);
     expect(run.status).toBe(3);
     expect(run.outputs["codex_version"]).toBe("9.9.9");
-    expect(run.outputs["cx_version"]).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(run.outputs["cx_version"]).toBe("");
     expect(run.outputs["release_state"]).toBe("unknown");
     expect(run.outputs["should_build"]).toBe("false");
     expect(run.outputs["blocked_reason"]).toContain("not covered by patches/manifest.json");

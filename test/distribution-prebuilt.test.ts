@@ -413,6 +413,35 @@ test("unchanged pair is detected when the manifest omits cxVersion", async () =>
   }
 });
 
+test("unchanged pair is reused across cxstatusline CLI version bumps (manifest cxVersion undefined or newer)", async () => {
+  const fixture = release();
+  fixture.manifest.cxVersion = "0.16.0";
+  const server = await releaseServer(routesFor(fixture));
+  const { ctx } = prebuiltCtx();
+  try {
+    const first = await preparePrebuilt(ctx, EXPECTED, { baseUrl: server.baseUrl });
+    first.pair.provenance.cxVersion = "0.15.0";
+    const generation = createGeneration(first.pair, ctx.paths);
+    swapPointer(ctx.paths, generation);
+    expect(readInstallation(ctx.paths)?.provenance.cxVersion).toBe("0.15.0");
+
+    // Case 1: remote manifest has newer cxVersion ("0.16.0") while installed has "0.15.0"
+    const second = await preparePrebuilt(ctx, EXPECTED, { baseUrl: server.baseUrl });
+    expect(second.kind).toBe("unchanged");
+    expect(second.pair.directory).toBe(generation);
+    expect(server.requests.filter((p) => p.endsWith(ARCHIVE))).toHaveLength(1);
+
+    // Case 2: remote manifest omits cxVersion while installed has "0.15.0"
+    delete fixture.manifest.cxVersion;
+    const third = await preparePrebuilt(ctx, EXPECTED, { baseUrl: server.baseUrl });
+    expect(third.kind).toBe("unchanged");
+    expect(third.pair.directory).toBe(generation);
+    expect(server.requests.filter((p) => p.endsWith(ARCHIVE))).toHaveLength(1);
+  } finally {
+    await server.close();
+  }
+});
+
 
 test("a release published before cxstatusline 0.11 (schema 2, flat archive) is refused with the reason", async () => {
   const flat: TarEntry[] = [

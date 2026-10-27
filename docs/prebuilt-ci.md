@@ -77,16 +77,14 @@ build steps holds release-write or issue-write credentials.
   `Prebuilt blocked: Codex <v>`, not `Prebuilt blocked: upstream detection` - and passes the
   single-line `blocked_reason` output into the issue body. Only a genuinely unresolved detection
   (no version at all) keeps the null title.
-- **`patches/` is read from the frozen commit.** A scheduled run resolves an *older* `v<CX>`
-  source commit while `detect` itself is checked out at the default branch, so
-  `patches/manifest.json` and the patch bytes are read out of that commit
-  (`git show <sha>:patches/...`, materialized under `RUNNER_TEMP`), never out of the working
-  tree - otherwise the published `patchSha256` would be the digest of a patch the build never
-  applied. That is why the `detect` job checks out with `fetch-depth: 0`. A manual dispatch keeps
-  reading the working tree, which *is* `github.sha`. The `patches_from` output records which.
+- **`patches/` is read from checkout HEAD (`main`).** Scheduled runs build directly from the default
+  branch HEAD (`main`), completely decoupled from npm `v<CX>` source releases. `detect` reads
+  `patches/manifest.json` and the patch files directly from the working tree checkout on `main`.
+  Patch resolution, upstream compatibility, and target matrix derivation are driven directly by `main`'s
+  patch manifest without waiting for source releases.
 - **`validate`** installs frozen dependencies, typechecks, runs `bun test`, builds with
   `CXSTATUSLINE_RELEASE_BUILD=1` (which refuses a dirty or commit-less checkout) and asserts
-  the bundle prints the detected `cx_version`.
+  the bundle prints a valid version string (or `needs.detect.outputs.cx_version` when provided).
 - **`native`** runs as a matrix across the detected platforms (`needs.detect.outputs.matrix`).
   Each job clones the exact upstream tag, applies the exact patch with
   `git apply --index --check` before `git apply --index`, restores a Cargo build cache
@@ -115,11 +113,10 @@ build steps holds release-write or issue-write credentials.
   `extractArchive` from `src/distribution/archive.ts` for the archive, then `SHA256SUMS`
   agreement, per-file digests, Mach-O architecture, system-only linkage, `vtool` `minos` at or
   below 14.0, staged `codex --version` and the companion's `--listen` help.
-- **The source commit is passed in, never inferred.** `package` requires
-  `--source-commit "${{ needs.detect.outputs.source_commit }}"`. `GITHUB_SHA` is deliberately not
-  consulted: on a scheduled run it stays at the default-branch head while `validate`/`native`/
-  `publish` are checked out at the frozen source commit, so a manifest stamped from it would name a
-  commit the build never used - and `publish` would then refuse its own artifact set forever.
+- **The source commit is passed in and recorded as informational metadata.** `package` requires
+  `--source-commit "${{ needs.detect.outputs.source_commit }}"` (resolved by `detect` from checkout HEAD).
+  `sourceCommit` in `manifest.json` is purely informational metadata recording which cxstatusline commit
+  was used when assembling the package; it does not invalidate published releases or factor into release identity comparison.
 - **Outputs.** Each native job uploads `release-<tag>-<platform>` (holding the platform archive,
   manifest and checksums) and `provenance-<tag>-<platform>`. The `merge` job unifies them.
 
@@ -177,10 +174,11 @@ Repository visibility is never read or changed, and no draft is ever deleted aut
   no new timestamps, no new workflow URL, no version bump.
 - **Draft holding different bytes** (a conflicting build set, or an expired original artifact).
   **Blocked**, exit 3, nothing deleted. Two owner options, both deliberate and manual: delete the
-  unpublished draft in the GitHub Releases UI and re-run, or bump the cxstatusline version so the
-  build publishes under a new tag.
-- **Already published, identical** (same `sourceCommit` and `patchSha256`). Success, skipped, with
-  nothing uploaded. `detect` catches this first and skips the build entirely.
+  unpublished draft in the GitHub Releases UI and re-run, or bump `patchVersion` in `patches/manifest.json`
+  so the build publishes under a new patch identity.
+- **Already published, identical** (matching `patchSha256`, `patchVersion`, and `upstreamCommit`). Success, skipped, with
+  nothing uploaded. `detect` catches this first and skips the build entirely. Release identity is pure patch & upstream identity;
+  `sourceCommit` differences are informational and do not invalidate published releases.
 - **Already published, different** (a republish). With a verified `--backup-dir` the release is
   backed up, deleted, recreated as a draft with the complete platform set, uploaded, re-verified
   and un-drafted (`replacePublished`). A replacement that omits a platform the release already
@@ -253,24 +251,26 @@ call they make goes through it. The workflow itself guards on repository identit
 - `codex_version` = `auto`, or an exact supported version
 - `publish` = **true**
 
-That builds `github.sha` and publishes `cxstatusline-v<CX>-codex-v<CODEX>`.
+That builds `github.sha` and publishes `codex-v<CODEX>`.
 With `publish=false` it builds and verifies only, and `report` says "build succeeded, not
 published".
 
-**Enable the cron.** The `17 3 * * *` schedule does nothing until an owner-published stable
-`v<CX>` **source release** exists in this repository: scheduled runs resolve their CX input from
-the highest such release and build the commit its tag points at, never whatever is on the default
-branch. Publish a `v<CX>` release (not a draft, not a prerelease) to arm it. Until then a
-scheduled run writes "no v<CX> source release published; nothing to build" and skips.
+**Scheduled runs.** The `17 3 * * *` schedule builds directly from default branch HEAD (`main`).
+Scheduled runs are completely decoupled from npm `v<CX>` source releases and do not wait for them.
+When upstream publishes a new stable Codex release covered by `patches/manifest.json` that does not
+yet have a published prebuilt release with matching patch identity (`patchSha256`, `patchVersion`, `upstreamCommit`),
+the scheduled run automatically builds, tests, packages, and publishes `codex-v<CODEX>`.
 
 **When a run reports blocked.** Read the issue. An uncovered upstream version needs a new tested
-patch. A published-but-different release needs a cxstatusline version bump. A conflicting draft
-needs the draft deleted by hand, or a version bump. The pipeline never resolves any of these for
-you, and never deletes a draft on its own.
+patch in `patches/manifest.json`. A published-but-different release needs a patch version bump in
+`patches/manifest.json` or a deliberate republish via `--backup-dir`. A conflicting draft needs the draft
+deleted by hand or a patch version bump. The pipeline never resolves any of these for you, and never deletes
+a draft on its own.
 
-**Releases are immutable.** Nothing in this pipeline changes repository visibility. Once
-published, a release's assets are never replaced - differing bytes always mean a new CX version and
-therefore a new tag.
+**Release identity and immutability.** Prebuilt release identity is pure patch & upstream identity
+(`patchSha256`, `patchVersion`, `upstreamCommit`). `sourceCommit` is informational and does not invalidate
+published releases. Once published, release assets are immutable - differing patch bytes mean incrementing
+`patchVersion` in `patches/manifest.json` or invoking the explicit backup-and-replace republish flow.
 
 ### npm and source release procedure (`release-please.yml` & `publish.yml`)
 
