@@ -178,13 +178,19 @@ async function installCommand(argv: readonly string[], io: MainIo, deps: MainDep
         const defaultVersion = compile
           ? supported[0]!
           : (prebuiltVersions && prebuiltVersions.length > 0
-              ? (supported.find((v) => prebuiltVersions.includes(v)) ?? supported[0]!)
+              ? prebuiltVersions[0]!
               : supported[0]!);
 
         if (io.isTTY === true && !yes) {
           const prompter = deps.promptVersion ?? promptCodexVersion;
+          const availableVersions = Array.from(new Set([...(prebuiltVersions ?? []), ...supported])).sort((a, b) => {
+            const semA = parseSemver(a);
+            const semB = parseSemver(b);
+            if (!semA || !semB) return b.localeCompare(a);
+            return compareSemver(semB, semA);
+          });
           const result = await prompter({
-            supportedVersions: supported,
+            supportedVersions: availableVersions,
             prebuiltVersions,
             defaultVersion,
             compile,

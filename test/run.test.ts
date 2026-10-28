@@ -305,13 +305,23 @@ describe("runAcquisition (prebuilt)", () => {
       expect(requests.filter((r) => r.endsWith(".tar.gz"))).toHaveLength(1);
     });
   });
-  test("refused: targetVersion not supported by manifest", async () => {
+  test("refused: targetVersion not supported by manifest for compiled source", async () => {
     const { c } = ctx({ noRust: true });
-    expect(await runAcquisition(c, { source: "prebuilt", force: true, targetVersion: "0.99.0" }))
+    expect(await runAcquisition(c, { source: "compiled", force: true, targetVersion: "0.99.0" }))
       .toEqual({
         kind: "refused",
         reason: expect.stringMatching(/0\.99\.0 is not supported/i),
       });
+  });
+  test("allows prebuilt targetVersion absent from local manifest if published", async () => {
+    const NEW_CODEX = "0.999.0";
+    const f = releaseFixture({ cxVersion: VERSION, codexVersion: NEW_CODEX });
+    const { c, paths } = ctx({ noRust: true, stagedVersion: NEW_CODEX });
+    await withServer(routesFor(f), async (baseUrl) => {
+      expect(await runAcquisition(c, { source: "prebuilt", force: true, targetVersion: NEW_CODEX }, { baseUrl }))
+        .toEqual({ kind: "installed", version: NEW_CODEX, source: "prebuilt", reused: false });
+    });
+    expect(readInstallation(paths)?.codexVersion).toBe(NEW_CODEX);
   });
   test("installs requested targetVersion even when local upstream is different", async () => {
     const f = fixture();
@@ -613,13 +623,26 @@ describe("runUpdate", () => {
     };
     await withServer(routesFor(f), async (baseUrl) => {
       expect(await runUpdate({ ...c, run }, {
-        fetchPrebuilts: async () => ["0.152.1", "0.156.1", "0.153.0"],
+        fetchPrebuilts: async () => ["0.152.1", "0.153.0"],
       }, { baseUrl })).toBe(0);
     });
     expect(readInstallation(paths)?.codexVersion).toBe("0.153.0");
     expect(activePair(paths).codex).toBe("CODEX-BINARY");
     expect(readFileSync(real, "utf8")).toBe("UPSTREAM-ELF");
     expect(calls.some((call) => call.args[0] === "update")).toBe(false);
+  });
+
+  test("runUpdate installs a prebuilt newer than local manifest ranges (true prebuilt independence)", async () => {
+    const NEW_CODEX = "0.999.0";
+    const f = releaseFixture({ cxVersion: VERSION, codexVersion: NEW_CODEX });
+    const { c, paths } = ctx({ upstreamVersion: "0.152.1", stagedVersion: NEW_CODEX, noRust: true });
+    await withServer(routesFor(f), async (baseUrl) => {
+      expect(await runUpdate(c, {
+        fetchPrebuilts: async () => [NEW_CODEX, "0.153.0"],
+      }, { baseUrl })).toBe(0);
+    });
+    expect(readInstallation(paths)?.codexVersion).toBe(NEW_CODEX);
+    expect(activePair(paths).codex).toBe("CODEX-BINARY");
   });
 
   test("updates a prebuilt even when no upstream installation exists", async () => {

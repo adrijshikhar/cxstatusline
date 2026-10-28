@@ -228,9 +228,13 @@ export async function runUpdate(
   const versions = opts.compile
     ? supportedCodexVersions(manifest)
     : await (opts.fetchPrebuilts ?? fetchPublishedPrebuiltVersions)(transport.fetch);
-  const target = versions
-    .filter((version) => isCodexVersionSupported(manifest, version))
-    .sort((a, b) => compareSemver(parseSemver(b)!, parseSemver(a)!))[0];
+  const target = opts.compile
+    ? versions
+        .filter((version) => isCodexVersionSupported(manifest, version))
+        .sort((a, b) => compareSemver(parseSemver(b)!, parseSemver(a)!))[0]
+    : versions
+        .filter((version) => parseSemver(version) !== null)
+        .sort((a, b) => compareSemver(parseSemver(b)!, parseSemver(a)!))[0];
   if (!target) {
     ctx.say(opts.compile
       ? "No supported source patch is available. Update the cxstatusline package and retry."
