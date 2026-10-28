@@ -414,7 +414,7 @@ describe("network resilience and retry", () => {
     }) as unknown as typeof fetch;
 
     const mockGh: GhRunner = (args) => {
-      if (args[0] === "api" && args[1] === "repos/openai/codex/releases?per_page=100") {
+      if (args[0] === "api" && args[1] === "repos/openai/codex/releases?per_page=30") {
         return {
           status: 0,
           stdout: JSON.stringify([
