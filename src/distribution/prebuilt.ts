@@ -203,6 +203,7 @@ export async function preparePrebuilt(
 }
 
 export const PREBUILT_PAGE_SIZE = 30;
+export const PREBUILT_MAX_PAGES = 10;
 
 export interface FetchPrebuiltsOptions {
   readonly maxRetries?: number;
@@ -231,7 +232,7 @@ export async function fetchPublishedPrebuiltVersions(
       headers.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
     }
     const data: unknown[] = [];
-    for (let page = 1; ; page += 1) {
+    for (let page = 1; page <= PREBUILT_MAX_PAGES; page += 1) {
       let pageData: unknown[] | null = null;
       for (let attempt = 0; attempt < maxRetries; attempt += 1) {
         try {

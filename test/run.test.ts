@@ -645,6 +645,30 @@ describe("runUpdate", () => {
     expect(activePair(paths).codex).toBe("CODEX-BINARY");
   });
 
+  test("runUpdate skips prerelease tags and selects highest stable version", async () => {
+    const f = fixture();
+    const { c, paths } = ctx({ upstreamVersion: "0.152.1", stagedVersion: CODEX, noRust: true });
+    await withServer(routesFor(f), async (baseUrl) => {
+      expect(await runUpdate(c, {
+        fetchPrebuilts: async () => ["0.999.0-rc.1", CODEX, "0.152.1"],
+      }, { baseUrl })).toBe(0);
+    });
+    expect(readInstallation(paths)?.codexVersion).toBe(CODEX);
+  });
+
+  test("runUpdate succeeds with prebuilt even when local patches/manifest.json is missing", async () => {
+    const NEW_CODEX = "0.999.0";
+    const f = releaseFixture({ cxVersion: VERSION, codexVersion: NEW_CODEX });
+    const { c, paths } = ctx({ upstreamVersion: "0.152.1", stagedVersion: NEW_CODEX, noRust: true });
+    rmSync(c.patchesDir, { recursive: true, force: true });
+    await withServer(routesFor(f), async (baseUrl) => {
+      expect(await runUpdate(c, {
+        fetchPrebuilts: async () => [NEW_CODEX],
+      }, { baseUrl })).toBe(0);
+    });
+    expect(readInstallation(paths)?.codexVersion).toBe(NEW_CODEX);
+  });
+
   test("updates a prebuilt even when no upstream installation exists", async () => {
     const f = fixture();
     const { c, paths, real } = ctx({ upstreamVersion: CODEX, noRust: true });

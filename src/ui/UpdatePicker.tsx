@@ -8,13 +8,14 @@ export type UpdateAction = "prebuilt" | "compile" | "cancel";
 export interface UpdatePickerOptions {
   readonly latest: string;
   readonly highestAvailable?: string;
+  readonly canCompile?: boolean;
 }
 
-export function UpdatePicker({ latest, highestAvailable, onSelect }: UpdatePickerOptions & {
+export function UpdatePicker({ latest, highestAvailable, canCompile = true, onSelect }: UpdatePickerOptions & {
   onSelect: (action: UpdateAction) => void;
 }): React.JSX.Element {
   const { usable, maxVisibleItems } = useTerminalSize();
-  const [selectedIndex, setSelectedIndex] = useState(highestAvailable ? 0 : 1);
+  const [selectedIndex, setSelectedIndex] = useState(highestAvailable ? 0 : (canCompile ? 1 : 0));
   useInput((input, key) => {
     if (key.escape || (key.ctrl && input === "c")) onSelect("cancel");
   });
@@ -29,11 +30,14 @@ export function UpdatePicker({ latest, highestAvailable, onSelect }: UpdatePicke
     value: "prebuilt",
     description: "Downloads a verified prebuilt. No Rust toolchain needed.",
   });
-  items.push(
-    { label: `Compile Codex ${latest} from source`, value: "compile",
-      description: "Requires Rust, at least 20 GiB free, and may take tens of minutes." },
-    { label: "Cancel", value: "cancel" },
-  );
+  if (canCompile) {
+    items.push({
+      label: `Compile Codex ${latest} from source`,
+      value: "compile",
+      description: "Requires Rust, at least 20 GiB free, and may take tens of minutes.",
+    });
+  }
+  items.push({ label: "Cancel", value: "cancel" });
   return <Box flexDirection="column" marginY={1}>
     <Text bold>How would you like to proceed?</Text>
     <List items={items} marginTop={1} maxVisibleItems={maxVisibleItems} initialSelection={selectedIndex}
