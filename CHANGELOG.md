@@ -3,6 +3,19 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.17.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.16.0...v0.17.0) (2026-10-28)
+
+
+### Features
+
+* decouple prebuilt upgrades from local manifest gating and improve CLI resilience ([#189](https://github.com/adrijshikhar/cxstatusline/issues/189)) ([5209b05](https://github.com/adrijshikhar/cxstatusline/commit/5209b053b6776e6c49029481c198750a658d7745))
+* support Codex 0.165.0 ([#187](https://github.com/adrijshikhar/cxstatusline/issues/187)) ([07341f2](https://github.com/adrijshikhar/cxstatusline/commit/07341f2213ad5395044c7b61584d2d5874708d90))
+
+
+### Bug Fixes
+
+* **prebuilt:** resolve HTTP 504 upstream detection failure with triple-layer fallback ([#185](https://github.com/adrijshikhar/cxstatusline/issues/185)) ([7e86886](https://github.com/adrijshikhar/cxstatusline/commit/7e86886d8f87333ca7445196493e2e3f43c35db2))
+
 ## [0.16.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.15.0...v0.16.0) (2026-10-23)
 
 
