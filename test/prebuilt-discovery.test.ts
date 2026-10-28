@@ -22,22 +22,35 @@ describe("fetchPublishedPrebuiltVersions", () => {
     expect(versions).toEqual(["0.155.2", "0.155.1", "0.155.0", "0.154.0", "0.153.4"]);
   });
 
-  test("reads all release pages and discards partial results when a later page fails", async () => {
-    const pages: number[] = [];
+  test("reads all release pages using per_page=30 and discards partial results when a later page fails", async () => {
+    const urls: string[] = [];
     const mockFetch = async (url: string) => {
+      urls.push(url);
       const page = Number(new URL(url).searchParams.get("page"));
-      pages.push(page);
-      if (page === 1) return new Response(JSON.stringify(Array.from({ length: 100 }, (_, i) => ({ tag_name: `codex-v0.${200 - i}.0`, draft: false }))));
+      if (page === 1) return new Response(JSON.stringify(Array.from({ length: 30 }, (_, i) => ({ tag_name: `codex-v0.${200 - i}.0`, draft: false }))));
       return new Response(JSON.stringify([{ tag_name: "codex-v0.99.0", draft: false }]));
     };
     const versions = await fetchPublishedPrebuiltVersions(mockFetch as any);
-    expect(pages).toEqual([1, 2]);
+    expect(urls[0]).toContain("per_page=30");
+    expect(urls.length).toBe(2);
     expect(versions.at(-1)).toBe("0.99.0");
 
     const failing = async (url: string) => new URL(url).searchParams.get("page") === "1"
-      ? new Response(JSON.stringify(Array.from({ length: 100 }, () => ({ tag_name: "codex-v0.155.1", draft: false }))))
+      ? new Response(JSON.stringify(Array.from({ length: 30 }, () => ({ tag_name: "codex-v0.155.1", draft: false }))))
       : new Response("unavailable", { status: 503 });
-    expect(await fetchPublishedPrebuiltVersions(failing as any)).toEqual([]);
+    expect(await fetchPublishedPrebuiltVersions(failing as any, undefined, { retryDelayMs: 0 })).toEqual([]);
+  });
+
+  test("retries transient 5xx responses and succeeds", async () => {
+    let attempts = 0;
+    const mockFetch = async () => {
+      attempts += 1;
+      if (attempts < 3) return new Response("504 Gateway Timeout", { status: 504 });
+      return new Response(JSON.stringify([{ tag_name: "codex-v0.165.0", draft: false }]));
+    };
+    const versions = await fetchPublishedPrebuiltVersions(mockFetch as any, undefined, { retryDelayMs: 0 });
+    expect(attempts).toBe(3);
+    expect(versions).toEqual(["0.165.0"]);
   });
 
   test("returns empty array when API returns non-200", async () => {
@@ -54,7 +67,7 @@ describe("fetchPublishedPrebuiltVersions", () => {
       throw new Error("Network timeout");
     };
 
-    const versions = await fetchPublishedPrebuiltVersions(mockFetch as any);
+    const versions = await fetchPublishedPrebuiltVersions(mockFetch as any, undefined, { retryDelayMs: 0 });
     expect(versions).toEqual([]);
   });
 

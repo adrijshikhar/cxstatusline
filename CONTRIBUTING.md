@@ -32,7 +32,13 @@ See [SECURITY.md](SECURITY.md) for sensitive reports.
 
 Direct pushes to `main` are strictly blocked. All contributions—whether from humans or AI agents—must follow this workflow:
 
-1. Create a dedicated branch: `git checkout -b <type>/<description>` (e.g. `feat/...`, `fix/...`, `chore/...`).
+1. Always create a dedicated git worktree for your branch:
+   ```sh
+   git worktree add .worktrees/<branch-name> -b <branch-name> main
+   cd .worktrees/<branch-name>
+   bun install --frozen-lockfile
+   ```
+   Branch naming follows conventions: `feat/...`, `fix/...`, `chore/...`, `ci/...`.
 2. Verify all local checks pass: `bun test && bun run typecheck && bun run build && bun run check:package`.
 3. Push your branch: `git push -u origin <branch-name>`.
 4. Open a Pull Request using Conventional Commits format in the title (e.g. `fix: ...` or `feat: ...`).
@@ -43,7 +49,7 @@ Direct pushes to `main` are strictly blocked. All contributions—whether from h
 ### Version Support Policy
 
 - **Baseline Series Coverage**: The `.0` baseline release of each Codex minor line (e.g., `0.161.0`, `0.162.0`, `0.163.0`, `0.164.0`) is supported.
-- **Active Series Coverage**: In the newest/active minor series (currently `0.164.x`), all stable releases including the latest patch release are supported.
+- **Active Series Coverage**: In the newest/active minor series (currently `0.165.x`), all stable releases including the latest patch release are supported.
 - **Excluded Releases**: Intermediate patch releases in older minor series (e.g., `0.162.1`, `0.161.1`) are intentionally omitted once a newer minor series is available.
 
 To add support for a newly released upstream Codex version:

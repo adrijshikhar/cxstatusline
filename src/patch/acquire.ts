@@ -93,20 +93,26 @@ async function acquireLocked(
 ): Promise<PatchOutcome> {
   let targetSemver: SemVer | undefined;
   if (opts.targetVersion) {
-    try {
-      const manifest = loadManifest(ctx.patchesDir);
-      if (!isCodexVersionSupported(manifest, opts.targetVersion)) {
-        const supported = supportedCodexVersions(manifest).join(", ");
-        return {
-          kind: "refused",
-          reason: `Codex ${opts.targetVersion} is not supported. Supported versions: ${supported}`,
-        };
+    if (opts.source === "compiled") {
+      try {
+        const manifest = loadManifest(ctx.patchesDir);
+        if (!isCodexVersionSupported(manifest, opts.targetVersion)) {
+          const supported = supportedCodexVersions(manifest).join(", ");
+          return {
+            kind: "refused",
+            reason: `Codex ${opts.targetVersion} is not supported. Supported versions: ${supported}`,
+          };
+        }
+      } catch (e) {
+        const reason = e instanceof ManifestError ? e.message : `patches/manifest.json could not be read: ${String(e)}`;
+        return { kind: "refused", reason };
       }
-      targetSemver = parseSemver(opts.targetVersion)!;
-    } catch (e) {
-      const reason = e instanceof ManifestError ? e.message : `patches/manifest.json could not be read: ${String(e)}`;
-      return { kind: "refused", reason };
     }
+    const parsed = parseSemver(opts.targetVersion);
+    if (!parsed) {
+      return { kind: "refused", reason: `Invalid Codex version format: ${opts.targetVersion}` };
+    }
+    targetSemver = parsed;
   }
 
   const located = upstreamFor(ctx, initial);

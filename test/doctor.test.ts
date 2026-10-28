@@ -497,7 +497,7 @@ describe("doctorReport", () => {
     });
     expect(get(lines, "codex_target")).toMatchObject({
       ok: null,
-      value: "0.155.1 available (active: 0.154.0; prebuilt live on GitHub; run cxstatusline install to update)",
+      value: "0.155.1 available (active: 0.154.0; prebuilt live on GitHub; run cxstatusline upgrade)",
     });
   });
 
@@ -534,7 +534,7 @@ describe("doctorReport", () => {
     });
   });
 
-  test("codex_target: reports supported with install update guidance when probe errors or times out", async () => {
+  test("codex_target: reports supported with upgrade guidance when probe errors or times out", async () => {
     const { env, root } = tmpEnv();
     const paths = resolvePaths(env);
     const c = bareCtx(env, paths, "0.154.0");
@@ -546,7 +546,7 @@ describe("doctorReport", () => {
     });
     expect(get(lines, "codex_target")).toMatchObject({
       ok: null,
-      value: "0.155.1 supported (active: 0.154.0; run cxstatusline install to update)",
+      value: "0.155.1 supported (active: 0.154.0; run cxstatusline upgrade)",
     });
   });
 });

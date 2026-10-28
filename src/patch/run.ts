@@ -11,7 +11,7 @@ import { compareSemver, parseSemver } from "../version";
 import { fetchPublishedPrebuiltVersions, preparePrebuilt } from "../distribution/prebuilt";
 import { promptUpdate, type UpdateAction, type UpdatePickerOptions } from "../ui/UpdatePicker";
 import { loadState, runAcquisition, type PatchOutcome } from "./acquire";
-import { ManifestError, loadManifest, resolvePatch, supportedCodexVersions, isCodexVersionSupported } from "./manifest";
+import { ManifestError, loadManifest, resolvePatch, supportedCodexVersions, isCodexVersionSupported, type Manifest } from "./manifest";
 import {
   renderInstallFailure,
   renderInstallHeader,
@@ -224,13 +224,29 @@ export async function runUpdate(
   opts: UpdateOptions = {},
   transport: TransportOptions = {},
 ): Promise<number> {
-  const manifest = loadManifest(ctx.patchesDir);
+  let manifest: Manifest | undefined;
+  if (opts.compile) {
+    try {
+      manifest = loadManifest(ctx.patchesDir);
+    } catch (e) {
+      const reason = e instanceof ManifestError ? e.message : `patches/manifest.json could not be read: ${String(e)}`;
+      ctx.say(`refused: ${reason}`);
+      return 1;
+    }
+  }
   const versions = opts.compile
-    ? supportedCodexVersions(manifest)
+    ? supportedCodexVersions(manifest!)
     : await (opts.fetchPrebuilts ?? fetchPublishedPrebuiltVersions)(transport.fetch);
-  const target = versions
-    .filter((version) => isCodexVersionSupported(manifest, version))
-    .sort((a, b) => compareSemver(parseSemver(b)!, parseSemver(a)!))[0];
+  const target = opts.compile
+    ? versions
+        .filter((version) => isCodexVersionSupported(manifest!, version))
+        .sort((a, b) => compareSemver(parseSemver(b)!, parseSemver(a)!))[0]
+    : versions
+        .filter((version) => {
+          const s = parseSemver(version);
+          return s !== null && s.pre === null;
+        })
+        .sort((a, b) => compareSemver(parseSemver(b)!, parseSemver(a)!))[0];
   if (!target) {
     ctx.say(opts.compile
       ? "No supported source patch is available. Update the cxstatusline package and retry."
@@ -265,7 +281,7 @@ export async function runUpdate(
         // Fall through to runInstall to let standard failure handling report errors.
       }
     } else if (opts.compile && record && record.provenance.source === "compiled") {
-      const patchRef = resolvePatch(manifest, targetSemver);
+      const patchRef = resolvePatch(manifest!, targetSemver);
       const currentPatch = record.provenance.patchVersion ?? 1;
       const targetPatch = patchRef?.patchVersion ?? 1;
       if (currentPatch >= targetPatch) {
@@ -276,7 +292,17 @@ export async function runUpdate(
   }
 
   if (opts.isTTY && !opts.force && !opts.compile && (!current || compareSemver(current, targetSemver) < 0)) {
-    const action = await (opts.promptUpdate ?? promptUpdate)({ latest: target, highestAvailable: target });
+    let canCompile = false;
+    try {
+      const m = loadManifest(ctx.patchesDir);
+      canCompile = isCodexVersionSupported(m, target);
+    } catch {
+      canCompile = false;
+    }
+    const updateOptions: UpdatePickerOptions = canCompile
+      ? { latest: target, highestAvailable: target }
+      : { latest: target, highestAvailable: target, canCompile: false };
+    const action = await (opts.promptUpdate ?? promptUpdate)(updateOptions);
     if (action === "cancel") {
       ctx.say("Update cancelled.");
       return 0;

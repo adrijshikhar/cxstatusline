@@ -2,11 +2,11 @@ import { expect, test } from "bun:test";
 import { PassThrough } from "node:stream";
 import { render } from "ink";
 import { UpdatePicker } from "../src/ui/UpdatePicker";
-import type { UpdateAction } from "../src/ui/UpdatePicker";
+import type { UpdateAction, UpdatePickerOptions } from "../src/ui/UpdatePicker";
 import { VersionPicker } from "../src/ui/VersionPicker";
 import type { PromptVersionSelection } from "../src/ui/prompt-version";
 
-function picker(compile = false, update?: { latest: string; highestAvailable?: string }) {
+function picker(compile = false, update?: UpdatePickerOptions) {
   const stdin = new PassThrough() as PassThrough & { isTTY: boolean; setRawMode: () => void; ref: () => void; unref: () => void };
   Object.assign(stdin, { isTTY: true, setRawMode() {}, ref() {}, unref() {} });
   const stdout = Object.assign(new PassThrough(), { columns: 80, rows: 24 });
@@ -122,6 +122,18 @@ test("update picker navigates to source and cancel choices", async () => {
     expect(ui.frame()).toContain("20 GiB");
     await ui.key("\r");
     expect(ui.result()).toBe("compile");
+    await ui.key("\x1b[B");
+    await ui.key("\r");
+    expect(ui.result()).toBe("cancel");
+  } finally { ui.cleanup(); }
+});
+
+test("update picker omits compile choice when canCompile is false", async () => {
+  const ui = picker(false, { latest: "0.999.0", highestAvailable: "0.999.0", canCompile: false });
+  try {
+    expect(ui.frame()).not.toContain("20 GiB");
+    expect(ui.frame()).not.toContain("Compile Codex");
+    expect(ui.frame()).toContain("Install prebuilt Codex 0.999.0");
     await ui.key("\x1b[B");
     await ui.key("\r");
     expect(ui.result()).toBe("cancel");

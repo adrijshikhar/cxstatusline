@@ -209,6 +209,13 @@ describe("command dispatch", () => {
     expect(t.out.join("")).toMatch(/Notice: 'cxstatusline upgrade' is now used to upgrade the patched Codex pair/);
     expect(t.out.join("")).toMatch(/rustup is not on PATH/);
   });
+  test("`update` with --codex-version prints notice and forwards to install", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    expect(await main(["update", "--codex-version", "0.152.1"], { ...t.io, env: d.env }, d.deps)).toBe(1);
+    expect(t.out.join("")).toMatch(/Notice: 'cxstatusline install --codex-version' is now used to install a specific Codex version/);
+    expect(t.out.join("")).toMatch(/staging a prebuilt Codex pair needs 2 GiB/);
+  });
   test("`update` with unknown flags exits 2 with usage", async () => {
     const t = io("");
     const d = dispatchDeps();
@@ -368,6 +375,39 @@ describe("command dispatch", () => {
       promptVersion,
     });
     expect(pickedDefault).toBe("0.156.0");
+  });
+  test("interactive install defaults to prebuilt version newer than local manifest ranges", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    const ctx = d.deps.context!(d.env, { say: () => {}, log: () => {} });
+    writeFileSync(join(ctx.patchesDir, "manifest.json"), JSON.stringify({
+      version: 1,
+      tag_prefix: "rust-v",
+      candidate: "0.156.0",
+      patches: [
+        { min: "0.152.1", max: "0.152.1", file: "p.patch" },
+        { min: "0.156.0", max: "0.156.0", file: "p.patch" },
+      ],
+    }));
+    const mockReleases = [
+      { tag_name: "codex-v0.999.0", draft: false },
+      { tag_name: "codex-v0.156.0", draft: false },
+    ];
+    const mockFetch = async () => new Response(JSON.stringify(mockReleases), { status: 200 });
+    let pickedDefault: string | undefined;
+    let offeredVersions: readonly string[] | undefined;
+    const promptVersion = async (opts: any) => {
+      pickedDefault = opts.defaultVersion;
+      offeredVersions = opts.supportedVersions;
+      return { version: opts.defaultVersion, compile: false };
+    };
+    await main(["install"], { ...t.io, isTTY: true, env: d.env }, {
+      ...d.deps,
+      transport: { fetch: mockFetch as any },
+      promptVersion,
+    });
+    expect(pickedDefault).toBe("0.999.0");
+    expect(offeredVersions).toContain("0.999.0");
   });
   test("interactive install --compile defaults to the latest supported version", async () => {
     const t = io("");

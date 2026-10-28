@@ -178,13 +178,19 @@ async function installCommand(argv: readonly string[], io: MainIo, deps: MainDep
         const defaultVersion = compile
           ? supported[0]!
           : (prebuiltVersions && prebuiltVersions.length > 0
-              ? (supported.find((v) => prebuiltVersions.includes(v)) ?? supported[0]!)
+              ? prebuiltVersions[0]!
               : supported[0]!);
 
         if (io.isTTY === true && !yes) {
           const prompter = deps.promptVersion ?? promptCodexVersion;
+          const availableVersions = Array.from(new Set([...(prebuiltVersions ?? []), ...supported])).sort((a, b) => {
+            const semA = parseSemver(a);
+            const semB = parseSemver(b);
+            if (!semA || !semB) return b.localeCompare(a);
+            return compareSemver(semB, semA);
+          });
           const result = await prompter({
-            supportedVersions: supported,
+            supportedVersions: availableVersions,
             prebuiltVersions,
             defaultVersion,
             compile,
@@ -215,8 +221,12 @@ async function installCommand(argv: readonly string[], io: MainIo, deps: MainDep
  */
 async function updateCommand(argv: readonly string[], io: MainIo, deps: MainDeps): Promise<number> {
   const flags = argv.slice(1);
+  if (flags.some((f) => f.startsWith("--codex-version"))) {
+    io.stdout("Notice: 'cxstatusline install --codex-version' is now used to install a specific Codex version.\nForwarding to 'install'...\n\n");
+    return installCommand(["install", ...flags], io, deps);
+  }
   const codexFlags = new Set(["--compile", "--force", "-y", "--yes"]);
-  if (flags.some((f) => codexFlags.has(f) || f.startsWith("--codex-version"))) {
+  if (flags.some((f) => codexFlags.has(f))) {
     io.stdout("Notice: 'cxstatusline upgrade' is now used to upgrade the patched Codex pair.\nForwarding to 'upgrade'...\n\n");
     return upgradeCommand(argv, io, deps);
   }
