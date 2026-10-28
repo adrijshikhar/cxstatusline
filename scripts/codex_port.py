@@ -68,9 +68,9 @@ def run_cmd(cmd: List[str], cwd: Optional[Path] = None, check: bool = True, capt
 
 
 def fetch_upstream_releases(repo: str) -> List[Dict[str, Any]]:
-    # First try gh CLI on releases (single page of 100 is plenty to cover active + recent baselines)
+    # First try gh CLI on releases (single page of 30 is plenty to cover active + recent baselines)
     if shutil.which("gh"):
-        res = run_cmd(["gh", "api", f"repos/{repo}/releases?per_page=100"], check=False)
+        res = run_cmd(["gh", "api", f"repos/{repo}/releases?per_page=30"], check=False)
         if res.returncode == 0 and res.stdout.strip():
             try:
                 data = json.loads(res.stdout)
@@ -108,7 +108,7 @@ def fetch_upstream_releases(repo: str) -> List[Dict[str, Any]]:
     if token:
         headers["Authorization"] = f"Bearer {token}"
 
-    url = f"https://api.github.com/repos/{repo}/releases?per_page=100"
+    url = f"https://api.github.com/repos/{repo}/releases?per_page=30"
     req = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
