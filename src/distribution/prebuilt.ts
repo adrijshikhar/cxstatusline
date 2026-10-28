@@ -202,6 +202,13 @@ export async function preparePrebuilt(
   }
 }
 
+export const PREBUILT_PAGE_SIZE = 30;
+
+export interface FetchPrebuiltsOptions {
+  readonly maxRetries?: number;
+  readonly retryDelayMs?: number;
+}
+
 /**
  * Queries GitHub Releases for published prebuilt releases (tag `codex-v<semver>`).
  * Returns discrete Codex versions sorted descending by semver.
@@ -210,8 +217,11 @@ export async function preparePrebuilt(
 export async function fetchPublishedPrebuiltVersions(
   fetchFn?: FetchLike,
   repo: string = "adrijshikhar/cxstatusline",
+  options?: FetchPrebuiltsOptions,
 ): Promise<string[]> {
   const fetcher = fetchFn ?? (globalThis.fetch as unknown as FetchLike);
+  const maxRetries = options?.maxRetries ?? 3;
+  const retryDelayMs = options?.retryDelayMs ?? 1000;
   try {
     const headers: Record<string, string> = {
       accept: "application/vnd.github+json",
@@ -222,15 +232,37 @@ export async function fetchPublishedPrebuiltVersions(
     }
     const data: unknown[] = [];
     for (let page = 1; ; page += 1) {
-      const res = await fetcher(`https://api.github.com/repos/${repo}/releases?per_page=100&page=${page}`, {
-        headers,
-        signal: AbortSignal.timeout(5000),
-      });
-      if (!res.ok) return [];
-      const result = (await res.json()) as unknown;
-      if (!Array.isArray(result)) return [];
-      data.push(...result);
-      if (result.length < 100) break;
+      let pageData: unknown[] | null = null;
+      for (let attempt = 0; attempt < maxRetries; attempt += 1) {
+        try {
+          const res = await fetcher(`https://api.github.com/repos/${repo}/releases?per_page=${PREBUILT_PAGE_SIZE}&page=${page}`, {
+            headers,
+            signal: AbortSignal.timeout(5000),
+          });
+          if (res.ok) {
+            const result = (await res.json()) as unknown;
+            if (Array.isArray(result)) {
+              pageData = result;
+              break;
+            }
+            return [];
+          }
+          if (res.status >= 500 && attempt < maxRetries - 1) {
+            if (retryDelayMs > 0) await new Promise((r) => setTimeout(r, (attempt + 1) * retryDelayMs));
+            continue;
+          }
+          return [];
+        } catch {
+          if (attempt < maxRetries - 1) {
+            if (retryDelayMs > 0) await new Promise((r) => setTimeout(r, (attempt + 1) * retryDelayMs));
+            continue;
+          }
+          return [];
+        }
+      }
+      if (!pageData) return [];
+      data.push(...pageData);
+      if (pageData.length < PREBUILT_PAGE_SIZE) break;
     }
     const versions = new Set<string>();
     for (const item of data) {
