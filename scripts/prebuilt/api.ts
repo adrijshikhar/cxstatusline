@@ -13,6 +13,13 @@ export {
   type Detection,
 } from "./detect";
 export {
+  fetchUpstreamReleases,
+  UpstreamDiscoveryError,
+  type FetchUpstreamOptions,
+  type UpstreamReleaseEntry,
+  type UpstreamRunners,
+} from "./upstream";
+export {
   buildMatrix,
   resolveSource,
   unionReleasePlatforms,
