@@ -28,20 +28,7 @@ import { execGh, type GhRunner } from "./gh";
 import { archiveFilename, sha256File } from "./pack";
 import { commitPatches, workingTreePatches, type PatchTree } from "./patch-tree";
 import { checkExistingRelease, type ReleaseState } from "./release";
-
-const RELEASES_URL = "https://api.github.com/repos/openai/codex/releases?per_page=100";
-
-async function fetchUpstreamReleases(): Promise<unknown> {
-  const headers: Record<string, string> = {
-    accept: "application/vnd.github+json",
-    "user-agent": "cxstatusline-prebuilt",
-  };
-  const token = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN;
-  if (token) headers.authorization = `Bearer ${token}`;
-  const response = await fetch(RELEASES_URL, { headers, signal: AbortSignal.timeout(30_000) });
-  if (!response.ok) throw new Error(`upstream release listing failed with HTTP ${response.status}`);
-  return response.json();
-}
+import { fetchUpstreamReleases } from "./upstream";
 
 /** Where a prebuilt run's CX source comes from. */
 export interface SourceSelection {
@@ -146,7 +133,7 @@ async function resolveCodexVersion(flags: Record<string, string>): Promise<{ ver
   if (pinned) return { version: requested!, pinned: true };
   const releases = flags["releases-file"] !== undefined
     ? (JSON.parse(readFileSync(flags["releases-file"], "utf8")) as unknown)
-    : await fetchUpstreamReleases();
+    : await fetchUpstreamReleases(process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN);
   return { version: selectStableVersion(releases), pinned: false };
 }
 

@@ -14,6 +14,7 @@ import { compareSemver, parseSemver } from "../src/version";
 import { selectStableVersion } from "./prebuilt/detect";
 import { execGh, ghJson, ghText, type GhRunner } from "./prebuilt/gh";
 import { redact } from "./prebuilt/redact";
+import { fetchUpstreamReleases } from "./prebuilt/upstream";
 
 export interface GitResult {
   readonly status: number;
@@ -137,29 +138,15 @@ export async function defaultFetchReleases(
   gh?: GhRunner,
   retryOptions?: { maxRetries?: number; retryDelayMs?: number },
 ): Promise<string> {
-  const headers: Record<string, string> = {
-    accept: "application/vnd.github+json",
-    "user-agent": "cxstatusline-upstream-watch",
-  };
-  if (token) headers.authorization = `Bearer ${token}`;
-
-  let releases: unknown;
-  try {
-    const res = await fetchWithRetry(
-      "https://api.github.com/repos/openai/codex/releases?per_page=100",
-      headers,
-      retryOptions?.maxRetries ?? 3,
-      retryOptions?.retryDelayMs ?? 1000,
-    );
-    releases = await res.json();
-  } catch (fetchErr) {
-    const runner = gh ?? execGh;
-    try {
-      releases = ghJson<unknown>(runner, ["api", "repos/openai/codex/releases?per_page=100"]);
-    } catch {
-      throw fetchErr;
-    }
-  }
+  const releases = await fetchUpstreamReleases(
+    token,
+    {
+      perPage: 30,
+      maxRetries: retryOptions?.maxRetries,
+      retryDelayMs: retryOptions?.retryDelayMs,
+    },
+    gh ? { ghRunner: gh } : undefined,
+  );
   return selectStableVersion(releases);
 }
 
