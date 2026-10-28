@@ -209,6 +209,13 @@ describe("command dispatch", () => {
     expect(t.out.join("")).toMatch(/Notice: 'cxstatusline upgrade' is now used to upgrade the patched Codex pair/);
     expect(t.out.join("")).toMatch(/rustup is not on PATH/);
   });
+  test("`update` with --codex-version prints notice and forwards to install", async () => {
+    const t = io("");
+    const d = dispatchDeps();
+    expect(await main(["update", "--codex-version", "0.152.1"], { ...t.io, env: d.env }, d.deps)).toBe(1);
+    expect(t.out.join("")).toMatch(/Notice: 'cxstatusline install --codex-version' is now used to install a specific Codex version/);
+    expect(t.out.join("")).toMatch(/staging a prebuilt Codex pair needs 2 GiB/);
+  });
   test("`update` with unknown flags exits 2 with usage", async () => {
     const t = io("");
     const d = dispatchDeps();

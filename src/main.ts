@@ -215,8 +215,12 @@ async function installCommand(argv: readonly string[], io: MainIo, deps: MainDep
  */
 async function updateCommand(argv: readonly string[], io: MainIo, deps: MainDeps): Promise<number> {
   const flags = argv.slice(1);
+  if (flags.some((f) => f.startsWith("--codex-version"))) {
+    io.stdout("Notice: 'cxstatusline install --codex-version' is now used to install a specific Codex version.\nForwarding to 'install'...\n\n");
+    return installCommand(["install", ...flags], io, deps);
+  }
   const codexFlags = new Set(["--compile", "--force", "-y", "--yes"]);
-  if (flags.some((f) => codexFlags.has(f) || f.startsWith("--codex-version"))) {
+  if (flags.some((f) => codexFlags.has(f))) {
     io.stdout("Notice: 'cxstatusline upgrade' is now used to upgrade the patched Codex pair.\nForwarding to 'upgrade'...\n\n");
     return upgradeCommand(argv, io, deps);
   }
