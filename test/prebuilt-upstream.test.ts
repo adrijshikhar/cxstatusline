@@ -38,14 +38,14 @@ describe("fetchUpstreamReleases", () => {
       expect(authHeader).toBe("Bearer test-token-123");
     });
 
-    test("retries on 504 Gateway Timeout with exponential backoff and succeeds", async () => {
+    test("retries on 504 Gateway Timeout with backoff delays of 1000ms, 2000ms, 3000ms (4 attempts total)", async () => {
       let attempts = 0;
       const delays: number[] = [];
 
       const runners: UpstreamRunners = {
         fetchFn: (async () => {
           attempts++;
-          if (attempts < 3) {
+          if (attempts <= 3) {
             return new Response("Gateway Timeout", { status: 504, statusText: "Gateway Timeout" });
           }
           return new Response(JSON.stringify([{ tag_name: "rust-v0.165.0" }]), { status: 200 });
@@ -57,8 +57,8 @@ describe("fetchUpstreamReleases", () => {
 
       const result = await fetchUpstreamReleases(undefined, { maxRetries: 3, retryDelayMs: 1000 }, runners);
 
-      expect(attempts).toBe(3);
-      expect(delays).toEqual([1000, 2000]);
+      expect(attempts).toBe(4);
+      expect(delays).toEqual([1000, 2000, 3000]);
       expect(result).toEqual([{ tag_name: "rust-v0.165.0" }]);
     });
 
@@ -149,13 +149,16 @@ describe("fetchUpstreamReleases", () => {
     test("falls back to gh api when Layer 1 exhausts all retries", async () => {
       let fetchAttempts = 0;
       let ghCalledWith: string[] = [];
+      const delays: number[] = [];
 
       const runners: UpstreamRunners = {
         fetchFn: (async () => {
           fetchAttempts++;
           return new Response("Gateway Timeout", { status: 504, statusText: "Gateway Timeout" });
         }) as unknown as typeof fetch,
-        sleepFn: async () => {},
+        sleepFn: async (ms) => {
+          delays.push(ms);
+        },
         ghRunner: (args) => {
           ghCalledWith = args;
           return {
@@ -171,9 +174,10 @@ describe("fetchUpstreamReleases", () => {
         },
       };
 
-      const result = await fetchUpstreamReleases(undefined, { maxRetries: 3, perPage: 30 }, runners);
+      const result = await fetchUpstreamReleases(undefined, { maxRetries: 3, retryDelayMs: 1000, perPage: 30 }, runners);
 
       expect(fetchAttempts).toBe(4); // 1 initial + 3 retries
+      expect(delays).toEqual([1000, 2000, 3000]);
       expect(ghCalledWith).toEqual(["api", "repos/openai/codex/releases?per_page=30"]);
       expect(result).toEqual([{ tag_name: "rust-v0.165.0", draft: false, prerelease: false }]);
     });

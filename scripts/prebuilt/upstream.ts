@@ -102,7 +102,7 @@ export async function fetchUpstreamReleases(
       if (res.status >= 500 || res.status === 429) {
         layer1Error = new Error(`upstream HTTP ${res.status}: ${res.statusText || "Request failed"}`);
         if (retry < maxRetries) {
-          const delay = retryDelayMs * (2 ** retry);
+          const delay = (retry + 1) * retryDelayMs;
           await sleep(delay);
           continue;
         }
@@ -114,7 +114,7 @@ export async function fetchUpstreamReleases(
     } catch (err) {
       layer1Error = err instanceof Error ? err : new Error(String(err));
       if (retry < maxRetries) {
-        const delay = retryDelayMs * (2 ** retry);
+        const delay = (retry + 1) * retryDelayMs;
         await sleep(delay);
         continue;
       }
