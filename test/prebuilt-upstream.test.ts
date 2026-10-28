@@ -340,6 +340,27 @@ describe("fetchUpstreamReleases", () => {
       expect(discoveryErr.message).toContain("fatal: could not read Username");
       expect(discoveryErr.errors).toHaveLength(3);
     });
+    test("redacts sensitive tokens in subprocess stderr output", async () => {
+      const runners: UpstreamRunners = {
+        fetchFn: (async () => {
+          throw new Error("fetch down");
+        }) as unknown as typeof fetch,
+        sleepFn: async () => {},
+        ghRunner: () => ({ status: 1, stdout: "", stderr: "error with token ghp_1234567890abcdef12345678" }),
+        execRunner: () => ({ status: 1, stdout: "", stderr: "error with token ghp_0987654321fedcba09876543" }),
+      };
+
+      try {
+        await fetchUpstreamReleases(undefined, { maxRetries: 0 }, runners);
+        expect.unreachable("should have thrown UpstreamDiscoveryError");
+      } catch (err) {
+        expect(err).toBeInstanceOf(UpstreamDiscoveryError);
+        const e = err as UpstreamDiscoveryError;
+        expect(e.message).not.toContain("ghp_1234567890abcdef12345678");
+        expect(e.message).not.toContain("ghp_0987654321fedcba09876543");
+        expect(e.message).toContain("[redacted-token]");
+      }
+    });
   });
 
   describe("Integration with selectStableVersion", () => {

@@ -7,6 +7,7 @@
  * 3. Native `git ls-remote --tags` fallback if both REST endpoints fail.
  */
 import { spawnSync } from "node:child_process";
+import { redact } from "./redact";
 
 export interface UpstreamReleaseEntry {
   readonly tag_name: string;
@@ -59,12 +60,21 @@ export async function fetchUpstreamReleases(
   const fetchFn = runners?.fetchFn ?? globalThis.fetch;
 
   const defaultExecRunner = (cmd: string, args: string[]) => {
-    const env = effectiveToken ? { ...process.env, GH_TOKEN: effectiveToken } : process.env;
-    const r = spawnSync(cmd, args, { encoding: "utf8", env });
+    const env = {
+      ...process.env,
+      ...(effectiveToken ? { GH_TOKEN: effectiveToken } : {}),
+      GIT_TERMINAL_PROMPT: "0",
+    };
+    const r = spawnSync(cmd, args, {
+      encoding: "utf8",
+      env,
+      timeout: FETCH_TIMEOUT_MS,
+      maxBuffer: 16 * 1024 * 1024,
+    });
     if (r.error) {
-      return { status: 1, stdout: "", stderr: r.error.message };
+      return { status: 1, stdout: "", stderr: redact(r.error.message) };
     }
-    return { status: r.status ?? 1, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+    return { status: r.status ?? 1, stdout: r.stdout ?? "", stderr: redact(r.stderr ?? "") };
   };
 
   const exec = runners?.execRunner ?? defaultExecRunner;
@@ -127,7 +137,7 @@ export async function fetchUpstreamReleases(
     const ghResult = gh(["api", `repos/openai/codex/releases?per_page=${perPage}`]);
     if (ghResult.status !== 0) {
       layer2Error = new Error(
-        `gh api failed (exit ${ghResult.status}): ${ghResult.stderr.trim() || ghResult.stdout.trim() || "unknown error"}`
+        `gh api failed (exit ${ghResult.status}): ${redact(ghResult.stderr.trim() || ghResult.stdout.trim() || "unknown error")}`
       );
     } else {
       const data = JSON.parse(ghResult.stdout);
@@ -147,7 +157,7 @@ export async function fetchUpstreamReleases(
     const gitResult = exec("git", ["ls-remote", "--tags", gitUrl, "rust-v*"]);
     if (gitResult.status !== 0) {
       layer3Error = new Error(
-        `git ls-remote failed (exit ${gitResult.status}): ${gitResult.stderr.trim() || gitResult.stdout.trim() || "unknown error"}`
+        `git ls-remote failed (exit ${gitResult.status}): ${redact(gitResult.stderr.trim() || gitResult.stdout.trim() || "unknown error")}`
       );
     } else {
       const entries: UpstreamReleaseEntry[] = [];
