@@ -170,7 +170,7 @@ async function codexTargetLine(
   if (remote?.available === true) {
     return line(
       "codex_target",
-      `${target} available (active: ${effectivePatchedFrom}; prebuilt live on GitHub; run cxstatusline install to update)`,
+      `${target} available (active: ${effectivePatchedFrom}; prebuilt live on GitHub; run cxstatusline upgrade)`,
       null,
     );
   }
@@ -214,7 +214,7 @@ async function codexTargetLine(
   }
   return line(
     "codex_target",
-    `${target} supported (active: ${effectivePatchedFrom}; run cxstatusline install to update)`,
+    `${target} supported (active: ${effectivePatchedFrom}; run cxstatusline upgrade)`,
     null,
   );
 }
