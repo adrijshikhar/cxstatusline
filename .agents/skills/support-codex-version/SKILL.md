@@ -37,7 +37,7 @@ When NOT to use:
 
 Per repository policy in `AGENTS.md`:
 - **Baseline Releases**: The `.0` baseline release of every Codex minor line (e.g., `0.161.0`, `0.162.0`, `0.163.0`, `0.164.0`) MUST be supported.
-- **Active Series Coverage**: In the newest/active minor series (currently `0.164.x`), ALL stable releases and latest patch releases MUST be supported.
+- **Active Series Coverage**: In the newest/active minor series (currently `0.166.x`), ALL stable releases and latest patch releases MUST be supported.
 - **Excluded Intermediate Patches**: Intermediate patch releases in older minor series (e.g. `0.162.1`, `0.161.1`) are intentionally omitted once a newer minor series is released.
 
 ---

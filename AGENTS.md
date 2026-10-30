@@ -32,5 +32,5 @@
 ## Codex Version Support Policy
 
 - **Supported Baseline Versions**: Support the baseline `.0` release of each Codex minor line (e.g., `0.161.0`, `0.162.0`, `0.163.0`, `0.164.0`).
-- **Active Series Coverage**: In the newest/active minor series (currently `0.165.x`), support all stable releases including the latest patch release.
+- **Active Series Coverage**: In the newest/active minor series (currently `0.166.x`), support all stable releases including the latest patch release.
 - **Skipping Intermediate Patch Releases**: Intermediate patch releases in older minor series (such as `0.162.1` or `0.161.1`) are intentionally skipped and not ported once a newer minor series is released.
