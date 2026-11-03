@@ -32,6 +32,7 @@ export const WidgetItemSchema = z.object({
 
 export type WidgetItem = z.infer<typeof WidgetItemSchema>;
 export type WidgetType = z.infer<typeof WidgetTypeSchema>;
+export type WidgetItemType = WidgetType;
 
 export interface WidgetEditorDisplay {
   displayText: string;

@@ -65,6 +65,7 @@ export function App({ initialSettings, settingsPath, readImportFile = readImport
   const [originalSettings, setOriginalSettings] = useState<Settings | null>(() => initialSettings ? clampSettings(initialSettings) : null);
   const [screen, setScreen] = useState<AppScreen>("main");
   const [selectedLine, setSelectedLine] = useState(0);
+  const [previewWidgets, setPreviewWidgets] = useState<WidgetItem[] | null>(null);
   const [colorLine, setColorLine] = useState<number | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
@@ -74,6 +75,17 @@ export function App({ initialSettings, settingsPath, readImportFile = readImport
   const [terminalWidth, setTerminalWidth] = useState(() => tty.columns || 80);
   const importGeneration = useRef(0);
   const importApplyPending = useRef(false);
+
+  // Label drafts and the picker's highlighted widget affect only the preview until Enter accepts them.
+  const previewLines = settings && screen === "items" && previewWidgets
+    ? settings.lines.map((line, index) => index === selectedLine ? previewWidgets : line)
+    : settings?.lines;
+
+  const previewSettings = useMemo(() => {
+    if (!settings) return null;
+    if (!previewLines || previewLines === settings.lines) return settings;
+    return { ...settings, lines: previewLines };
+  }, [settings, previewLines]);
 
   useEffect(() => {
     const updateWidth = (): void => setTerminalWidth(tty.columns || 80);
@@ -254,7 +266,7 @@ export function App({ initialSettings, settingsPath, readImportFile = readImport
       {flash && <Text color="yellow">{flash}</Text>}
       <Box marginTop={1} flexDirection="column">
         <Text dimColor>&gt; Preview</Text>
-        <StatusLinePreview settings={settings} terminalWidth={terminalWidth} />
+        <StatusLinePreview settings={previewSettings ?? settings} terminalWidth={terminalWidth} />
       </Box>
       <Box marginTop={1}>
         {screen === "main" && <MainMenu hasChanges={hasChanges} onSelect={(value) => handleMainMenu(value)} />}
@@ -269,6 +281,7 @@ export function App({ initialSettings, settingsPath, readImportFile = readImport
         {screen === "items" && <ItemsEditor
           widgets={settings.lines[selectedLine] ?? []}
           onUpdate={(widgets) => updateLine(selectedLine, widgets)}
+          onPreviewChange={setPreviewWidgets}
           onBack={() => setScreen("lines")}
           lineNumber={selectedLine + 1}
           settings={settings}
