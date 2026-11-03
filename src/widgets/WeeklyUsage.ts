@@ -94,7 +94,12 @@ export class WeeklyUsageWidget implements Widget {
             return formatRawOrLabeledValue(item, 'Weekly: ', formatPercent(renderedPercent, format));
         }
 
-        const data = context.usageData ?? {};
+        const sessionLimit = (context.data as any)?.session?.rateLimits?.weekly;
+        const codexUsage = (context.data as any)?.usage?.weekly;
+        const data: NonNullable<RenderContext['usageData']> = context.usageData ?? {
+            weeklyUsage: sessionLimit?.usedPercentage ?? (codexUsage?.used !== undefined ? codexUsage.used * 100 : undefined),
+            weeklyResetAt: sessionLimit?.resetsAt ?? codexUsage?.resets_at
+        };
         if (data.weeklyUsage === undefined) {
             if (data.error) {
                 return isHideStateEnabled(item, USAGE_NO_DATA_HIDEABLE_STATE)
@@ -111,8 +116,10 @@ export class WeeklyUsageWidget implements Widget {
                 return undefined;
             }
 
+            // A remaining-percent bar shrinks as the window runs out, so its cursor
+            // marks the time left, keeping the cursor and the fill on one scale.
             const window = resolveWeeklyUsageWindow(data, context.now?.getTime());
-            return window ? { cursorPercent: window.elapsedPercent } : undefined;
+            return window ? { cursorPercent: inverted ? window.remainingPercent : window.elapsedPercent } : undefined;
         };
 
         if (isUsageProgressMode(displayMode)) {
