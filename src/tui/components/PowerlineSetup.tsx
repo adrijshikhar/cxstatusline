@@ -98,7 +98,7 @@ export function PowerlineSetup({ settings, onUpdate, onBack }: PowerlineSetupPro
     else if (shortcut.toLowerCase() === "t") {
       if (powerline.enabled) onUpdate({ ...settings, powerline: { ...powerline, enabled: false } });
       else if (manualSeparators) setConfirmEnable(true);
-      else onUpdate(buildEnabledPowerlineSettings(settings, false));
+      else onUpdate(buildEnabledPowerlineSettings(settings));
     } else if (shortcut.toLowerCase() === "a" && powerline.enabled) {
       onUpdate({ ...settings, powerline: { ...powerline, autoAlign: !powerline.autoAlign } });
     } else if (shortcut.toLowerCase() === "c" && powerline.enabled) {
@@ -113,9 +113,10 @@ export function PowerlineSetup({ settings, onUpdate, onBack }: PowerlineSetupPro
   if (confirmEnable) {
     return (
       <Box flexDirection="column">
-        <Text color="yellow">Enabling Powerline removes manual separators from the status lines.</Text>
+        <Text color="yellow">Powerline mode uses its own separator system.</Text>
+        <Text dimColor>Your existing manual separators will stay in this configuration but won't be shown while Powerline is enabled.</Text>
         <Text>Continue?</Text>
-        <ConfirmDialog inline onConfirm={() => { onUpdate(buildEnabledPowerlineSettings(settings, true)); setConfirmEnable(false); }} onCancel={() => setConfirmEnable(false)} />
+        <ConfirmDialog inline onConfirm={() => { onUpdate(buildEnabledPowerlineSettings(settings)); setConfirmEnable(false); }} onCancel={() => setConfirmEnable(false)} />
       </Box>
     );
   }
