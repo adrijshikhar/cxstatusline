@@ -10,6 +10,7 @@ import {
     buildIdeFileUrl,
     renderOsc8Link
 } from "../../src/utils/hyperlink";
+import { renderStatusLines } from "../../src/utils/renderer";
 import { sanitizeTerminalText } from "../../src/utils/terminal-sanitize";
 
 const widget = new CurrentWorkingDirWidget();
@@ -131,6 +132,19 @@ describe("CurrentWorkingDirWidget links", () => {
             expect(widget.render(item, createContext("C:"), DEFAULT_SETTINGS)).toBe("C:");
         });
 
+        it("renders clickable OSC 8 hyperlink cleanly through renderStatusLines without stripping escape codes", () => {
+            const item = createItem({ linkTo: "file" });
+            const settings = {
+                ...DEFAULT_SETTINGS,
+                lines: [[item]]
+            };
+            const rendered = renderStatusLines(settings, createContext("/Users/example/project"));
+            expect(rendered[0]).toContain("\x1b]8;;file:///Users/example/project\x1b\\");
+            expect(rendered[0]).toContain("\x1b]8;;\x1b\\");
+            // Must not have stripped \x1b into naked ]8;;
+            expect(rendered[0]).not.toMatch(/[^\x1b]\]8;;/);
+        });
+
         it("does not create a link for an unknown or inapplicable mode", () => {
             const unknownMode = createItem({ linkTo: "browser" }, true);
             const ideUnc = createItem({ linkTo: "vscode" }, true);
@@ -170,7 +184,7 @@ describe("CurrentWorkingDirWidget links", () => {
 
             expect(widget.render(item, createContext(path), DEFAULT_SETTINGS)).toBe(
                 renderOsc8Link(
-                    buildIdeFileUrl(path, "cursor"),
+                    buildIdeFileUrl(path, "cursor")!,
                     "/Volumes/E/中/n/final"
                 )
             );

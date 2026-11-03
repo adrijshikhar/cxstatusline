@@ -15,6 +15,7 @@ import { shouldInsertInput } from '../../utils/input-guards';
 
 import { removeMetadataKeys } from './metadata';
 import { getGraphemes } from './text-cursor';
+import { BlinkingCursor } from './BlinkingCursor';
 
 export const SYMBOL_OVERRIDE_ACTION = 'edit-symbol-override';
 
@@ -146,10 +147,10 @@ const SymbolSlotsEditor: React.FC<WidgetEditorProps & { slots: SymbolSlot[] }> =
                             <Text color={isSelected ? 'green' : undefined}>
                                 {`${labelPadding}${slot.label}: `}
                             </Text>
-                            {value ? (
-                                <Text inverse>{value}</Text>
+                            {isSelected ? (
+                                <BlinkingCursor inverse dimColor={!value}>{value || '(none)'}</BlinkingCursor>
                             ) : (
-                                <Text inverse dimColor>(none)</Text>
+                                <Text inverse dimColor={!value}>{value || '(none)'}</Text>
                             )}
                             <Text dimColor>{` (default: ${slot.defaultSymbol})`}</Text>
                         </Box>

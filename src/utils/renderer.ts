@@ -41,6 +41,11 @@ import { sanitizeTerminalText } from './terminal-sanitize';
 const WIDGET_CONTROL_CHARS = /[\u0000-\u001F\u007F-\u009F]/g;
 
 function sanitizeRawText(text: string): string {
+    if (text.includes('\x1b]8;')) {
+        return text.replace(/(?:\x1b\]8;[^\x1b]*\x1b\\)|([\u0000-\u001F\u007F-\u009F])/g, (match, control) => {
+            return control ? '' : match;
+        });
+    }
     return text.replace(WIDGET_CONTROL_CHARS, '');
 }
 

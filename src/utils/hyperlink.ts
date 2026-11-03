@@ -106,22 +106,38 @@ export function buildFileUrl(filePath: string): string | null {
     }
 }
 
-export function buildIdeFileUrl(filePath: string, ideLinkMode: IdeLinkMode): string {
+export function buildIdeFileUrl(filePath: string, ideLinkMode: IdeLinkMode): string | null {
+    if (!filePath) {
+        return null;
+    }
+
     const isUncPath = /^\\\\[^\\]/.test(filePath) || /^\/\/[^/]/.test(filePath);
     const isWindowsDrivePath = /^[A-Za-z]:[\\/]/.test(filePath);
-    // Backslashes are separators only in Windows paths; POSIX filenames need %5C.
-    const normalizedPath = isUncPath || isWindowsDrivePath ? normalizeFilePath(filePath) : filePath;
-    const uncMatch = /^\/\/([^/]+)(\/.*)?$/.exec(normalizedPath);
-    if (uncMatch?.[1]) {
-        const encodedPath = encodeFilePathForUri(uncMatch[2] ?? '/');
-        return `${ideLinkMode}://file//${uncMatch[1]}${encodedPath}`;
+    if (!isUncPath && !isWindowsDrivePath && !filePath.startsWith('/')) {
+        return null;
     }
 
-    const driveMatch = /^([A-Za-z]:)(\/.*)?$/.exec(normalizedPath);
-    if (driveMatch?.[1]) {
-        const encodedPath = encodeFilePathForUri(driveMatch[2] ?? '/');
-        return `${ideLinkMode}://file/${driveMatch[1]}${encodedPath}`;
-    }
+    try {
+        // Backslashes are separators only in Windows paths; POSIX filenames need %5C.
+        const normalizedPath = isUncPath || isWindowsDrivePath ? normalizeFilePath(filePath) : filePath;
+        const uncMatch = /^\/\/([^/]+)(\/.*)?$/.exec(normalizedPath);
+        if (uncMatch?.[1]) {
+            const host = encodeUncHost(uncMatch[1]);
+            if (!host) {
+                return null;
+            }
+            const encodedPath = encodeFilePathForUri(uncMatch[2] ?? '/');
+            return `${ideLinkMode}://file//${host}${encodedPath}`;
+        }
 
-    return `${ideLinkMode}://file${encodeFilePathForUri(normalizedPath)}`;
+        const driveMatch = /^([A-Za-z]:)(\/.*)?$/.exec(normalizedPath);
+        if (driveMatch?.[1]) {
+            const encodedPath = encodeFilePathForUri(driveMatch[2] ?? '/');
+            return `${ideLinkMode}://file/${driveMatch[1]}${encodedPath}`;
+        }
+
+        return `${ideLinkMode}://file${encodeFilePathForUri(normalizedPath)}`;
+    } catch {
+        return null;
+    }
 }

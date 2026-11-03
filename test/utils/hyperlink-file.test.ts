@@ -26,6 +26,15 @@ describe("buildIdeFileUrl", () => {
     ])("encodes $label in IDE link path segments", ({ path, expected }) => {
         expect(buildIdeFileUrl(path, "cursor")).toBe(expected);
     });
+
+    it("returns null for relative paths, invalid UNC authorities, and malformed surrogates", () => {
+        expect(buildIdeFileUrl("my-project", "vscode")).toBeNull();
+        expect(buildIdeFileUrl("", "vscode")).toBeNull();
+        expect(buildIdeFileUrl("\\\\server#frag\\share", "vscode")).toBeNull();
+        expect(buildIdeFileUrl("\\\\user:pass@host\\share", "vscode")).toBeNull();
+        expect(buildIdeFileUrl("\\\\host with spaces\\share", "vscode")).toBeNull();
+        expect(buildIdeFileUrl("/tmp/\uD800", "vscode")).toBeNull();
+    });
 });
 
 describe("buildFileUrl", () => {

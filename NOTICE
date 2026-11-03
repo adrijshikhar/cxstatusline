@@ -1,6 +1,6 @@
 cxstatusline
 
-Portions of src/utils/{ansi,colors,executable-path,git-hardening,gradient,hyperlink,jj,no-proxy,powerline-settings,powerline-theme-index,renderer,separator-index,terminal,terminal-sanitize,windows-code-page}.ts
+Portions of src/utils/{ansi,colors,context-window,executable-path,git,git-hardening,gradient,hyperlink,jj,no-proxy,powerline-settings,powerline-theme-index,renderer,separator-index,terminal,terminal-sanitize,windows-code-page}.ts
 are derived from ccstatusline at commit c78cc4d8107d095c4798f0d8e87671dd4f6ee2e6 (v2.2.33).
 
 Portions of src/{types/{RenderContext.ts,SpeedMetrics.ts},utils/{widget-manifest.ts,widgets.ts,speed-metrics.ts,speed-window.ts},widgets/}

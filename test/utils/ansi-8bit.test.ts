@@ -1,11 +1,25 @@
 import { describe, expect, it } from "bun:test";
-import { restoreBackgroundAfterResets, stripSgrCodes } from "../../src/utils/ansi";
+import { keepSgrOnly, restoreBackgroundAfterResets, stripOscCodes, stripSgrCodes } from "../../src/utils/ansi";
 import { sanitizeTerminalText } from "../../src/utils/terminal-sanitize";
 
 describe("8-bit ANSI and C1 control sanitization", () => {
   it("strips 8-bit CSI color sequences", () => {
     const text = "\x9b31mred\x9b0m";
     expect(stripSgrCodes(text)).toBe("red");
+  });
+
+  it("strips colon-delimited truecolor and 256-color SGR sequences in stripSgrCodes", () => {
+    expect(stripSgrCodes("\x1b[38:2::255:128:0mtruecolor\x1b[0m")).toBe("truecolor");
+    expect(stripSgrCodes("\x9b38:5:208m256color\x9b0m")).toBe("256color");
+  });
+
+  it("normalizes 8-bit CSI codes to 7-bit in keepSgrOnly", () => {
+    expect(keepSgrOnly("\x9b31mred\x9b0m")).toBe("\x1b[31mred\x1b[0m");
+  });
+
+  it("aborts an unterminated OSC sequence when a new ESC sequence starts", () => {
+    const text = "a\x1b]52;c;AAAA\x1b[1mb";
+    expect(stripOscCodes(text)).toBe("a\x1b[1mb");
   });
 
   it("converts 8-bit C1 color codes to 7-bit in sanitizeTerminalText", () => {

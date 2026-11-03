@@ -23,6 +23,7 @@ import {
     renderOsc8Link
 } from '../utils/hyperlink';
 import { shouldInsertInput } from '../utils/input-guards';
+import { BlinkingCursor } from './shared/BlinkingCursor';
 
 import {
     SYMBOL_OVERRIDE_ACTION,
@@ -223,7 +224,7 @@ export class CurrentWorkingDirWidget implements Widget {
             ? null
             : (CWD_LINK_MODES[currentIndex + 1] ?? null);
         const {
-            [LINK_KEY]: removedLink,
+            [LINK_KEY]: _removedLink,
             ...restMetadata
         } = item.metadata ?? {};
 
@@ -370,7 +371,7 @@ const CurrentWorkingDirEditor: React.FC<WidgetEditorProps> = ({ widget, onComple
                 <Box>
                     <Text>Enter number of segments to display (blank for full path): </Text>
                     <Text>{segmentsInput}</Text>
-                    <Text backgroundColor='gray' color='black'>{' '}</Text>
+                    <BlinkingCursor>{' '}</BlinkingCursor>
                 </Box>
                 <Text dimColor>Press Enter to save, ESC to cancel</Text>
             </Box>

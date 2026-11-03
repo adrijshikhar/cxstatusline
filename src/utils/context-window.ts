@@ -26,10 +26,34 @@ export function parseUsageTokens(value: Partial<{ input_tokens: number; output_t
 }
 export function contextLengthFromUsageTokens(tokens: UsageTokens): number { return tokens.input + tokens.creation + tokens.read; }
 
+export interface LegacyContextWindowPayload {
+  readonly usage?: Partial<{
+    context_window: number;
+    cached_input_tokens: number;
+    input_tokens: number;
+    output_tokens: number;
+  }>;
+  readonly context_window?: {
+    readonly context_window_size?: number;
+    readonly current_usage?: number | Partial<{
+      input_tokens: number;
+      output_tokens: number;
+      cache_creation_input_tokens: number;
+      cache_read_input_tokens: number;
+    }>;
+    readonly used_percentage?: number;
+    readonly remaining_percentage?: number;
+    readonly total_input_tokens?: number;
+    readonly total_output_tokens?: number;
+  };
+}
+
+export type ContextWindowPayload = Partial<PayloadV1> & LegacyContextWindowPayload;
+
 /** Normalize the Codex usage fields once so every context/token widget agrees. */
-export function getContextWindowMetrics(data?: PayloadV1 | any): ContextWindowMetrics {
-  const usage = data?.usage;
-  const cw = data?.context_window;
+export function getContextWindowMetrics(data?: ContextWindowPayload | Record<string, unknown>): ContextWindowMetrics {
+  const usage = (data as ContextWindowPayload | undefined)?.usage;
+  const cw = (data as ContextWindowPayload | undefined)?.context_window;
 
   const rawWindowSize = finite(usage?.context_window ?? (typeof cw === 'object' ? cw?.context_window_size : undefined));
   const windowSize = rawWindowSize !== null && rawWindowSize > 0 ? rawWindowSize : null;
@@ -146,8 +170,8 @@ export interface TurnCacheTokens {
   input: number;
 }
 
-export function getContextWindowTurnCacheTokens(data?: PayloadV1 | any): TurnCacheTokens | null {
-  const usage = data?.usage;
+export function getContextWindowTurnCacheTokens(data?: ContextWindowPayload | Record<string, unknown>): TurnCacheTokens | null {
+  const usage = (data as ContextWindowPayload | undefined)?.usage;
   if (usage?.cached_input_tokens !== undefined || usage?.input_tokens !== undefined) {
     return {
       read: finite(usage.cached_input_tokens) ?? 0,

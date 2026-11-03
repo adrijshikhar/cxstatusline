@@ -32,6 +32,7 @@ import {
     withWidgetSpeedWindowSeconds
 } from '../../utils/speed-window';
 import { resolveLiveSpeedMetrics } from '../../utils/speed-tracker';
+import { BlinkingCursor } from './BlinkingCursor';
 
 import { makeModifierText } from './editor-display';
 import { isHideStateEnabled } from './hideable';
@@ -216,7 +217,7 @@ const SpeedWindowEditor: React.FC<WidgetEditorProps> = ({ widget, onComplete, on
                     {' '}
                 </Text>
                 <Text>{windowInput}</Text>
-                <Text backgroundColor='gray' color='black'>{' '}</Text>
+                <BlinkingCursor>{' '}</BlinkingCursor>
             </Box>
             <Text dimColor>0 disables window mode and averages the full session. Press Enter to save, ESC to cancel.</Text>
         </Box>

@@ -51,7 +51,7 @@ export class GitBranchWidget implements Widget {
   handleEditorAction(action: string, item: WidgetItem): WidgetItem | null {
     if (action === 'toggle-fish-style') {
       const enabled = item.metadata?.fishStyle === 'true';
-      const { fishStyle, ...restMetadata } = item.metadata ?? {};
+      const { fishStyle: _fishStyle, ...restMetadata } = item.metadata ?? {};
       const nextMetadata = enabled ? restMetadata : { ...restMetadata, fishStyle: 'true' };
       return {
         ...item,

@@ -15,6 +15,7 @@ import type {
     WidgetItem
 } from '../types/Widget';
 import { shouldInsertInput } from '../utils/input-guards';
+import { BlinkingCursor } from './shared/BlinkingCursor';
 
 import {
     DEFAULT_TIMEOUT_MS,
@@ -175,7 +176,7 @@ const CommandEditor: React.FC<WidgetEditorProps> = ({ widget, onComplete, onCanc
                 Enter command:
                 {' '}
                 {command.slice(0, cursor)}
-                <Text backgroundColor='gray' color='black'>{command[cursor] ?? ' '}</Text>
+                <BlinkingCursor>{command[cursor] ?? ' '}</BlinkingCursor>
                 {command.slice(cursor + 1)}
             </Text>
             <Text dimColor>Runs in your shell on every redraw. ←→ move cursor, Enter save, ESC cancel</Text>

@@ -3,7 +3,7 @@ import { PassThrough } from "node:stream";
 import { render, type Instance } from "ink";
 import React from "react";
 import { countSeparatorSlots } from "../src/utils/separator-index";
-import { assignPowerlineThemeSlots, countPowerlineThemeSlots, type PowerlineThemeSlotEntry } from "../src/utils/powerline-theme-index";
+import { countPowerlineThemeSlots, type PowerlineThemeSlotEntry } from "../src/utils/powerline-theme-index";
 import { renderStatusLines } from "../src/utils/renderer";
 import { DEFAULT_SETTINGS, type Settings } from "../src/types/Settings";
 import type { WidgetItem } from "../src/types/Widget";

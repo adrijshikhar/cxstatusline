@@ -20,7 +20,7 @@ const REGIONAL_INDICATOR_START = 0x1f1e6;
 const REGIONAL_INDICATOR_END = 0x1f1ff;
 
 // Color codes, written with ESC [ or the 8-bit CSI
-const SGR_REGEX = /(?:\x1b\[|\x9b)[0-9;]*m/g;
+const SGR_REGEX = /(?:\x1b\[|\x9b)[0-9;:]*m/g;
 // Lowest code point that can extend a display cluster (U+0300 is the first
 // \p{Mark}; ZWJ, variation selectors, the keycap and emoji modifiers are all
 // higher), so a printable ASCII character followed by anything below it is a
@@ -318,14 +318,23 @@ function parseOsc(
             };
         }
 
-        if (current === ESC && input[index + 1] === '\\') {
-            const end = index + 2;
+        if (current === ESC) {
+            if (input[index + 1] === '\\') {
+                const end = index + 2;
+                const body = input.slice(bodyStart, index);
+                return {
+                    nextIndex: end,
+                    sequence: input.slice(start, end),
+                    osc8Action: getOsc8Action(body),
+                    osc8Terminator: 'st'
+                };
+            }
+            // Any other ESC starts a new sequence; abort this OSC string
             const body = input.slice(bodyStart, index);
             return {
-                nextIndex: end,
-                sequence: input.slice(start, end),
-                osc8Action: getOsc8Action(body),
-                osc8Terminator: 'st'
+                nextIndex: index,
+                sequence: input.slice(start, index),
+                osc8Action: getOsc8Action(body)
             };
         }
 
@@ -677,7 +686,10 @@ export function keepSgrOnly(text: string): string {
         if (escape) {
             const isCsi = escape.sequence.startsWith(`${ESC}[`) || escape.sequence.startsWith(C1_CSI);
             if (isCsi && escape.sequence.endsWith('m')) {
-                result += escape.sequence;
+                const sequence = escape.sequence.startsWith(C1_CSI)
+                    ? `${ESC}[${escape.sequence.slice(1)}`
+                    : escape.sequence;
+                result += sequence;
             }
             index = escape.nextIndex;
             continue;

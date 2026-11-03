@@ -1,5 +1,6 @@
 import { Box, Text, useInput } from "ink";
 import React, { useState } from "react";
+import { BlinkingCursor } from "../../widgets/shared/BlinkingCursor";
 
 export interface ImportConfigDialogProps {
   error?: string | null;
@@ -24,7 +25,7 @@ export function ImportConfigDialog({ error, onFileChosen, onCancel }: ImportConf
     <Box flexDirection="column">
       <Text bold>Import Config</Text>
       <Text dimColor>Enter the file path to import configuration from:</Text>
-      <Text>{`Path: ${path}`}<Text inverse> </Text></Text>
+      <Text>{`Path: ${path}`}<BlinkingCursor inverse>{' '}</BlinkingCursor></Text>
       {error && <Text color="red">{error}</Text>}
       <Text dimColor>Enter to preview, Escape to cancel</Text>
     </Box>

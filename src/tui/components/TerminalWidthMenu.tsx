@@ -68,7 +68,9 @@ export function buildTerminalWidthItems(
       label: "Full width until compact",
       sublabel: selectedOption === "full-until-compact"
         ? `(threshold ${compactThreshold}%, active)`
-        : `(threshold ${compactThreshold}%)`,
+        : DEFAULT_SETTINGS.flexMode === "full-until-compact"
+          ? `(threshold ${compactThreshold}%, default)`
+          : `(threshold ${compactThreshold}%)`,
       description: `Dynamically adjusts width based on context usage. When context reaches ${compactThreshold}%, it switches to leaving space for the auto-compact message.\n\nNOTE: If /ide integration is enabled, it is not recommended to use this mode.`,
     },
   ];

@@ -12,7 +12,6 @@ import { LabelEditor } from "./LabelEditor";
 import { EDIT_HIDE_STATES_ACTION, getHideModifierText } from "../../widgets/shared/hideable";
 import {
   EDIT_LABEL_ACTION,
-  clearLabel,
   getLabelModifierText,
 } from "../../widgets/shared/raw-or-labeled";
 import { getNumberFormatModifierText } from "../../utils/number-format";
@@ -225,6 +224,7 @@ export function ItemsEditor({
       setSelectedIndex(placement.selectedIndex);
     }
     setWidgetPicker(null);
+    setPickerNewWidget(null);
   };
 
   const pickerCategories = widgetPicker ? [...widgetCategories] : [];
@@ -262,17 +262,22 @@ export function ItemsEditor({
   const searchResultType = widgetPicker && widgetPicker.categoryQuery.trim().length > 0 ? selectedTopLevelSearchEntry?.type : undefined;
   const highlightedPickerType = widgetPicker?.level === "widget" ? selectedPickerEntry?.type : searchResultType;
   const pickerAction = widgetPicker?.action;
-  const previewWidgets = useMemo(() => {
+  useEffect(() => {
     if (!pickerAction || !highlightedPickerType || !pickerNewWidget) {
-      return null;
+      onPreviewChangeRef.current?.(null);
+      return;
     }
 
-    return placePickerSelection(widgets, pickerAction, selectedIndex, highlightedPickerType, pickerNewWidget).widgets;
-  }, [widgets, pickerAction, selectedIndex, highlightedPickerType, pickerNewWidget]);
+    const preview = placePickerSelection(
+      widgets,
+      pickerAction,
+      selectedIndex,
+      highlightedPickerType,
+      pickerNewWidget
+    ).widgets;
 
-  useEffect(() => {
-    onPreviewChangeRef.current?.(previewWidgets);
-  }, [previewWidgets]);
+    onPreviewChangeRef.current?.(preview);
+  }, [widgets, pickerAction, selectedIndex, highlightedPickerType, pickerNewWidget]);
 
   const onSelectedIndexChangeRef = useRef(onSelectedIndexChange);
   useEffect(() => {
@@ -287,7 +292,23 @@ export function ItemsEditor({
     if (customEditor) return;
     if (showClearConfirm) return;
     if (widgetPicker) {
-      handlePickerInputMode({ input, key, widgetPicker, widgetCatalog, widgetCategories, setWidgetPicker, applyWidgetPickerSelection });
+      handlePickerInputMode({
+        input,
+        key,
+        widgetPicker,
+        widgetCatalog,
+        widgetCategories,
+        setWidgetPicker: (value) => {
+          setWidgetPicker((prev) => {
+            const next = typeof value === "function" ? value(prev) : value;
+            if (!next) {
+              setPickerNewWidget(null);
+            }
+            return next;
+          });
+        },
+        applyWidgetPickerSelection,
+      });
       return;
     }
     if (moveMode) {

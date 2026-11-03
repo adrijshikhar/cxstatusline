@@ -1,5 +1,6 @@
 import { Box, Text, useInput } from "ink";
 import React, { useState } from "react";
+import { BlinkingCursor } from "../../widgets/shared/BlinkingCursor";
 
 export interface ExportConfigDialogProps {
   initialPath: string;
@@ -24,7 +25,7 @@ export function ExportConfigDialog({ initialPath, onExport, onCancel }: ExportCo
     <Box flexDirection="column">
       <Text bold>Export Config</Text>
       <Text dimColor>Enter the file path to export your configuration to:</Text>
-      <Text>{`Path: ${path}`}<Text inverse> </Text></Text>
+      <Text>{`Path: ${path}`}<BlinkingCursor inverse>{' '}</BlinkingCursor></Text>
       <Text dimColor>Enter to confirm, Escape to cancel</Text>
     </Box>
   );

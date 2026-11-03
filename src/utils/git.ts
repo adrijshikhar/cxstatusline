@@ -373,7 +373,7 @@ function readPersistentCache(cachePath: string): PersistentGitCache | null {
 }
 
 function writePersistentCache(cachePath: string, cache: PersistentGitCache): void {
-  const tempPath = `${cachePath}.tmp`;
+  const tempPath = `${cachePath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`;
   try {
     fs.mkdirSync(path.dirname(cachePath), { recursive: true });
     fs.writeFileSync(tempPath, JSON.stringify(cache), 'utf-8');

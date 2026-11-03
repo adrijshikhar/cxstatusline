@@ -33,7 +33,8 @@ export function isInsideJjRepo(context: RenderContext): boolean {
 }
 
 export function parseDiffStat(stat: string): JjChangeCounts {
-  const summaryLine = stat.trimEnd().split('\n').pop() ?? '';
+  const lines = stat.trimEnd().split('\n');
+  const summaryLine = lines.slice().reverse().find(line => /files?\s+changed|\binsertions?|\bdeletions?/i.test(line)) ?? '';
   const insertMatch = /(\d+)\s+insertions?/.exec(summaryLine);
   const deleteMatch = /(\d+)\s+deletions?/.exec(summaryLine);
 

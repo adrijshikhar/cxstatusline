@@ -3,7 +3,7 @@ import { FIVE_HOUR_WINDOW_MS, SEVEN_DAY_WINDOW_MS, type UsageWindowMetrics } fro
 function windowFromReset(resetAt: string | undefined, durationMs: number, nowMs: number): UsageWindowMetrics | null {
   if (!resetAt) return null;
   const resetAtMs = Date.parse(resetAt);
-  if (!Number.isFinite(resetAtMs) || durationMs <= 0) return null;
+  if (!Number.isFinite(resetAtMs) || !Number.isFinite(nowMs) || durationMs <= 0) return null;
   const elapsedMs = Math.max(0, Math.min(durationMs, nowMs - resetAtMs + durationMs));
   const elapsedPercent = elapsedMs / durationMs * 100;
   return { sessionDurationMs: durationMs, elapsedMs, remainingMs: durationMs - elapsedMs, elapsedPercent, remainingPercent: 100 - elapsedPercent };

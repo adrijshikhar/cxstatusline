@@ -96,4 +96,35 @@ describe("FreeMemory unit rollover", () => {
     };
     expect(widget.render(item, context, DEFAULT_SETTINGS)).toBe("1.0G");
   });
+
+  it("does not render NaNB when memory values are NaN", () => {
+    const item: WidgetItem = { id: "mem", type: "free-memory", rawValue: true };
+    const context = {
+      data: {
+        memory: {
+          totalBytes: NaN,
+          freeBytes: NaN,
+        },
+      },
+      memoryUsage: { total: NaN, used: NaN },
+    };
+    const rendered = widget.render(item, context as any, DEFAULT_SETTINGS);
+    expect(rendered).not.toContain("NaN");
+    expect(rendered).toBe("0B/0B");
+  });
+
+  it("promotes bytes to kilobytes when rounded value reaches 1024", () => {
+    const item: WidgetItem = { id: "mem", type: "free-memory", rawValue: true };
+    const context: RenderContext = {
+      data: { payload_version: 1 },
+      now: new Date(),
+      terminalWidth: 80,
+      isPreview: false,
+      memoryUsage: {
+        total: 2 * 1024 ** 3,
+        used: 1023.6, // 1023.6 bytes -> 1K
+      },
+    };
+    expect(widget.render(item, context, DEFAULT_SETTINGS)).toBe("1K/2.0G");
+  });
 });

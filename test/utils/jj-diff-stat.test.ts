@@ -26,6 +26,17 @@ describe("getJjChangeCounts parsing", () => {
     });
   });
 
+  it("parses diffstat correctly even when jj appends trailing hints or warnings", () => {
+    const statWithHint =
+      "src/index.ts | 4 ++--\n" +
+      "1 file changed, 2 insertions(+), 2 deletions(-)\n" +
+      "Hint: The working copy is clean (no changes to commit)";
+    expect(parseDiffStat(statWithHint)).toEqual({
+      insertions: 2,
+      deletions: 2,
+    });
+  });
+
   it("parses change counts via getJjChangeCounts with mock", () => {
     const spy = spyOn(childProcess, "execFileSync").mockReturnValue(
       "777 insertions.txt | 1 +\n1 file changed, 1 insertion(+), 0 deletions(-)\n"
