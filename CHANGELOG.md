@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.19.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.18.0...v0.19.0) (2026-11-04)
+
+
+### Features
+
+* port upstream ccstatusline v2.2.33 parity ([#195](https://github.com/adrijshikhar/cxstatusline/issues/195)) ([110f70c](https://github.com/adrijshikhar/cxstatusline/commit/110f70c5bf6223f6601a4da4c880b584dd226684))
+
 ## [0.18.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.17.0...v0.18.0) (2026-10-30)
 
 
