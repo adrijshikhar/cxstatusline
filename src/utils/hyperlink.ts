@@ -24,27 +24,120 @@ export function encodeGitRefForUrlPath(ref: string): string {
         .join('/');
 }
 
-function encodeFilePathForUri(path: string): string {
-    return path
-        .replace(/\\/g, '/')
+// URL file paths preserve separator slashes and encode every character with
+// URI meaning inside a path segment.
+export function encodeFilePathForUri(path: string, normalizeSeparators = false): string {
+    const pathToEncode = normalizeSeparators ? path.replace(/\\/g, '/') : path;
+    return pathToEncode
         .split('/')
         .map(segment => encodeURIComponent(segment))
         .join('/');
 }
 
-export function buildIdeFileUrl(filePath: string, ideLinkMode: IdeLinkMode): string {
-    const normalizedPath = filePath.replace(/\\/g, '/');
-    const uncMatch = /^\/\/([^/]+)(\/.*)?$/.exec(normalizedPath);
-    if (uncMatch?.[1]) {
-        const encodedPath = encodeFilePathForUri(uncMatch[2] ?? '/');
-        return `${ideLinkMode}://file//${uncMatch[1]}${encodedPath}`;
+export function normalizeFilePath(filePath: string): string {
+    return filePath.replace(/\\/g, '/');
+}
+
+export function encodeUncHost(host: string): string | null {
+    // The host belongs to a URL authority, not a path segment. Reject syntax
+    // that could start a URL component instead of silently serializing it.
+    if (!host || /[\x00-\x20\x7f-\x9f#?%\\]/.test(host)) {
+        return null;
     }
 
-    const driveMatch = /^([A-Za-z]:)(\/.*)?$/.exec(normalizedPath);
-    if (driveMatch?.[1]) {
-        const encodedPath = encodeFilePathForUri(driveMatch[2] ?? '/');
-        return `${ideLinkMode}://file/${driveMatch[1]}${encodedPath}`;
+    try {
+        const parsed = new URL(`file://${host}/`);
+        if (parsed.protocol !== 'file:'
+            || parsed.username
+            || parsed.password
+            || parsed.port
+            || parsed.pathname !== '/'
+            || parsed.search
+            || parsed.hash
+            || !parsed.hostname) {
+            return null;
+        }
+        return parsed.host;
+    } catch {
+        return null;
+    }
+}
+
+export function buildFileUrl(filePath: string): string | null {
+    if (!filePath || /^[A-Za-z]:$/.test(filePath)) {
+        return null;
     }
 
-    return `${ideLinkMode}://file${encodeFilePathForUri(normalizedPath)}`;
+    const isUncPath = /^\\\\[^\\]/.test(filePath) || /^\/\/[^/]/.test(filePath);
+    const isWindowsDrivePath = /^[A-Za-z]:[\\/]/.test(filePath);
+    if (isUncPath) {
+        try {
+            const normalizedPath = normalizeFilePath(filePath);
+            const uncMatch = /^\/\/([^/]+)(\/.*)?$/.exec(normalizedPath);
+            const host = uncMatch?.[1] ? encodeUncHost(uncMatch[1]) : null;
+            return host ? `file://${host}${encodeFilePathForUri(uncMatch?.[2] ?? '/', true)}` : null;
+        } catch {
+            return null;
+        }
+    }
+
+    if (isWindowsDrivePath) {
+        try {
+            const normalizedPath = normalizeFilePath(filePath);
+            const driveMatch = /^([A-Za-z]:)(\/.*)?$/.exec(normalizedPath);
+            return driveMatch?.[1]
+                ? `file:///${driveMatch[1]}${encodeFilePathForUri(driveMatch[2] ?? '/')}`
+                : null;
+        } catch {
+            return null;
+        }
+    }
+
+    // A POSIX filename may contain backslashes. Keep them as part of the same
+    // path segment and let URI encoding emit %5C.
+    if (!filePath.startsWith('/')) {
+        return null;
+    }
+
+    try {
+        return `file://${encodeFilePathForUri(filePath)}`;
+    } catch {
+        return null;
+    }
+}
+
+export function buildIdeFileUrl(filePath: string, ideLinkMode: IdeLinkMode): string | null {
+    if (!filePath) {
+        return null;
+    }
+
+    const isUncPath = /^\\\\[^\\]/.test(filePath) || /^\/\/[^/]/.test(filePath);
+    const isWindowsDrivePath = /^[A-Za-z]:[\\/]/.test(filePath);
+    if (!isUncPath && !isWindowsDrivePath && !filePath.startsWith('/')) {
+        return null;
+    }
+
+    try {
+        // Backslashes are separators only in Windows paths; POSIX filenames need %5C.
+        const normalizedPath = isUncPath || isWindowsDrivePath ? normalizeFilePath(filePath) : filePath;
+        const uncMatch = /^\/\/([^/]+)(\/.*)?$/.exec(normalizedPath);
+        if (uncMatch?.[1]) {
+            const host = encodeUncHost(uncMatch[1]);
+            if (!host) {
+                return null;
+            }
+            const encodedPath = encodeFilePathForUri(uncMatch[2] ?? '/');
+            return `${ideLinkMode}://file//${host}${encodedPath}`;
+        }
+
+        const driveMatch = /^([A-Za-z]:)(\/.*)?$/.exec(normalizedPath);
+        if (driveMatch?.[1]) {
+            const encodedPath = encodeFilePathForUri(driveMatch[2] ?? '/');
+            return `${ideLinkMode}://file/${driveMatch[1]}${encodedPath}`;
+        }
+
+        return `${ideLinkMode}://file${encodeFilePathForUri(normalizedPath)}`;
+    } catch {
+        return null;
+    }
 }

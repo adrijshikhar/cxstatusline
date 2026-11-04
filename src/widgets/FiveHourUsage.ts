@@ -94,7 +94,12 @@ export class FiveHourUsageWidget implements Widget {
             return formatRawOrLabeledValue(item, '5h: ', formatPercent(renderedPercent, format));
         }
 
-        const data = context.usageData ?? {};
+        const sessionLimit = (context.data as any)?.session?.rateLimits?.fiveHour;
+        const codexUsage = (context.data as any)?.usage?.five_hour;
+        const data: NonNullable<RenderContext['usageData']> = context.usageData ?? {
+            fiveHourUsage: sessionLimit?.usedPercentage ?? (codexUsage?.used !== undefined ? codexUsage.used * 100 : undefined),
+            fiveHourResetAt: sessionLimit?.resetsAt ?? codexUsage?.resets_at
+        };
         if (data.fiveHourUsage === undefined) {
             if (data.error) {
                 return isHideStateEnabled(item, USAGE_NO_DATA_HIDEABLE_STATE)
@@ -111,8 +116,10 @@ export class FiveHourUsageWidget implements Widget {
                 return undefined;
             }
 
+            // A remaining-percent bar shrinks as the window runs out, so its cursor
+            // marks the time left, keeping the cursor and the fill on one scale.
             const window = resolveFiveHourUsageWindow(data, context.now?.getTime());
-            return window ? { cursorPercent: window.elapsedPercent } : undefined;
+            return window ? { cursorPercent: inverted ? window.remainingPercent : window.elapsedPercent } : undefined;
         };
 
         if (isUsageProgressMode(displayMode)) {

@@ -6,7 +6,7 @@ import { formatRawOrLabeledValue } from './shared/raw-or-labeled';
 const LABEL = 'v';
 
 export class VersionWidget implements Widget {
-  getDefaultColor(): string { return 'gray'; }
+  getDefaultColor(): string { return 'brightBlack'; }
   getDescription(): string { return 'Shows Codex CLI version number'; }
   getDisplayName(): string { return 'Version'; }
   getCategory(): string { return 'Core'; }

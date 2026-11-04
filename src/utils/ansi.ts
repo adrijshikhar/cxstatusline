@@ -19,7 +19,8 @@ const VARIATION_SELECTOR_SUPPLEMENT_END = 0xe01ef;
 const REGIONAL_INDICATOR_START = 0x1f1e6;
 const REGIONAL_INDICATOR_END = 0x1f1ff;
 
-const SGR_REGEX = /\x1b\[[0-9;]*m/g;
+// Color codes, written with ESC [ or the 8-bit CSI
+const SGR_REGEX = /(?:\x1b\[|\x9b)[0-9;:]*m/g;
 // Lowest code point that can extend a display cluster (U+0300 is the first
 // \p{Mark}; ZWJ, variation selectors, the keycap and emoji modifiers are all
 // higher), so a printable ASCII character followed by anything below it is a
@@ -317,14 +318,23 @@ function parseOsc(
             };
         }
 
-        if (current === ESC && input[index + 1] === '\\') {
-            const end = index + 2;
+        if (current === ESC) {
+            if (input[index + 1] === '\\') {
+                const end = index + 2;
+                const body = input.slice(bodyStart, index);
+                return {
+                    nextIndex: end,
+                    sequence: input.slice(start, end),
+                    osc8Action: getOsc8Action(body),
+                    osc8Terminator: 'st'
+                };
+            }
+            // Any other ESC starts a new sequence; abort this OSC string
             const body = input.slice(bodyStart, index);
             return {
-                nextIndex: end,
-                sequence: input.slice(start, end),
-                osc8Action: getOsc8Action(body),
-                osc8Terminator: 'st'
+                nextIndex: index,
+                sequence: input.slice(start, index),
+                osc8Action: getOsc8Action(body)
             };
         }
 
@@ -399,17 +409,21 @@ export function stripSgrCodes(text: string): string {
 // reset (0, an empty parameter, or 49). Skip extended color arguments so their
 // values aren't mistaken for resets or background operations.
 function sgrClearsBackground(sequence: string): boolean {
-    const params = sequence.slice(2, -1).split(';').map(param => Number.parseInt(param || '0', 10));
+    const introducerLength = sequence.startsWith(C1_CSI) ? 1 : 2;
+    const rawParts = sequence.slice(introducerLength, -1).split(';');
     let clearsBackground = false;
-    for (let i = 0; i < params.length; i++) {
-        const param = params[i];
-        if (param === 0 || param === 49) {
+    for (let i = 0; i < rawParts.length; i++) {
+        const part = rawParts[i] ?? '';
+        const subparams = part.split(':').map(p => Number.parseInt(p || '0', 10));
+        const code = subparams[0] ?? 0;
+        if (code === 0 || code === 49) {
             clearsBackground = true;
-        } else if (param !== undefined && ((param >= 40 && param <= 47) || (param >= 100 && param <= 107) || param === 48)) {
+        } else if ((code >= 40 && code <= 47) || (code >= 100 && code <= 107) || code === 48) {
             clearsBackground = false;
         }
-        if (param === 38 || param === 48 || param === 58) {
-            i += params[i + 1] === 5 ? 2 : 4;
+        if (subparams.length === 1 && (code === 38 || code === 48 || code === 58)) {
+            const next = Number.parseInt(rawParts[i + 1] || '0', 10);
+            i += next === 5 ? 2 : 4;
         }
     }
     return clearsBackground;
@@ -675,7 +689,10 @@ export function keepSgrOnly(text: string): string {
         if (escape) {
             const isCsi = escape.sequence.startsWith(`${ESC}[`) || escape.sequence.startsWith(C1_CSI);
             if (isCsi && escape.sequence.endsWith('m')) {
-                result += escape.sequence;
+                const sequence = escape.sequence.startsWith(C1_CSI)
+                    ? `${ESC}[${escape.sequence.slice(1)}`
+                    : escape.sequence;
+                result += sequence;
             }
             index = escape.nextIndex;
             continue;

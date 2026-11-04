@@ -23,3 +23,10 @@ test("Local reset dates honor the process timezone, including a date boundary", 
   expect(values[4]).toContain("2026-09-06 1:30");
   expect(values[5]).toBe("2026-09-05 20:00 UTC");
 });
+
+test("Usage window calculations fail closed when nowMs or resetAt is NaN", async () => {
+  const { getFiveHourUsageWindowFromResetAt, getWeeklyUsageWindowFromResetAt } = await import("../src/utils/usage-windows");
+  expect(getFiveHourUsageWindowFromResetAt("2026-09-05T08:30:00Z", NaN)).toBeNull();
+  expect(getWeeklyUsageWindowFromResetAt("2026-09-05T08:30:00Z", NaN)).toBeNull();
+  expect(getFiveHourUsageWindowFromResetAt("invalid-date", Date.now())).toBeNull();
+});

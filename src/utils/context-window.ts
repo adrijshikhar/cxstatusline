@@ -26,29 +26,104 @@ export function parseUsageTokens(value: Partial<{ input_tokens: number; output_t
 }
 export function contextLengthFromUsageTokens(tokens: UsageTokens): number { return tokens.input + tokens.creation + tokens.read; }
 
+export interface LegacyContextWindowPayload {
+  readonly usage?: Partial<{
+    context_window: number;
+    cached_input_tokens: number;
+    input_tokens: number;
+    output_tokens: number;
+  }>;
+  readonly context_window?: {
+    readonly context_window_size?: number;
+    readonly current_usage?: number | Partial<{
+      input_tokens: number;
+      output_tokens: number;
+      cache_creation_input_tokens: number;
+      cache_read_input_tokens: number;
+    }>;
+    readonly used_percentage?: number;
+    readonly remaining_percentage?: number;
+    readonly total_input_tokens?: number;
+    readonly total_output_tokens?: number;
+  };
+}
+
+export type ContextWindowPayload = Partial<PayloadV1> & LegacyContextWindowPayload;
+
 /** Normalize the Codex usage fields once so every context/token widget agrees. */
-export function getContextWindowMetrics(data?: PayloadV1): ContextWindowMetrics {
-  const usage = data?.usage;
-  const windowSize = finite(usage?.context_window);
-  const contextLengthTokens = finite(usage?.context_tokens ?? usage?.used_tokens);
-  const totalInputTokens = finite(usage?.input_tokens);
-  const totalOutputTokens = finite(usage?.output_tokens);
-  const cachedTokens = finite(usage?.cached_input_tokens);
-  const totalTokens = totalInputTokens !== null && totalOutputTokens !== null
-    ? totalInputTokens + totalOutputTokens
+export function getContextWindowMetrics(data?: ContextWindowPayload | Record<string, unknown>): ContextWindowMetrics {
+  const usage = (data as ContextWindowPayload | undefined)?.usage;
+  const cw = (data as ContextWindowPayload | undefined)?.context_window;
+
+  const rawWindowSize = finite(usage?.context_window ?? (typeof cw === 'object' ? cw?.context_window_size : undefined));
+  const windowSize = rawWindowSize !== null && rawWindowSize > 0 ? rawWindowSize : null;
+
+  let currentUsageTotalTokens: number | null = null;
+  let contextLengthTokens: number | null = null;
+  let cachedTokens: number | null = finite(usage?.cached_input_tokens);
+
+  if (typeof cw?.current_usage === 'number') {
+    currentUsageTotalTokens = finite(cw.current_usage);
+    contextLengthTokens = currentUsageTotalTokens;
+  } else if (cw?.current_usage && typeof cw.current_usage === 'object') {
+    const usageTokens = parseUsageTokens(cw.current_usage);
+    const { input, output, creation, read } = usageTokens;
+    currentUsageTotalTokens = input + output + creation + read;
+    contextLengthTokens = contextLengthFromUsageTokens(usageTokens);
+    cachedTokens = creation + read;
+  } else {
+    contextLengthTokens = finite(usage?.context_tokens);
+    currentUsageTotalTokens = finite(usage?.used_tokens);
+  }
+
+  const rawUsedPercentage = finite(usage?.context_used) !== null
+    ? (finite(usage?.context_used)! * 100)
+    : finite(cw?.used_percentage);
+
+  const rawRemainingPercentage = finite(usage?.context_remaining) !== null
+    ? (finite(usage?.context_remaining)! * 100)
+    : finite(cw?.remaining_percentage);
+
+  const usedTokensFromPercentage = rawUsedPercentage !== null && windowSize !== null
+    ? (rawUsedPercentage / 100) * windowSize
     : null;
-  const usedPercentage = finite(usage?.context_used);
-  const resolvedUsedPercentage = usedPercentage !== null
-    ? clamp(usedPercentage * 100)
-    : contextLengthTokens !== null && windowSize !== null && windowSize > 0
-      ? clamp(contextLengthTokens / windowSize * 100)
+
+  const totalInputTokens = finite(usage?.input_tokens ?? cw?.total_input_tokens);
+  const totalOutputTokens = finite(usage?.output_tokens ?? cw?.total_output_tokens);
+
+  const usedTokens = currentUsageTotalTokens
+    ?? usedTokensFromPercentage
+    ?? (totalInputTokens !== null && totalOutputTokens !== null
+      ? totalInputTokens + totalOutputTokens
+      : contextLengthTokens);
+
+  // Output tokens aren't in the context until the next turn reads them back
+  // as input, so count only input tokens, as the context length does.
+  const percentageTokens = contextLengthTokens ?? usedTokens;
+
+  const usedPercentage = rawUsedPercentage !== null
+    ? clamp(rawUsedPercentage)
+    : percentageTokens !== null && windowSize !== null && windowSize > 0
+      ? clamp((percentageTokens / windowSize) * 100)
       : null;
+
+  const remainingPercentage = rawRemainingPercentage !== null
+    ? clamp(rawRemainingPercentage)
+    : usedPercentage !== null
+      ? 100 - usedPercentage
+      : null;
+
+  const totalTokens = currentUsageTotalTokens
+    ?? (totalInputTokens !== null && totalOutputTokens !== null
+      ? totalInputTokens + totalOutputTokens
+      : null);
+
   return {
-    windowSize: windowSize !== null && windowSize > 0 ? windowSize : null,
-    usedTokens: contextLengthTokens,
-    contextLengthTokens,
-    usedPercentage: resolvedUsedPercentage,
-    remainingPercentage: resolvedUsedPercentage === null ? null : 100 - resolvedUsedPercentage,
+    windowSize,
+    usedTokens,
+    contextLengthTokens: percentageTokens,
+    usedPercentage,
+    remainingPercentage,
     totalInputTokens,
     totalOutputTokens,
     cachedTokens,
@@ -95,14 +170,19 @@ export interface TurnCacheTokens {
   input: number;
 }
 
-export function getContextWindowTurnCacheTokens(data?: PayloadV1): TurnCacheTokens | null {
-  const usage = data?.usage;
-  if (usage?.cached_input_tokens === undefined && usage?.input_tokens === undefined) {
-    return null;
+export function getContextWindowTurnCacheTokens(data?: ContextWindowPayload | Record<string, unknown>): TurnCacheTokens | null {
+  const usage = (data as ContextWindowPayload | undefined)?.usage;
+  if (usage?.cached_input_tokens !== undefined || usage?.input_tokens !== undefined) {
+    return {
+      read: finite(usage.cached_input_tokens) ?? 0,
+      creation: 0,
+      input: finite(usage.input_tokens) ?? 0
+    };
   }
-  return {
-    read: finite(usage.cached_input_tokens) ?? 0,
-    creation: 0,
-    input: finite(usage.input_tokens) ?? 0
-  };
+  const cwUsage = (data as any)?.context_window?.current_usage;
+  if (cwUsage && typeof cwUsage === "object") {
+    const { input, creation, read } = parseUsageTokens(cwUsage);
+    return { read, creation, input };
+  }
+  return null;
 }

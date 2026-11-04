@@ -10,6 +10,7 @@ import type {
     WidgetItem
 } from '../../types/Widget';
 import { shouldInsertInput } from '../../utils/input-guards';
+import { BlinkingCursor } from './BlinkingCursor';
 
 export interface NumericEditorOptions {
     field: 'maxWidth' | 'timeout' | 'refreshMs';
@@ -58,7 +59,7 @@ const NumericEditor: React.FC<WidgetEditorProps & { options: NumericEditorOption
             <Box>
                 <Text>{prompt}</Text>
                 <Text>{value}</Text>
-                <Text backgroundColor='gray' color='black'>{' '}</Text>
+                <BlinkingCursor>{' '}</BlinkingCursor>
             </Box>
             <Text dimColor>{hint}</Text>
         </Box>

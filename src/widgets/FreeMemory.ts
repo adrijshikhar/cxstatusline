@@ -2,17 +2,25 @@ import type { NumberFormat } from '../types/NumberFormat';
 import type { RenderContext } from '../types/RenderContext';
 import type { Settings } from '../types/Settings';
 import type { Widget, WidgetEditorDisplay, WidgetItem } from '../types/Widget';
-import { renderMagnitude, resolveNumberFormat } from '../utils/number-format';
+import { effectiveDecimals, renderMagnitude, resolveNumberFormat } from '../utils/number-format';
 import { formatRawOrLabeledValue } from './shared/raw-or-labeled';
 
 const LABEL = 'Mem: ';
 
 function formatBytes(bytes: number, format: NumberFormat): string {
-  const value = Math.max(0, bytes);
-  if (value >= 1024 ** 3) return renderMagnitude(value / 1024 ** 3, format, 1) + 'G';
-  if (value >= 1024 ** 2) return renderMagnitude(value / 1024 ** 2, format, 0) + 'M';
-  if (value >= 1024) return renderMagnitude(value / 1024, format, 0) + 'K';
-  return value + 'B';
+  if (!Number.isFinite(bytes) || bytes < 0) return '0B';
+  const value = bytes;
+  const GB = 1024 ** 3;
+  const MB = 1024 ** 2;
+  const KB = 1024;
+  // Promote to the next unit once the smaller-unit value would round up to
+  // "1024" at the displayed precision (e.g. 1023.6M -> "1.0G", not "1024M").
+  const rollover = 1024 - 0.5 / 10 ** effectiveDecimals(format, 0);
+
+  if (value >= MB * rollover) return renderMagnitude(value / GB, format, 1) + 'G';
+  if (value >= KB * rollover) return renderMagnitude(value / MB, format, 0) + 'M';
+  if (value >= rollover) return renderMagnitude(value / KB, format, 0) + 'K';
+  return Math.round(value) + 'B';
 }
 
 export class FreeMemoryWidget implements Widget {
@@ -28,7 +36,14 @@ export class FreeMemoryWidget implements Widget {
       const value = formatBytes(12.4 * 1024 ** 3, format) + '/' + formatBytes(16 * 1024 ** 3, format);
       return formatRawOrLabeledValue(item, this.getLabelPrefix(), value);
     }
-    const usage = context.memoryUsage;
+    const dataMem = (context.data as any)?.memory;
+    const usage = context.memoryUsage ?? (dataMem
+      && typeof dataMem.totalBytes === 'number'
+      && typeof dataMem.freeBytes === 'number'
+      && Number.isFinite(dataMem.totalBytes)
+      && Number.isFinite(dataMem.freeBytes)
+      ? { used: Math.max(0, dataMem.totalBytes - dataMem.freeBytes), total: Math.max(0, dataMem.totalBytes) }
+      : undefined);
     if (usage) {
       const value = formatBytes(usage.used, format) + '/' + formatBytes(usage.total, format);
       return formatRawOrLabeledValue(item, this.getLabelPrefix(), value);
