@@ -410,17 +410,20 @@ export function stripSgrCodes(text: string): string {
 // values aren't mistaken for resets or background operations.
 function sgrClearsBackground(sequence: string): boolean {
     const introducerLength = sequence.startsWith(C1_CSI) ? 1 : 2;
-    const params = sequence.slice(introducerLength, -1).split(';').map(param => Number.parseInt(param || '0', 10));
+    const rawParts = sequence.slice(introducerLength, -1).split(';');
     let clearsBackground = false;
-    for (let i = 0; i < params.length; i++) {
-        const param = params[i];
-        if (param === 0 || param === 49) {
+    for (let i = 0; i < rawParts.length; i++) {
+        const part = rawParts[i] ?? '';
+        const subparams = part.split(':').map(p => Number.parseInt(p || '0', 10));
+        const code = subparams[0] ?? 0;
+        if (code === 0 || code === 49) {
             clearsBackground = true;
-        } else if (param !== undefined && ((param >= 40 && param <= 47) || (param >= 100 && param <= 107) || param === 48)) {
+        } else if ((code >= 40 && code <= 47) || (code >= 100 && code <= 107) || code === 48) {
             clearsBackground = false;
         }
-        if (param === 38 || param === 48 || param === 58) {
-            i += params[i + 1] === 5 ? 2 : 4;
+        if (subparams.length === 1 && (code === 38 || code === 48 || code === 58)) {
+            const next = Number.parseInt(rawParts[i + 1] || '0', 10);
+            i += next === 5 ? 2 : 4;
         }
     }
     return clearsBackground;

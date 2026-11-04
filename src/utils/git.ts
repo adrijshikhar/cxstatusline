@@ -50,7 +50,7 @@ export const DEFAULT_GIT_CACHE_TTL_SECONDS = 5;
 const GIT_CACHE_SCHEMA_VERSION = 1 as const;
 
 export const GIT_EXEC_TIMEOUT = 5_000;
-const GIT_COMMAND_TIMEOUT_MS = 5_000;
+const GIT_COMMAND_TIMEOUT_MS = GIT_EXEC_TIMEOUT;
 
 const gitCommandCache = new Map<string, GitCacheEntry>();
 const filterOverrideCache = new Map<string, string[] | null>();
@@ -63,7 +63,8 @@ const WORK_TREE_COMMAND_ARGS = new Map<string, string[]>([
 const GIT_CONFIG_NO_MATCH_STATUS = 1;
 
 function getCacheDir(): string {
-  return path.join(os.homedir(), '.cache', 'cxstatusline');
+  const base = process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache');
+  return path.join(base, 'cxstatusline');
 }
 
 function getCachePath(gitDir: string, cwd: string): string {

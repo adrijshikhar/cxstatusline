@@ -112,20 +112,20 @@ export class GitBranchWidget implements Widget {
   // root, so `jj root` also succeeds in a plain git repo anywhere under a jj
   // workspace. The repo is colocated only when its work tree holds the .jj.
   private isColocatedJjRepo(context: RenderContext): boolean {
-    if (!isInsideJjRepo(context)) {
-      return false;
-    }
-
     const topLevel = runGit('rev-parse --show-toplevel', context);
     if (!topLevel) {
       return false;
     }
 
     try {
-      return fs.statSync(path.join(topLevel, '.jj')).isDirectory();
+      if (!fs.statSync(path.join(topLevel, '.jj')).isDirectory()) {
+        return false;
+      }
     } catch {
       return false;
     }
+
+    return isInsideJjRepo(context);
   }
 
   getCustomKeybinds(): CustomKeybind[] {

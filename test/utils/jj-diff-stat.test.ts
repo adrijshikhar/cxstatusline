@@ -37,6 +37,17 @@ describe("getJjChangeCounts parsing", () => {
     });
   });
 
+  it("ignores trailing hint containing words insertions and deletions without numbers", () => {
+    const statWithHint =
+      "src/index.ts | 4 ++--\n" +
+      "1 file changed, 5 insertions(+), 3 deletions(-)\n" +
+      "Hint: There were no insertions into parent and no deletions pending";
+    expect(parseDiffStat(statWithHint)).toEqual({
+      insertions: 5,
+      deletions: 3,
+    });
+  });
+
   it("parses change counts via getJjChangeCounts with mock", () => {
     const spy = spyOn(childProcess, "execFileSync").mockReturnValue(
       "777 insertions.txt | 1 +\n1 file changed, 1 insertion(+), 0 deletions(-)\n"

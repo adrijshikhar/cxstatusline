@@ -48,7 +48,7 @@ describe("git runner timeout", () => {
   it("returns true for a temp directory without git markers", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "cxstatusline-no-git-"));
     try {
-      expect(typeof isDefinitelyOutsideGitRepository(tmp)).toBe("boolean");
+      expect(isDefinitelyOutsideGitRepository(tmp)).toBe(true);
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }

@@ -39,10 +39,11 @@ import { sanitizeTerminalText } from './terminal-sanitize';
 
 /** Untrusted strings cross this boundary before renderer-owned ANSI is applied. */
 const WIDGET_CONTROL_CHARS = /[\u0000-\u001F\u007F-\u009F]/g;
+const OSC8_SAFE_REGEX = /(?:\x1b\]8;[^\x00-\x1f\x7f-\x9f\x1b]*(?:\x1b\\|\x07))|([\u0000-\u001F\u007F-\u009F])/g;
 
 function sanitizeRawText(text: string): string {
     if (text.includes('\x1b]8;')) {
-        return text.replace(/(?:\x1b\]8;[^\x1b]*\x1b\\)|([\u0000-\u001F\u007F-\u009F])/g, (match, control) => {
+        return text.replace(OSC8_SAFE_REGEX, (match, control) => {
             return control ? '' : match;
         });
     }
@@ -178,7 +179,7 @@ function resolveEffectiveTerminalWidth(
     }
     if (flexMode === 'full-until-compact') {
         const threshold = settings.compactThreshold;
-        const contextPercentage = (context.data.usage?.context_used ?? 0) * 100;
+        const contextPercentage = context.contextPercentage ?? ((context.data.usage?.context_used ?? 0) * 100);
         return contextPercentage >= threshold
             ? remaining(40)
             : remaining(6);

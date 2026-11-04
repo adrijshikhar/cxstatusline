@@ -38,6 +38,12 @@ describe("8-bit ANSI and C1 control sanitization", () => {
       .toBe(`\x9b31ma\x9b0m${BG}b\x9b49m${BG}c`);
   });
 
+  it("re-applies the background after a colon-delimited SGR sequence that clears background", () => {
+    const BG = "\x1b[44m";
+    expect(restoreBackgroundAfterResets("\x1b[38:2::255:0:0;49mtest", BG))
+      .toBe(`\x1b[38:2::255:0:0;49m${BG}test`);
+  });
+
   it.each([
     ["clearing the screen", "\x9b2J"],
     ["moving the cursor", "\x9b10;20H"],

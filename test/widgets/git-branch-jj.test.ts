@@ -170,6 +170,9 @@ describe("GitBranchWidget fish-style & JJ enhancements", () => {
         if (argStr.includes("rev-parse --show-toplevel")) {
           return `${workspaceDir}\n`;
         }
+        if (argStr.includes("rev-parse --short HEAD")) {
+          return "ddfb2de\n";
+        }
         return "";
       });
 
@@ -207,6 +210,9 @@ describe("GitBranchWidget fish-style & JJ enhancements", () => {
         }
         if (argStr.includes("rev-parse --show-toplevel")) {
           return `${workspaceDir}\n`;
+        }
+        if (argStr.includes("rev-parse --short HEAD")) {
+          return "ddfb2de\n";
         }
         return "";
       });

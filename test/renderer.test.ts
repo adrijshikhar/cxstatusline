@@ -246,3 +246,43 @@ test("derives full-until-compact width from payload context usage at the thresho
   expect(getVisibleWidth(below!)).toBe(94);
   expect(getVisibleWidth(atThreshold!)).toBe(60);
 });
+
+test("derives full-until-compact width using context.contextPercentage fallback", () => {
+  const settings: Settings = {
+    ...threeRowSettings,
+    colorLevel: 0,
+    flexMode: "full-until-compact",
+    compactThreshold: 60,
+    lines: [[
+      { id: "1", type: "model" },
+      { id: "2", type: "flex-separator" },
+      { id: "3", type: "git-branch" },
+    ]],
+  };
+  const base = {
+    ...previewContext,
+    isPreview: false,
+    terminalWidth: 100,
+    data: { payload_version: 1 as const, model: { name: "left" }, git: { branch: "right" } },
+  };
+
+  const [atThreshold] = renderStatusLines(settings, { ...base, contextPercentage: 75 });
+  expect(getVisibleWidth(atThreshold!)).toBe(60);
+});
+
+test("strips raw control characters embedded inside OSC 8 sequence while preserving safe hyperlinks", () => {
+  const settings: Settings = {
+    ...threeRowSettings,
+    colorLevel: 3,
+    lines: [[
+      { id: "1", type: "custom-text", customText: "\x1b]8;;https://example.com/foo\nbar\r\x00baz\x1b\\link\x1b]8;;\x1b\\" },
+      { id: "2", type: "custom-text", customText: "\x1b]8;;https://example.com/bel\x07bellink\x1b]8;;\x07" },
+    ]],
+  };
+
+  const [row] = renderStatusLines(settings, { ...previewContext, terminalWidth: 100 });
+  expect(row).not.toContain("\n");
+  expect(row).not.toContain("\r");
+  expect(row).not.toContain("\x00");
+  expect(row).toContain("\x1b]8;;https://example.com/bel\x07bellink\x1b]8;;\x07");
+});
