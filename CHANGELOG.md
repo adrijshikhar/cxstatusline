@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.20.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.19.0...v0.20.0) (2026-11-06)
+
+
+### Features
+
+* support Codex 0.167.0 ([#197](https://github.com/adrijshikhar/cxstatusline/issues/197)) ([174d4ae](https://github.com/adrijshikhar/cxstatusline/commit/174d4aeadb43a5cace5d320fbbfb7b3c101b381a))
+
+
+### Bug Fixes
+
+* remove obsolete set_status_line_hyperlink in 0.167.0 patch ([#200](https://github.com/adrijshikhar/cxstatusline/issues/200)) ([819a366](https://github.com/adrijshikhar/cxstatusline/commit/819a366a340c3b74ce971907d4677ac7aca9e7b4))
+
 ## [0.19.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.18.0...v0.19.0) (2026-11-04)
 
 
