@@ -1013,7 +1013,7 @@ index 6e405d2..21c3fec 100644
              current_goal_status_indicator: None,
              current_goal_status: None,
 diff --git a/codex-rs/tui/src/chatwidget/status_surfaces.rs b/codex-rs/tui/src/chatwidget/status_surfaces.rs
-index 9e6baf1..4eaef78 100644
+index 9e6baf1..93e9fb9 100644
 --- a/codex-rs/tui/src/chatwidget/status_surfaces.rs
 +++ b/codex-rs/tui/src/chatwidget/status_surfaces.rs
 @@ -44,6 +44,16 @@ const TERMINAL_TITLE_ACTION_REQUIRED_INTERVAL: Duration = Duration::from_secs(1)
@@ -1082,7 +1082,7 @@ index 9e6baf1..4eaef78 100644
              return;
          }
          let cwd = self.status_line_cwd().to_path_buf();
-@@ -617,6 +633,189 @@ impl ChatWidget {
+@@ -617,6 +633,188 @@ impl ChatWidget {
      ///
      /// The resulting `StatusLineBranchUpdated` event carries the lookup cwd so callers can reject
      /// stale completions after directory changes.
@@ -1151,7 +1151,6 @@ index 9e6baf1..4eaef78 100644
 +        self.bottom_pane.set_cxstatusline_block(rendered);
 +        self.bottom_pane.set_status_line_enabled(/*enabled*/ false);
 +        self.set_status_line(/*status_line*/ None);
-+        self.set_status_line_hyperlink(/*url*/ None);
 +        true
 +    }
 +
@@ -1272,7 +1271,7 @@ index 9e6baf1..4eaef78 100644
      fn request_status_line_branch(&mut self, cwd: PathBuf) {
          if self.status_line_branch_pending {
              return;
-@@ -1306,3 +1505,48 @@ where
+@@ -1306,3 +1504,48 @@ where
      }
      (items, invalid)
  }
