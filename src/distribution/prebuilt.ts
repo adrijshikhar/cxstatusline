@@ -205,24 +205,50 @@ export async function preparePrebuilt(
 export const PREBUILT_PAGE_SIZE = 30;
 export const PREBUILT_MAX_PAGES = 10;
 
+export type PrebuiltFetchErrorKind =
+  | "timeout"
+  | "network_error"
+  | "rate_limited"
+  | "http_error"
+  | "not_found"
+  | "invalid_payload";
+
+export class PrebuiltFetchError extends Error {
+  readonly kind: PrebuiltFetchErrorKind;
+  readonly status?: number;
+
+  constructor(kind: PrebuiltFetchErrorKind, message: string, status?: number) {
+    super(message);
+    this.name = "PrebuiltFetchError";
+    this.kind = kind;
+    this.status = status;
+  }
+}
+
+export type PrebuiltFetchResult =
+  | { readonly ok: true; readonly versions: string[] }
+  | { readonly ok: false; readonly error: PrebuiltFetchError };
+
 export interface FetchPrebuiltsOptions {
   readonly maxRetries?: number;
   readonly retryDelayMs?: number;
+  readonly timeoutMs?: number;
+  readonly throwOnError?: boolean;
 }
 
 /**
  * Queries GitHub Releases for published prebuilt releases (tag `codex-v<semver>`).
- * Returns discrete Codex versions sorted descending by semver.
- * Fails safely to empty array on timeout (5s), network error, or invalid responses.
+ * Returns discrete Codex versions sorted descending by semver in a structured result.
  */
-export async function fetchPublishedPrebuiltVersions(
+export async function fetchPublishedPrebuiltVersionsResult(
   fetchFn?: FetchLike,
   repo: string = "adrijshikhar/cxstatusline",
   options?: FetchPrebuiltsOptions,
-): Promise<string[]> {
+): Promise<PrebuiltFetchResult> {
   const fetcher = fetchFn ?? (globalThis.fetch as unknown as FetchLike);
   const maxRetries = options?.maxRetries ?? 3;
   const retryDelayMs = options?.retryDelayMs ?? 1000;
+  const timeoutMs = options?.timeoutMs ?? 15000;
   try {
     const headers: Record<string, string> = {
       accept: "application/vnd.github+json",
@@ -232,36 +258,67 @@ export async function fetchPublishedPrebuiltVersions(
       headers.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
     }
     const data: unknown[] = [];
+    let lastError: PrebuiltFetchError | undefined;
     for (let page = 1; page <= PREBUILT_MAX_PAGES; page += 1) {
       let pageData: unknown[] | null = null;
       for (let attempt = 0; attempt < maxRetries; attempt += 1) {
         try {
           const res = await fetcher(`https://api.github.com/repos/${repo}/releases?per_page=${PREBUILT_PAGE_SIZE}&page=${page}`, {
             headers,
-            signal: AbortSignal.timeout(5000),
+            signal: AbortSignal.timeout(timeoutMs),
           });
           if (res.ok) {
             const result = (await res.json()) as unknown;
             if (Array.isArray(result)) {
               pageData = result;
+              lastError = undefined;
               break;
             }
-            return [];
+            lastError = new PrebuiltFetchError("invalid_payload", "GitHub API returned an invalid response");
+            break;
+          }
+          if (res.status === 403) {
+            let msg = "GitHub API rate limit exceeded (HTTP 403)";
+            try {
+              const body = (await res.json()) as { message?: string };
+              if (body?.message) msg = `GitHub API rate limit exceeded: ${body.message}`;
+            } catch {
+              // Ignore body parse errors
+            }
+            lastError = new PrebuiltFetchError("rate_limited", msg, 403);
+            break;
+          }
+          if (res.status === 404) {
+            lastError = new PrebuiltFetchError("not_found", `Repository ${repo} not found on GitHub`, 404);
+            break;
           }
           if (res.status >= 500 && attempt < maxRetries - 1) {
             if (retryDelayMs > 0) await new Promise((r) => setTimeout(r, (attempt + 1) * retryDelayMs));
             continue;
           }
-          return [];
-        } catch {
+          lastError = new PrebuiltFetchError("http_error", `GitHub API returned HTTP ${res.status}`, res.status);
+          break;
+        } catch (e) {
+          const isTimeout =
+            (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")) ||
+            String(e).toLowerCase().includes("timeout");
+          const errMsg = isTimeout
+            ? `Request to GitHub API timed out (${timeoutMs}ms)`
+            : (e instanceof Error ? e.message : String(e));
+          lastError = new PrebuiltFetchError(isTimeout ? "timeout" : "network_error", errMsg);
           if (attempt < maxRetries - 1) {
             if (retryDelayMs > 0) await new Promise((r) => setTimeout(r, (attempt + 1) * retryDelayMs));
             continue;
           }
-          return [];
+          break;
         }
       }
-      if (!pageData) return [];
+      if (!pageData) {
+        return {
+          ok: false,
+          error: lastError ?? new PrebuiltFetchError("network_error", "Failed to fetch prebuilt releases from GitHub"),
+        };
+      }
       data.push(...pageData);
       if (pageData.length < PREBUILT_PAGE_SIZE) break;
     }
@@ -278,12 +335,38 @@ export async function fetchPublishedPrebuiltVersions(
         }
       }
     }
-    return Array.from(versions).sort((a, b) => {
-      const semA = parseSemver(a)!;
-      const semB = parseSemver(b)!;
-      return compareSemver(semB, semA);
-    });
-  } catch {
+    return {
+      ok: true,
+      versions: Array.from(versions).sort((a, b) => {
+        const semA = parseSemver(a)!;
+        const semB = parseSemver(b)!;
+        return compareSemver(semB, semA);
+      }),
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof PrebuiltFetchError ? e : new PrebuiltFetchError("network_error", e instanceof Error ? e.message : String(e)),
+    };
+  }
+}
+
+/**
+ * Queries GitHub Releases for published prebuilt releases (tag `codex-v<semver>`).
+ * Returns discrete Codex versions sorted descending by semver.
+ * Fails safely to empty array on timeout, network error, or invalid responses unless `throwOnError` is set.
+ */
+export async function fetchPublishedPrebuiltVersions(
+  fetchFn?: FetchLike,
+  repo: string = "adrijshikhar/cxstatusline",
+  options?: FetchPrebuiltsOptions,
+): Promise<string[]> {
+  const result = await fetchPublishedPrebuiltVersionsResult(fetchFn, repo, options);
+  if (!result.ok) {
+    if (options?.throwOnError) {
+      throw result.error;
+    }
     return [];
   }
+  return result.versions;
 }
