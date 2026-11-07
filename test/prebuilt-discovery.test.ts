@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { fetchPublishedPrebuiltVersions } from "../src/distribution/prebuilt";
+import {
+  fetchPublishedPrebuiltVersions,
+  fetchPublishedPrebuiltVersionsResult,
+  PrebuiltFetchError,
+} from "../src/distribution/prebuilt";
 
 describe("fetchPublishedPrebuiltVersions", () => {
   test("extracts, parses, and sorts codex-v releases descending by semver", async () => {
@@ -78,5 +82,53 @@ describe("fetchPublishedPrebuiltVersions", () => {
 
     const versions = await fetchPublishedPrebuiltVersions(mockFetch as any);
     expect(versions).toEqual([]);
+  });
+
+  test("fetchPublishedPrebuiltVersionsResult returns structured error on rate limit (403)", async () => {
+    const mockFetch = async () => {
+      return new Response(JSON.stringify({ message: "API rate limit exceeded for IP" }), { status: 403 });
+    };
+    const res = await fetchPublishedPrebuiltVersionsResult(mockFetch as any);
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error.kind).toBe("rate_limited");
+      expect(res.error.status).toBe(403);
+      expect(res.error.message).toContain("API rate limit exceeded");
+    }
+  });
+
+  test("fetchPublishedPrebuiltVersionsResult returns structured error on network timeout", async () => {
+    const mockFetch = async () => {
+      const err = new Error("The operation was aborted due to timeout");
+      err.name = "TimeoutError";
+      throw err;
+    };
+    const res = await fetchPublishedPrebuiltVersionsResult(mockFetch as any, undefined, { retryDelayMs: 0 });
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error.kind).toBe("timeout");
+      expect(res.error.message).toContain("timed out");
+    }
+  });
+
+  test("fetchPublishedPrebuiltVersionsResult returns structured error on network failure", async () => {
+    const mockFetch = async () => {
+      throw new Error("getaddrinfo ENOTFOUND api.github.com");
+    };
+    const res = await fetchPublishedPrebuiltVersionsResult(mockFetch as any, undefined, { retryDelayMs: 0 });
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error.kind).toBe("network_error");
+      expect(res.error.message).toContain("ENOTFOUND");
+    }
+  });
+
+  test("fetchPublishedPrebuiltVersions throws when throwOnError is true", async () => {
+    const mockFetch = async () => {
+      throw new Error("connection reset");
+    };
+    expect(
+      fetchPublishedPrebuiltVersions(mockFetch as any, undefined, { retryDelayMs: 0, throwOnError: true }),
+    ).rejects.toThrow(PrebuiltFetchError);
   });
 });
