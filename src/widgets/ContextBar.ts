@@ -2,6 +2,7 @@ import type { RenderContext } from '../types/RenderContext';
 import type { Settings } from '../types/Settings';
 import type { CustomKeybind, Widget, WidgetEditorDisplay, WidgetItem } from '../types/Widget';
 import { getContextWindowMetrics } from '../utils/context-window';
+import { getContextConfig, getModelContextIdentifier } from '../utils/model-context';
 import { formatTokens } from '../utils/format-tokens';
 import { formatPercent, resolveNumberFormat } from '../utils/number-format';
 import { makeUsageProgressBar } from '../utils/usage';
@@ -49,7 +50,8 @@ export class ContextBarWidget implements Widget {
       return formatRawOrLabeledValue(item, 'Context: ', `${makeUsageProgressBar(25, width)} ${usedDisplay}/${totalDisplay} (${percentDisplay})`);
     }
     const metrics = getContextWindowMetrics(context.data);
-    const total = metrics.windowSize;
+    const modelIdentifier = getModelContextIdentifier(context.data?.model);
+    const total = getContextConfig(modelIdentifier, metrics.windowSize).maxTokens;
     const used = metrics.contextLengthTokens;
     if (total === null || used === null || total <= 0) return null;
     const percent = Math.max(0, Math.min(100, (used / total) * 100));

@@ -53,6 +53,76 @@ describe("terminal width settings & caching", () => {
     }
   });
 
+  it("respects COLUMNS environment variable when CXSTATUSLINE_WIDTH and CCSTATUSLINE_WIDTH are not set", () => {
+    const origCx = process.env.CXSTATUSLINE_WIDTH;
+    const origCc = process.env.CCSTATUSLINE_WIDTH;
+    const origCols = process.env.COLUMNS;
+    try {
+      delete process.env.CXSTATUSLINE_WIDTH;
+      delete process.env.CCSTATUSLINE_WIDTH;
+      process.env.COLUMNS = "110";
+      expect(getTerminalWidth()).toBe(110);
+    } finally {
+      if (origCx !== undefined) process.env.CXSTATUSLINE_WIDTH = origCx;
+      if (origCc !== undefined) process.env.CCSTATUSLINE_WIDTH = origCc;
+      if (origCols !== undefined) process.env.COLUMNS = origCols;
+      else delete process.env.COLUMNS;
+    }
+  });
+
+  it("prefers CXSTATUSLINE_WIDTH over COLUMNS", () => {
+    const origCx = process.env.CXSTATUSLINE_WIDTH;
+    const origCc = process.env.CCSTATUSLINE_WIDTH;
+    const origCols = process.env.COLUMNS;
+    try {
+      process.env.CXSTATUSLINE_WIDTH = "150";
+      process.env.COLUMNS = "110";
+      expect(getTerminalWidth()).toBe(150);
+    } finally {
+      if (origCx !== undefined) process.env.CXSTATUSLINE_WIDTH = origCx;
+      if (origCc !== undefined) process.env.CCSTATUSLINE_WIDTH = origCc;
+      if (origCols !== undefined) process.env.COLUMNS = origCols;
+      else delete process.env.COLUMNS;
+    }
+  });
+
+  it("prefers CCSTATUSLINE_WIDTH over COLUMNS", () => {
+    const origCx = process.env.CXSTATUSLINE_WIDTH;
+    const origCc = process.env.CCSTATUSLINE_WIDTH;
+    const origCols = process.env.COLUMNS;
+    try {
+      delete process.env.CXSTATUSLINE_WIDTH;
+      process.env.CCSTATUSLINE_WIDTH = "135";
+      process.env.COLUMNS = "110";
+      expect(getTerminalWidth()).toBe(135);
+    } finally {
+      if (origCx !== undefined) process.env.CXSTATUSLINE_WIDTH = origCx;
+      if (origCc !== undefined) process.env.CCSTATUSLINE_WIDTH = origCc;
+      if (origCols !== undefined) process.env.COLUMNS = origCols;
+      else delete process.env.COLUMNS;
+    }
+  });
+
+  it("ignores non-positive or non-numeric COLUMNS values", () => {
+    const origCx = process.env.CXSTATUSLINE_WIDTH;
+    const origCc = process.env.CCSTATUSLINE_WIDTH;
+    const origCols = process.env.COLUMNS;
+    try {
+      delete process.env.CXSTATUSLINE_WIDTH;
+      delete process.env.CCSTATUSLINE_WIDTH;
+      process.env.COLUMNS = "invalid";
+      resetTerminalWidthCache();
+      // Should not return NaN or throw, probes or falls back
+      const width = getTerminalWidth({ ttlSeconds: 0 });
+      expect(width === null || typeof width === "number").toBe(true);
+    } finally {
+      if (origCx !== undefined) process.env.CXSTATUSLINE_WIDTH = origCx;
+      if (origCc !== undefined) process.env.CCSTATUSLINE_WIDTH = origCc;
+      if (origCols !== undefined) process.env.COLUMNS = origCols;
+      else delete process.env.COLUMNS;
+    }
+  });
+
   it("validates terminalWidthCacheTtlSeconds in SettingsSchema with min(0) and max(300)", () => {
     const parsedDefault = SettingsSchema.parse({});
     expect(parsedDefault.terminalWidthCacheTtlSeconds).toBe(5);

@@ -18,8 +18,11 @@ export class ContextWindowWidget implements Widget {
   getLabelPrefix(): string { return LABEL; }
   render(item: WidgetItem, context: RenderContext, settings: Settings): string | null {
     const format = resolveNumberFormat('token', item, settings);
-    let total = context.isPreview ? 200000 : getContextWindowSize(context.data);
-    if (total === null) total = getContextConfig(getModelContextIdentifier(context.data.model)).maxTokens;
+    if (context.isPreview) {
+      return formatRawOrLabeledValue(item, this.getLabelPrefix(), formatTokens(200000, format));
+    }
+    const modelIdentifier = getModelContextIdentifier(context.data?.model);
+    const total = getContextConfig(modelIdentifier, getContextWindowSize(context.data)).maxTokens;
     if (total <= 0) return null;
     return formatRawOrLabeledValue(item, this.getLabelPrefix(), formatTokens(total, format));
   }

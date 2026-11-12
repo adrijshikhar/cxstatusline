@@ -26,7 +26,7 @@ export class ContextPercentageUsableWidget implements Widget {
     const format = resolveNumberFormat('percent', item, settings);
     const metrics = context.isPreview ? { contextLengthTokens: 18_560, windowSize: 200_000 } : getContextWindowMetrics(context.data);
     if (metrics.contextLengthTokens === null) return null;
-    const config = getContextConfig(getModelContextIdentifier(context.data.model), metrics.windowSize);
+    const config = getContextConfig(getModelContextIdentifier(context.data?.model), metrics.windowSize);
     const used = Math.min(100, metrics.contextLengthTokens / config.usableTokens * 100);
     const percentage = isContextInverse(item) ? 100 - used : used;
     const slider = renderContextSlider(getContextSliderMode(item), percentage, format);
