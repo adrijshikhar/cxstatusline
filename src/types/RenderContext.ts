@@ -4,6 +4,8 @@ import type { SpeedMetrics } from "./SpeedMetrics";
 /** All values available to widgets for one status-line render. */
 export interface RenderContext {
   readonly data: PayloadV1;
+  /** Codex's JSON as it arrived, for Custom Command's stdin. */
+  readonly rawData?: Record<string, unknown>;
   readonly now: Date;
   readonly terminalWidth: number | null;
   /** Explicit or pre-calculated speed metrics for token processing rates. */

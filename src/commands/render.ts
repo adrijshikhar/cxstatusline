@@ -26,12 +26,22 @@ export async function runRender(stdin: string, deps: RenderDeps): Promise<Render
     warnings.push(`cxstatusline: ${m}\n`);
   };
   try {
+    let rawData: Record<string, unknown> | undefined;
+    try {
+      const parsed = JSON.parse(stdin);
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        rawData = parsed as Record<string, unknown>;
+      }
+    } catch {
+      // payload parser will handle malformed JSON
+    }
     const payload = parsePayload(stdin);
     const paths = resolvePaths(deps.env);
     const loaded = await loadSettings(paths.settingsFile);
     if (loaded.error) warn(`${loaded.error}; using defaults`);
     const rows = renderStatusLines(loaded.settings, {
       data: payload,
+      rawData,
       now: deps.now,
       terminalWidth: deps.terminalWidth,
       freeMemoryBytes: deps.freeMemoryBytes,

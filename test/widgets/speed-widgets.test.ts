@@ -53,7 +53,7 @@ describe("OutputSpeedWidget", () => {
 
   it("should describe session-average behavior and window override", () => {
     expect(widget.getDescription()).toContain("session-average");
-    expect(widget.getDescription()).toContain("0-120");
+    expect(widget.getDescription()).toContain("0-3600");
   });
 
   it("should expose a window editor keybind", () => {
@@ -198,8 +198,8 @@ describe("TotalSpeedWidget", () => {
   });
 
   it("should clamp invalid editor metadata to supported range", () => {
-    const item = createItem("total-speed", { metadata: { windowSeconds: "999" } });
-    expect(widget.getEditorDisplay(item).modifierText).toBe("(120s window)");
+    const item = createItem("total-speed", { metadata: { windowSeconds: "9999" } });
+    expect(widget.getEditorDisplay(item).modifierText).toBe("(3600s window)");
   });
 
   it("should render preview values", () => {

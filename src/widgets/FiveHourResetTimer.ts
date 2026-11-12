@@ -55,6 +55,7 @@ import {
     isUsageSliderMode,
     isUsageWeekdayEnabled,
     makeSliderBar,
+    renderUsageProgressBar,
     toggleUsageCompact,
     toggleUsageDateMode,
     toggleUsageHourFormat,
@@ -188,9 +189,8 @@ export class FiveHourResetTimerWidget implements Widget {
             const previewPercent = inverted ? 90.0 : 10.0;
 
             if (isUsageProgressMode(displayMode)) {
-                const barWidth = getUsageProgressBarWidth(displayMode);
-                const progressBar = makeTimerProgressBar(previewPercent, barWidth);
-                return formatRawOrLabeledValue(item, '5h Reset ', `[${progressBar}] ${formatPercent(previewPercent, format)}`);
+                const progressBar = renderUsageProgressBar(previewPercent, displayMode);
+                return formatRawOrLabeledValue(item, '5h Reset ', `${progressBar} ${formatPercent(previewPercent, format)}`);
             }
 
             if (isUsageSliderMode(displayMode)) {
@@ -236,10 +236,9 @@ export class FiveHourResetTimerWidget implements Widget {
         }
 
         if (isUsageProgressMode(displayMode)) {
-            const barWidth = getUsageProgressBarWidth(displayMode);
             const percent = inverted ? window.remainingPercent : window.elapsedPercent;
-            const progressBar = makeTimerProgressBar(percent, barWidth);
-            return formatRawOrLabeledValue(item, '5h Reset ', `[${progressBar}] ${formatPercent(percent, format)}`);
+            const progressBar = renderUsageProgressBar(percent, displayMode);
+            return formatRawOrLabeledValue(item, '5h Reset ', `${progressBar} ${formatPercent(percent, format)}`);
         }
 
         if (isUsageSliderMode(displayMode)) {

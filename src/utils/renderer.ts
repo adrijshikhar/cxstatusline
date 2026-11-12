@@ -17,6 +17,7 @@ import {
     getVisibleWidth,
     keepSgrOnly,
     restoreBackgroundAfterResets,
+    restoreStyleAfterResets,
     stripSgrCodes,
     truncateStyledText
 } from './ansi';
@@ -1289,11 +1290,16 @@ export function renderStatusLine(
                     const bg = (settings.overrideBackgroundColor && settings.overrideBackgroundColor !== 'none')
                         ? settings.overrideBackgroundColor
                         : widget.backgroundColor;
-                    if (bg) {
-                        const bgCode = getColorAnsiCode(bg, colorLevel, true);
-                        content = `${bgCode}${restoreBackgroundAfterResets(widgetText, bgCode)}\x1b[0m`;
+                    const bgCode = bg ? getColorAnsiCode(bg, colorLevel, true) : undefined;
+                    content = restoreStyleAfterResets(widgetText, {
+                        background: bgCode,
+                        bold: settings.globalBold || widget.bold,
+                        dim: widget.dim === true
+                    });
+                    if (bgCode) {
+                        content = `${bgCode}${content}\x1b[0m`;
                     } else {
-                        content = `${widgetText}\x1b[0m`;
+                        content = `${content}\x1b[0m`;
                     }
                 } else {
                     content = applyColorsWithOverride(widgetText, widget.color ?? defaultColor, widget.backgroundColor, widget.bold, widget.dim);

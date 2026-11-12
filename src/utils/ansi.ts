@@ -465,34 +465,89 @@ export function stripSgrCodes(text: string): string {
     return text.replace(SGR_REGEX, '');
 }
 
-// Track background operations in order: a later explicit color overrides a
-// reset (0, an empty parameter, or 49). Skip extended color arguments so their
-// values aren't mistaken for resets or background operations.
-function sgrClearsBackground(sequence: string): boolean {
+type SgrEffect = 'clear' | 'set' | undefined;
+
+function getBackgroundEffect(param: number | undefined): SgrEffect {
+    if (param === 0 || param === 49) {
+        return 'clear';
+    }
+    if (param !== undefined && ((param >= 40 && param <= 47) || (param >= 100 && param <= 107) || param === 48)) {
+        return 'set';
+    }
+    return undefined;
+}
+
+// Bold (set by 1) and dim (set by 2) are both cleared by 0 and 22
+function getIntensityEffect(param: number | undefined, setBy: 1 | 2): SgrEffect {
+    if (param === 0 || param === 22) {
+        return 'clear';
+    }
+    return param === setBy ? 'set' : undefined;
+}
+
+interface SgrClears {
+    background: boolean;
+    bold: boolean;
+    dim: boolean;
+}
+
+// Track each attribute's operations in order: a later explicit setting
+// overrides a reset. Skip extended color arguments so their values aren't
+// mistaken for resets or background operations.
+function getSgrClears(sequence: string): SgrClears {
     const introducerLength = sequence.startsWith(C1_CSI) ? 1 : 2;
     const rawParts = sequence.slice(introducerLength, -1).split(';');
-    let clearsBackground = false;
+    const clears: SgrClears = { background: false, bold: false, dim: false };
+    const track = (attribute: keyof SgrClears, effect: SgrEffect) => {
+        if (effect) {
+            clears[attribute] = effect === 'clear';
+        }
+    };
     for (let i = 0; i < rawParts.length; i++) {
         const part = rawParts[i] ?? '';
         const subparams = part.split(':').map(p => Number.parseInt(p || '0', 10));
         const code = subparams[0] ?? 0;
-        if (code === 0 || code === 49) {
-            clearsBackground = true;
-        } else if ((code >= 40 && code <= 47) || (code >= 100 && code <= 107) || code === 48) {
-            clearsBackground = false;
-        }
-        if (subparams.length === 1 && (code === 38 || code === 48 || code === 58)) {
+        track('background', getBackgroundEffect(code));
+        track('bold', getIntensityEffect(code, 1));
+        track('dim', getIntensityEffect(code, 2));
+        if ((code === 38 || code === 48 || code === 58) && !part.includes(':')) {
             const next = Number.parseInt(rawParts[i + 1] || '0', 10);
             i += next === 5 ? 2 : 4;
         }
     }
-    return clearsBackground;
+    return clears;
+}
+
+// The styling restoreStyleAfterResets re-applies, with the background as the
+// SGR code that sets it
+export interface RestoredStyle {
+    background?: string;
+    bold?: boolean;
+    dim?: boolean;
+}
+
+// Re-apply a widget's own styling after each SGR sequence in the text that
+// clears it, so text that resets its own styling keeps the background, bold
+// and dim it's drawn with.
+export function restoreStyleAfterResets(text: string, style: RestoredStyle): string {
+    const background = style.background ?? '';
+    if (!background && !style.bold && !style.dim) {
+        return text;
+    }
+
+    return text.replace(SGR_REGEX, (sequence) => {
+        const clears = getSgrClears(sequence);
+        return sequence
+            + (style.bold && clears.bold ? '\x1b[1m' : '')
+            + (style.dim && clears.dim ? '\x1b[2m' : '')
+            + (clears.background ? background : '');
+    });
 }
 
 // Re-apply a background after each SGR sequence in the text that clears it,
 // so text that resets its own styling stays on the background it's drawn on.
 export function restoreBackgroundAfterResets(text: string, backgroundCode: string): string {
-    return text.replace(SGR_REGEX, sequence => (sgrClearsBackground(sequence) ? sequence + backgroundCode : sequence));
+    return restoreStyleAfterResets(text, { background: backgroundCode });
 }
 
 export function stripOscCodes(text: string): string {

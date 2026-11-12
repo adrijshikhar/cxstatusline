@@ -200,9 +200,10 @@ export function runSynchronously(
         return '[Budget]';
     }
 
+    const payload = context.rawData ?? context.data;
     const input = JSON.stringify(typeof context.terminalWidth === 'number'
-        ? { ...context.data, terminal_width: context.terminalWidth }
-        : context.data);
+        ? { ...payload, terminal_width: context.terminalWidth }
+        : payload);
     const cwd = context.data.session?.cwd;
     const start = performance.now();
     const result = runner({
@@ -232,9 +233,10 @@ function runCached(
     const cwdStr = cwd && cwd.length > 0 ? cwd : '';
     const key = cacheKey(item.commandPath, cwdStr);
     const docPath = join(context.commandCacheDir, `${key}.json`);
+    const payload = context.rawData ?? context.data;
     const input = JSON.stringify(typeof context.terminalWidth === 'number'
-        ? { ...context.data, terminal_width: context.terminalWidth }
-        : context.data);
+        ? { ...payload, terminal_width: context.terminalWidth }
+        : payload);
 
     const doc = readDocument(docPath, deps.now);
     const now = deps.now();
