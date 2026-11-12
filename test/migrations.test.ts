@@ -53,6 +53,19 @@ describe("settings migration", () => {
     expect(out.unknownVersion).toBe(true);
   });
 
+  test("version-less settings normalize legacy hide flags without claiming migrated", () => {
+    const raw = v2();
+    delete (raw as Record<string, unknown>).version;
+    const out = migrateSettings(raw);
+    expect(out.migrated).toBe(false);
+    expect(out.unknownVersion).toBe(false);
+    const parsed = SettingsSchema.safeParse(out.settings);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.lines[0]![0]!.metadata?.hide).toBe("no-git");
+    }
+  });
+
   test("migration never throws on junk", () => {
     for (const junk of [null, 42, "x", [], {}, { version: "2" }, { version: 2, lines: "no" }]) {
       expect(() => migrateSettings(junk)).not.toThrow();

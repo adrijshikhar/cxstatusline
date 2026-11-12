@@ -72,9 +72,15 @@ export function PowerlineSeparatorEditor({ settings, mode, onUpdate, onBack }: P
         const point = Number.parseInt(hexInput, 16);
         if (hexInput.length >= 4 && hexInput.length <= 6 && Number.isInteger(point) && point >= 0 && point <= 0x10ffff) {
           const next = [...items];
-          if (next.length) next[selected] = String.fromCodePoint(point);
-          else next.push(String.fromCodePoint(point));
-          update(next);
+          const char = String.fromCodePoint(point);
+          if (next.length) next[selected] = char;
+          else next.push(char);
+          let nextInversions = [...inversions];
+          if (mode === "separator" && presets.some((p) => p.char === char)) {
+            nextInversions = next.map((_, i) => inversions[i] ?? false);
+            nextInversions[items.length === 0 ? 0 : selected] = char === "\uE0B2" || char === "\uE0B6";
+          }
+          update(next, nextInversions);
           setHexInput(null);
         }
       } else if (key.backspace || key.delete) setHexInput((value) => value?.slice(0, -1) ?? null);
