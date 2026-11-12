@@ -32,6 +32,42 @@ describe('CurrentWorkingDirWidget', () => {
     const home = os.homedir();
 
     describe('fishStyle', () => {
+        it.each([
+            { name: 'an emoji', path: '/srv/🚀 rockets/sub/last', expected: '/srv/🚀/s/last' },
+            { name: 'a joined emoji', path: '/srv/👨‍👩‍👧 family/sub/last', expected: '/srv/👨‍👩‍👧/s/last' },
+            { name: 'an emoji after a dot', path: '/srv/.😀x/sub/last', expected: '/srv/.😀/s/last' },
+            { name: 'a decomposed accent', path: '/srv/U\u0308ber/sub/last', expected: '/srv/U\u0308/s/last' }
+        ])('should keep $name whole when abbreviating a middle segment', ({ path, expected }) => {
+            const item = createItem({ fishStyle: 'true' }, true);
+            const result = widget.render(
+                item,
+                createContext(path),
+                DEFAULT_SETTINGS
+            );
+            expect(result).toBe(expected);
+        });
+
+        it.each([
+            { path: '\\\\server\\share\\team\\repo', expected: '\\\\server\\s\\t\\repo' },
+            { path: '//server/share/team/repo', expected: '//server/s/t/repo' },
+            { path: 'C:\\Users\\me\\proj\\sub', expected: 'C:\\U\\m\\p\\sub' }
+        ])('should keep the root of $path', ({ path, expected }) => {
+            const item = createItem({ fishStyle: 'true' }, true);
+            const result = widget.render(
+                item,
+                createContext(path),
+                DEFAULT_SETTINGS
+            );
+            expect(result).toBe(expected);
+        });
+
+        it('should disable fishStyle and drop a segment count saved next to it', () => {
+            const item = createItem({ fishStyle: 'true', segments: '2' });
+            const result = widget.handleEditorAction('toggle-fish-style', item);
+            expect(result?.metadata?.fishStyle).toBeUndefined();
+            expect(result?.metadata?.segments).toBeUndefined();
+        });
+
         it('should replace home directory with ~ and abbreviate middle segments', () => {
             const item = createItem({ fishStyle: 'true' }, true);
             const result = widget.render(
