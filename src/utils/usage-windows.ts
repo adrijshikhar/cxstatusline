@@ -45,9 +45,11 @@ export function formatUsageResetAt(resetAt: string | undefined, compact = false,
     const options: Intl.DateTimeFormatOptions = { ...(zone === undefined ? {} : { timeZone: zone }), hour: '2-digit', minute: '2-digit', hour12, timeZoneName: compact ? undefined : 'short' };
     if (weekday) options.weekday = 'short';
     else { options.year = 'numeric'; options.month = '2-digit'; options.day = '2-digit'; }
-    const parts = Object.fromEntries(new Intl.DateTimeFormat(locale ?? 'en-US', options).formatToParts(date).map(part => [part.type, part.value]));
+    const resolvedLocale = locale ? (locale.includes('-u-ca-') ? locale : `${locale}-u-ca-gregory`) : 'en-US';
+    const parts = Object.fromEntries(new Intl.DateTimeFormat(resolvedLocale, options).formatToParts(date).map(part => [part.type, part.value]));
     const hour = String(parts.hour ?? '').replace(/^0/, '');
-    const time = hour + ':' + String(parts.minute ?? '') + (parts.dayPeriod ? ' ' + String(parts.dayPeriod).toUpperCase() : '');
+    const dayPeriod = parts.dayPeriod ? ' ' + String(parts.dayPeriod).replace(/[\s.]+/g, '').toUpperCase() : '';
+    const time = hour + ':' + String(parts.minute ?? '') + dayPeriod;
     if (weekday) return compact ? String(parts.weekday ?? '') + ' ' + time : String(parts.weekday ?? '') + ' ' + time + ' ' + String(parts.timeZoneName ?? '').trim();
     if (compact) return String(parts.month ?? pad(date.getUTCMonth() + 1)) + '-' + String(parts.day ?? pad(date.getUTCDate())) + ' ' + time;
     return String(parts.year ?? date.getUTCFullYear()) + '-' + String(parts.month ?? pad(date.getUTCMonth() + 1)) + '-' + String(parts.day ?? pad(date.getUTCDate())) + ' ' + time + ' ' + String(parts.timeZoneName ?? 'UTC');
