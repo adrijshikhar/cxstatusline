@@ -1,22 +1,25 @@
 cxstatusline
 
-Portions of src/utils/{ansi,colors,context-window,executable-path,git,git-hardening,gradient,hyperlink,jj,no-proxy,powerline-settings,powerline-theme-index,renderer,separator-index,terminal,terminal-sanitize,windows-code-page}.ts
-are derived from ccstatusline at commit c78cc4d8107d095c4798f0d8e87671dd4f6ee2e6 (v2.2.33).
+Portions of src/utils/{ansi,colors,color-sanitize,context-window,executable-path,git,git-hardening,gradient,hyperlink,jj,no-proxy,powerline-settings,powerline-theme-index,renderer,separator-index,terminal,terminal-sanitize,usage-windows,windows-code-page}.ts
+are derived from ccstatusline at commit 0c94df755665ed7794f082863821fd5f428cdf60 (v2.2.34).
 
 Portions of src/{types/{RenderContext.ts,SpeedMetrics.ts},utils/{widget-manifest.ts,widgets.ts,speed-metrics.ts,speed-window.ts},widgets/}
-are derived from ccstatusline at commit c78cc4d8107d095c4798f0d8e87671dd4f6ee2e6 (v2.2.33).
+are derived from ccstatusline at commit 0c94df755665ed7794f082863821fd5f428cdf60 (v2.2.34).
 
-Portions of src/widgets/shared/{BlinkingCursor.tsx,cursor-blink.ts,text-cursor.ts}
-are derived from ccstatusline at commit c78cc4d8107d095c4798f0d8e87671dd4f6ee2e6 (v2.2.33).
+Portions of src/widgets/shared/{BlinkingCursor.tsx,cursor-blink.ts,effort-style.ts,progress-bar.ts,text-cursor.ts,usage-display.ts}
+are derived from ccstatusline at commit 0c94df755665ed7794f082863821fd5f428cdf60 (v2.2.34).
 
-Portions of src/tui/components/{TerminalWidthMenu,PowerlineSetup,PowerlineSeparatorEditor,PowerlineThemeSelector,GlobalOverridesMenu}.tsx
-are derived from ccstatusline at commit c78cc4d8107d095c4798f0d8e87671dd4f6ee2e6 (v2.2.33).
+Portions of src/tui/components/{TerminalWidthMenu,PowerlineSetup,PowerlineSeparatorEditor,PowerlineThemeSelector,GlobalOverridesMenu,ColorMenu}.tsx
+are derived from ccstatusline at commit 0c94df755665ed7794f082863821fd5f428cdf60 (v2.2.34).
+
+Portions of src/tui/components/color-menu/{PalettePicker.tsx,palette.ts,mutations.ts}
+are derived from ccstatusline at commit 0c94df755665ed7794f082863821fd5f428cdf60 (v2.2.34).
 
 Portions of src/tui/components/items-editor/{list-window,picker-selection}.ts
-are derived from ccstatusline at commit c78cc4d8107d095c4798f0d8e87671dd4f6ee2e6 (v2.2.33).
+are derived from ccstatusline at commit 0c94df755665ed7794f082863821fd5f428cdf60 (v2.2.34).
 
 Portions of src/tui/components/{ExportConfigDialog,ImportConfigDialog,ImportPreviewDialog,LabelEditor}.tsx
-are derived from ccstatusline at commit c78cc4d8107d095c4798f0d8e87671dd4f6ee2e6 (v2.2.33).
+are derived from ccstatusline at commit 0c94df755665ed7794f082863821fd5f428cdf60 (v2.2.34).
 
 Copyright (c) 2025 Matthew Breedlove (https://github.com/sirmalloc)
 Original repository: https://github.com/sirmalloc/ccstatusline

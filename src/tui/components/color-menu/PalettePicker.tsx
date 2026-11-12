@@ -35,7 +35,8 @@ export const PalettePicker: React.FC<PalettePickerProps> = ({ title, initialInde
     const { stdout } = useStdout();
     const [index, setIndex] = useState(initialIndex);
     const [typed, setTyped] = useState('');
-    const wide = (stdout.columns || 80) >= WIDE_CELLS_MIN_COLUMNS;
+    const tty = stdout as NodeJS.WriteStream | undefined;
+    const wide = (tty?.columns || 80) >= WIDE_CELLS_MIN_COLUMNS;
 
     const highlight = (next: number) => {
         setIndex(next);
