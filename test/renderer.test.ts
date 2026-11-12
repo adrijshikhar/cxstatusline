@@ -157,7 +157,7 @@ test("applies a truecolor gradient after truncation", () => {
   expect(getVisibleText(row!)).toBe("Model: model-co...");
 });
 
-test("keeps padding and collapses adjacent separators", () => {
+test("keeps padding and preserves adjacent separators placed next to each other", () => {
   const settings: Settings = {
     ...threeRowSettings,
     lines: [[
@@ -171,7 +171,7 @@ test("keeps padding and collapses adjacent separators", () => {
 
   const [row] = renderStatusLines(settings, { ...previewContext, terminalWidth: 200 });
 
-  expect(getVisibleText(row!).match(/\|/g)).toHaveLength(1);
+  expect(getVisibleText(row!).match(/\|/g)).toHaveLength(2);
 });
 
 test("renders Powerline segments with configured separators", () => {

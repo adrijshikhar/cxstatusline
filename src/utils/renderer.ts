@@ -1089,9 +1089,11 @@ export function renderStatusLine(
     widgets: WidgetItem[],
     settings: Settings,
     context: RenderContext,
-    preRenderedWidgets: PreRenderedWidget[],
-    preCalculatedMaxWidths: number[]
+    preRenderedWidgets?: PreRenderedWidget[],
+    preCalculatedMaxWidths?: number[]
 ): string {
+    const preRendered = preRenderedWidgets ?? preRenderAllWidgets([widgets], settings, context)[0] ?? [];
+    const maxWidths = preCalculatedMaxWidths ?? [];
     // Force 24-bit color for non-preview statusline rendering
     // Chalk level is now set globally in ccstatusline.ts and tui.tsx
     // No need to override here
@@ -1112,8 +1114,8 @@ export function renderStatusLine(
             context.lineIndex ?? 0,
             context.globalSeparatorIndex ?? 0,
             context.globalPowerlineThemeIndex ?? 0,
-            preRenderedWidgets,
-            preCalculatedMaxWidths
+            preRendered,
+            maxWidths
         );
 
     // Helper to apply colors with optional background, bold, and dim
@@ -1158,7 +1160,7 @@ export function renderStatusLine(
             const next = widgets[j];
             if (!next)
                 continue;
-            if (next.type === 'separator' || next.type === 'flex-separator' || preRenderedWidgets[j]?.content)
+            if (next.type === 'separator' || next.type === 'flex-separator' || preRendered[j]?.content)
                 return false;
             if (!next.merge)
                 return true;
@@ -1179,8 +1181,12 @@ export function renderStatusLine(
             // and the preceding visible content. A visible separator owns that
             // boundary, while spacing-only separators can be replaced by a
             // more meaningful separator that follows the empty widget.
+            // Separators placed next to each other form one run and all
+            // render; only a run on the far side of an empty widget can
+            // own or give up the boundary.
             let contentBeforeIndex: number | null = null;
             let replacesSpacingSeparator = false;
+            let followsSeparatorInRun = false;
             let crossedEmptyWidget = false;
             let crossedUnmergedEmptyWidget = false;
             for (let j = i - 1; j >= 0; j--) {
@@ -1188,6 +1194,10 @@ export function renderStatusLine(
                 if (!prevWidget)
                     continue;
                 if (prevWidget.type === 'separator') {
+                    if (!crossedEmptyWidget) {
+                        followsSeparatorInRun = true;
+                        continue;
+                    }
                     if (!isSpacingSeparator(prevWidget, settings.defaultSeparator))
                         break;
                     replacesSpacingSeparator = true;
@@ -1195,7 +1205,7 @@ export function renderStatusLine(
                 }
                 if (prevWidget.type === 'flex-separator')
                     break;
-                if (preRenderedWidgets[j]?.content) {
+                if (preRendered[j]?.content) {
                     // A merge owns the boundary across widgets that render empty,
                     // but only while each of them is merged onward too.
                     if (!prevWidget.merge || !crossedEmptyWidget || crossedUnmergedEmptyWidget)
@@ -1209,7 +1219,10 @@ export function renderStatusLine(
             if (contentBeforeIndex === null)
                 continue;
 
-            if (replacesSpacingSeparator) {
+            // Only the first separator of a run removes the spacing it
+            // replaces; the rest of the run would remove that run's own
+            // separators.
+            if (replacesSpacingSeparator && !followsSeparatorInRun) {
                 while (isSpacingSeparator(elements[elements.length - 1]?.widget, settings.defaultSeparator)) {
                     elements.pop();
                 }
@@ -1257,10 +1270,10 @@ export function renderStatusLine(
             let defaultColor = 'white';
 
             // Use pre-rendered content
-            const preRendered = preRenderedWidgets[i];
+            const widgetPreRendered = preRendered[i];
             let isStyled = false;
-            if (preRendered?.content) {
-                const resolved = resolveStyledText(preRendered.content, preRendered.styled, settings, colorLevel);
+            if (widgetPreRendered?.content) {
+                const resolved = resolveStyledText(widgetPreRendered.content, widgetPreRendered.styled, settings, colorLevel);
                 widgetText = resolved.text;
                 isStyled = resolved.styled;
                 // Get default color from widget impl for consistency
