@@ -742,7 +742,45 @@ describe("runUpdate", () => {
     const { c, calls, said } = ctx();
     expect(await runUpdate(c, { force: true, fetchPrebuilts: async () => [] })).toBe(1);
     expect(calls).toEqual([]);
-    expect(said.join("\n")).toMatch(/No supported prebuilt/);
+    expect(said.join("\n")).toMatch(/No supported prebuilt release could be found/);
+    expect(said.join("\n")).not.toMatch(/Check your connection/);
+  });
+
+  test("runUpdate reports clear error on network timeout during prebuilt discovery", async () => {
+    const { c, said } = ctx();
+    const mockFetch = async () => {
+      const err = new Error("The operation was aborted due to timeout");
+      err.name = "TimeoutError";
+      throw err;
+    };
+    const code = await runUpdate(c, {}, { fetch: mockFetch as any });
+    expect(code).toBe(1);
+    expect(said.join("\n")).toMatch(/Failed to check for prebuilt releases: Request to GitHub API timed out/);
+    expect(said.join("\n")).toMatch(/Check your connection or retry later/);
+    expect(said.join("\n")).not.toMatch(/No supported prebuilt release could be found/);
+  });
+
+  test("runUpdate reports clear error on rate limit during prebuilt discovery", async () => {
+    const { c, said } = ctx();
+    const mockFetch = async () => {
+      return new Response(JSON.stringify({ message: "API rate limit exceeded for 1.2.3.4" }), { status: 403 });
+    };
+    const code = await runUpdate(c, {}, { fetch: mockFetch as any });
+    expect(code).toBe(1);
+    expect(said.join("\n")).toMatch(/Failed to check for prebuilt releases: GitHub API rate limit exceeded: API rate limit exceeded for 1.2.3.4/);
+    expect(said.join("\n")).toMatch(/Check your connection or retry later/);
+    expect(said.join("\n")).not.toMatch(/No supported prebuilt release could be found/);
+  });
+
+  test("runUpdate reports error when fetchPrebuilts hook throws", async () => {
+    const { c, said } = ctx();
+    const code = await runUpdate(c, {
+      fetchPrebuilts: async () => {
+        throw new Error("DNS resolution failed");
+      },
+    });
+    expect(code).toBe(1);
+    expect(said.join("\n")).toMatch(/Failed to check for prebuilt releases: DNS resolution failed/);
   });
 
   test("a foreign launcher is never overwritten", async () => {
