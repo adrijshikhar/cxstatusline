@@ -8,7 +8,7 @@ import { installHook } from "../hook/install";
 import { writeState } from "../state";
 import { readInstallation } from "./generation";
 import { compareSemver, parseSemver } from "../version";
-import { fetchPublishedPrebuiltVersions, preparePrebuilt } from "../distribution/prebuilt";
+import { fetchPublishedPrebuiltVersions, fetchPublishedPrebuiltVersionsResult, preparePrebuilt } from "../distribution/prebuilt";
 import { promptUpdate, type UpdateAction, type UpdatePickerOptions } from "../ui/UpdatePicker";
 import { loadState, runAcquisition, type PatchOutcome } from "./acquire";
 import { ManifestError, loadManifest, resolvePatch, supportedCodexVersions, isCodexVersionSupported, type Manifest } from "./manifest";
@@ -234,9 +234,29 @@ export async function runUpdate(
       return 1;
     }
   }
-  const versions = opts.compile
-    ? supportedCodexVersions(manifest!)
-    : await (opts.fetchPrebuilts ?? fetchPublishedPrebuiltVersions)(transport.fetch);
+  let versions: string[];
+  if (opts.compile) {
+    versions = supportedCodexVersions(manifest!);
+  } else if (opts.fetchPrebuilts) {
+    try {
+      versions = await opts.fetchPrebuilts(transport.fetch);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      ctx.say(`Failed to check for prebuilt releases: ${msg}. Your installation is unchanged.`);
+      return 1;
+    }
+  } else {
+    const res = await fetchPublishedPrebuiltVersionsResult(transport.fetch);
+    if (!res.ok) {
+      if (res.error.kind === "not_found") {
+        ctx.say("No supported prebuilt release could be found. Update the cxstatusline package and retry. Your installation is unchanged.");
+      } else {
+        ctx.say(`Failed to check for prebuilt releases: ${res.error.message}. Check your connection or retry later. Your installation is unchanged.`);
+      }
+      return 1;
+    }
+    versions = res.versions;
+  }
   const target = opts.compile
     ? versions
         .filter((version) => isCodexVersionSupported(manifest!, version))
@@ -250,7 +270,7 @@ export async function runUpdate(
   if (!target) {
     ctx.say(opts.compile
       ? "No supported source patch is available. Update the cxstatusline package and retry."
-      : "No supported prebuilt release could be found. Check your connection or update the cxstatusline package and retry. Your installation is unchanged.");
+      : "No supported prebuilt release could be found. Update the cxstatusline package and retry. Your installation is unchanged.");
     return 1;
   }
 
