@@ -28,7 +28,7 @@ function runDetect(args: readonly string[], releases: unknown): CliRun {
   writeFileSync(payload, JSON.stringify(releases));
   writeFileSync(output, "");
   const env = { ...process.env, GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: join(dir, "summary.md") };
-  const argv = ["scripts/prebuilt.ts", "detect", ...args, "--source-releases-file", payload];
+  const argv = ["scripts/prebuilt.ts", "detect", ...args, "--releases-file", payload, "--source-releases-file", payload];
   const result = spawnSync(process.execPath, argv, { cwd: root, encoding: "utf8", env, timeout: 30_000 });
   const status = result.status ?? -1;
   const stderr = result.stderr ?? "";
@@ -51,6 +51,19 @@ describe("detect on a schedule", () => {
 
   test("resolves source commit from checkout HEAD on schedule without requiring v<CX> releases", () => {
     const run = runDetect(["--event", "schedule", "--codex-version", "9.9.9", "--repo", "adrijshikhar/cxstatusline"], []);
+    expect(run.status).toBe(3);
+    expect(run.outputs["codex_version"]).toBe("9.9.9");
+    expect(run.outputs["cx_version"]).toBe("");
+    expect(run.outputs["should_build"]).toBe("false");
+    expect(run.outputs["blocked_reason"]).toContain("not covered by patches/manifest.json");
+    expect(run.stderr).toContain("Prebuilt blocked: Codex 9.9.9");
+  });
+
+  test("auto detection with only uncovered releases exits 3 reporting the highest uncovered version", () => {
+    const run = runDetect(
+      ["--event", "schedule", "--codex-version", "auto", "--repo", "adrijshikhar/cxstatusline"],
+      [{ tag_name: "rust-v9.9.9", draft: false, prerelease: false }],
+    );
     expect(run.status).toBe(3);
     expect(run.outputs["codex_version"]).toBe("9.9.9");
     expect(run.outputs["cx_version"]).toBe("");

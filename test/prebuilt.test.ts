@@ -27,6 +27,7 @@ import {
   resetDirectory,
   resolveDetection,
   runPackage,
+  selectHighestSupportedVersion,
   selectStableVersion,
   sourceCommit,
   UncoveredUpstreamError,
@@ -132,6 +133,27 @@ describe("selectStableVersion", () => {
   test("rejects a non-array payload and an array with no usable stable release", () => {
     expect(() => selectStableVersion({ tag_name: "rust-v0.153.0" })).toThrow(/list of releases/);
     expect(() => selectStableVersion([rel("rust-v0.1.0-rc.1")])).toThrow(/no stable/);
+  });
+});
+
+describe("selectHighestSupportedVersion", () => {
+  test("picks highest stable version covered by manifest when newer unmanifested versions exist", () => {
+    const releases = [
+      rel("rust-v0.152.1"),
+      rel("rust-v0.153.0"),
+      rel("rust-v0.169.0"),
+    ];
+    expect(selectHighestSupportedVersion(patchManifest, releases)).toBe("0.153.0");
+  });
+
+  test("falls back to selectStableVersion when no release is covered by manifest", () => {
+    const releases = [rel("rust-v0.169.0")];
+    expect(selectHighestSupportedVersion(patchManifest, releases)).toBe("0.169.0");
+  });
+
+  test("rejects a non-array payload or empty releases list like selectStableVersion", () => {
+    expect(() => selectHighestSupportedVersion(patchManifest, { tag_name: "rust-v0.153.0" })).toThrow(/list of releases/);
+    expect(() => selectHighestSupportedVersion(patchManifest, [])).toThrow(/no stable/);
   });
 });
 

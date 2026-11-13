@@ -7,6 +7,7 @@
 export {
   blockedIssueTitle,
   resolveDetection,
+  selectHighestSupportedVersion,
   selectStableVersion,
   UncoveredUpstreamError,
   UNCOVERED_EXIT_CODE,
