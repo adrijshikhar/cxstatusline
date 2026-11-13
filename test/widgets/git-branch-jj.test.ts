@@ -18,6 +18,13 @@ describe("GitBranchWidget fish-style & JJ enhancements", () => {
 
   describe("fish-style branch abbreviation", () => {
     it.each([
+      { name: "preserves a flag in a single segment", branch: "🇨🇳release", expected: "⎇ 🇨🇳" },
+      { name: "preserves a ZWJ emoji in a single segment", branch: "👩‍💻tools", expected: "⎇ 👩‍💻" },
+      { name: "preserves a combining mark in a single segment", branch: "e\u0301quipe", expected: "⎇ e\u0301" },
+      { name: "preserves skin tone modifiers", branch: "👍🏽fix/topic", expected: "⎇ 👍🏽/topic" },
+      { name: "preserves variation selectors", branch: "❤️health/topic", expected: "⎇ ❤️/topic" },
+      { name: "preserves graphemes in every abbreviated segment", branch: "🇨🇳release/👩‍💻tools/e\u0301quipe/topic", expected: "⎇ 🇨🇳/👩‍💻/e\u0301/topic" },
+      { name: "keeps the final grapheme-bearing segment full", branch: "feature/👩‍💻tools", expected: "⎇ f/👩‍💻tools" },
       { name: "collapses a plain branch to its first letter", branch: "main", expected: "⎇ m" },
       { name: "keeps the last segment full", branch: "feature/worktree", expected: "⎇ f/worktree" },
       { name: "collapses intermediate segments", branch: "fix/patch/story", expected: "⎇ f/p/story" },

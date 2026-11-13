@@ -6,6 +6,11 @@ import type { WidgetItem } from "../../types/Widget";
 import { getAvailableBackgroundColorsForUI, getAvailableColorsForUI, applyColors } from "../../utils/colors";
 import { getPlainInput } from "../../utils/input-guards";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { PalettePicker } from "./color-menu/PalettePicker";
+import {
+  colorToPaletteIndex,
+  paletteIndexToColor,
+} from "./color-menu/palette";
 import { displayWidgetType } from "./ItemsEditor";
 import {
   clearAllWidgetStyling,
@@ -28,20 +33,33 @@ function isTextInput(input: string, key: { ctrl: boolean; meta: boolean; tab: bo
   return Boolean(input && !key.ctrl && !key.meta && !key.tab);
 }
 
+interface PaletteSession {
+  widgets: WidgetItem[];
+  widgetId: string;
+  startColor: string;
+  startIndex: number;
+}
+
 export function ColorMenu({ widgets, lineIndex, settings, onUpdate, onBack }: ColorMenuProps): React.JSX.Element {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [showSeparators, setShowSeparators] = useState(false);
   const [editingBackground, setEditingBackground] = useState(false);
   const [hexInput, setHexInput] = useState<string | null>(null);
-  const [ansiInput, setAnsiInput] = useState<string | null>(null);
+  const [palette, setPalette] = useState<PaletteSession | null>(null);
   const [clearConfirm, setClearConfirm] = useState(false);
   const colorable = widgets.filter((widget) => widget.type !== "separator" && widget.type !== "flex-separator" || showSeparators);
   const selected = colorable[selectedIndex];
   const colors = getAvailableColorsForUI().map((entry) => entry.value);
   const backgrounds = getAvailableBackgroundColorsForUI().map((entry) => entry.value);
 
+  const applyPaletteColor = (session: PaletteSession, index: number) => {
+    const color = paletteIndexToColor(index);
+    onUpdate(color === session.startColor ? session.widgets : setWidgetColor(session.widgets, session.widgetId, color, editingBackground));
+  };
+
   useInput((input, key) => {
     if (clearConfirm) return;
+    if (palette) return;
     if (hexInput !== null) {
       if (key.escape) setHexInput(null);
       else if (key.return) {
@@ -49,16 +67,6 @@ export function ColorMenu({ widgets, lineIndex, settings, onUpdate, onBack }: Co
         setHexInput(null);
       } else if (key.backspace || key.delete) setHexInput((value) => value?.slice(0, -1) ?? null);
       else if (isTextInput(input, key) && /^[0-9a-f]$/i.test(input) && hexInput.length < 6) setHexInput(hexInput + input.toUpperCase());
-      return;
-    }
-    if (ansiInput !== null) {
-      if (key.escape) setAnsiInput(null);
-      else if (key.return) {
-        const value = Number.parseInt(ansiInput, 10);
-        if (selected && Number.isInteger(value) && value >= 0 && value <= 255) onUpdate(setWidgetColor(widgets, selected.id, `ansi256:${value}`, editingBackground));
-        setAnsiInput(null);
-      } else if (key.backspace || key.delete) setAnsiInput((value) => value?.slice(0, -1) ?? null);
-      else if (isTextInput(input, key) && /^[0-9]$/.test(input) && ansiInput.length < 3) setAnsiInput(ansiInput + input);
       return;
     }
     const shortcut = getPlainInput(input, key);
@@ -88,8 +96,15 @@ export function ColorMenu({ widgets, lineIndex, settings, onUpdate, onBack }: Co
       }
     } else if (shortcut.toLowerCase() === "h" && settings.colorLevel === 3 && selected) {
       setHexInput("");
-    } else if (shortcut.toLowerCase() === "a" && settings.colorLevel === 2 && selected) {
-      setAnsiInput("");
+    } else if (shortcut.toLowerCase() === "a" && settings.colorLevel >= 2 && selected) {
+      const effectiveColor = editingBackground ? (selected.backgroundColor ?? "") : (selected.color ?? "white");
+      const startIndex = colorToPaletteIndex(effectiveColor, getColorLevelString(settings.colorLevel));
+      setPalette({
+        widgets,
+        widgetId: selected.id,
+        startColor: effectiveColor,
+        startIndex,
+      });
     }
   });
 
@@ -102,15 +117,33 @@ export function ColorMenu({ widgets, lineIndex, settings, onUpdate, onBack }: Co
     );
   }
 
+  if (palette) {
+    return (
+      <PalettePicker
+        title={`Select ${editingBackground ? "Background" : "Foreground"} Color`}
+        initialIndex={palette.startIndex}
+        onHighlight={(index) => applyPaletteColor(palette, index)}
+        onSelect={(index) => {
+          applyPaletteColor(palette, index);
+          setPalette(null);
+        }}
+        onCancel={() => {
+          onUpdate(palette.widgets);
+          setPalette(null);
+        }}
+      />
+    );
+  }
+
   if (!colorable.length) {
     return <Box flexDirection="column"><Text bold>{`Colors — Line ${lineIndex + 1}`}</Text><Text dimColor>No colorable widgets. Press Escape to go back.</Text></Box>;
   }
 
-  const inputMode = hexInput !== null ? `Hex: #${hexInput}` : ansiInput !== null ? `ANSI 256: ${ansiInput}` : null;
+  const inputMode = hexInput !== null ? `Hex: #${hexInput}` : null;
   return (
     <Box flexDirection="column">
       <Text bold>{`Colors — Line ${lineIndex + 1}`}{editingBackground && <Text color="yellow"> [Background]</Text>}</Text>
-      {inputMode ? <Text>{inputMode}<Text dimColor>  Enter to apply, Escape to cancel</Text></Text> : <Text dimColor>{`↑↓ select, ←→ cycle ${editingBackground ? "background" : "foreground"}, (f)g/bg, (b)old, (d)im, (r)eset, (c)lear${settings.colorLevel === 3 ? ", (h)ex" : settings.colorLevel === 2 ? ", (a)nsi256" : ""}, Escape back`}</Text>}
+      {inputMode ? <Text>{inputMode}<Text dimColor>  Enter to apply, Escape to cancel</Text></Text> : <Text dimColor>{`↑↓ select, ←→ cycle ${editingBackground ? "background" : "foreground"}, (f)g/bg, (b)old, (d)im, (r)eset, (c)lear${settings.colorLevel === 3 ? ", (h)ex" : ""}${settings.colorLevel >= 2 ? ", (a)nsi256" : ""}, Escape back`}</Text>}
       <Box marginTop={1} flexDirection="column">
         {colorable.map((widget, index) => {
           const label = displayWidgetType(widget.type);

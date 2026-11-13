@@ -2,16 +2,18 @@ import type { RenderContext } from '../types/RenderContext';
 import type { Settings } from '../types/Settings';
 import type { CustomKeybind, Widget, WidgetEditorDisplay, WidgetItem } from '../types/Widget';
 import { getContextWindowMetrics } from '../utils/context-window';
+import { getContextConfig, getModelContextIdentifier } from '../utils/model-context';
 import { formatTokens } from '../utils/format-tokens';
 import { formatPercent, resolveNumberFormat } from '../utils/number-format';
 import { makeUsageProgressBar } from '../utils/usage';
 import { formatRawOrLabeledValue } from './shared/raw-or-labeled';
 import { makeSliderBar } from './shared/usage-display';
+import { makeLineProgressBar } from './shared/progress-bar';
 
-type DisplayMode = 'progress' | 'progress-short' | 'slider' | 'slider-only';
+type DisplayMode = 'progress' | 'progress-short' | 'slider' | 'slider-only' | 'line';
 function getDisplayMode(item: WidgetItem): DisplayMode {
   const mode = item.metadata?.display;
-  return mode === 'progress' || mode === 'slider' || mode === 'slider-only' ? mode : 'progress-short';
+  return mode === 'progress' || mode === 'slider' || mode === 'slider-only' || mode === 'line' ? mode : 'progress-short';
 }
 function sliderMode(mode: DisplayMode): boolean { return mode === 'slider' || mode === 'slider-only'; }
 
@@ -22,13 +24,13 @@ export class ContextBarWidget implements Widget {
   getCategory(): string { return 'Context'; }
   getEditorDisplay(item: WidgetItem): WidgetEditorDisplay {
     const mode = getDisplayMode(item);
-    const label = mode === 'progress' ? 'long bar' : mode === 'progress-short' ? 'medium bar' : mode === 'slider' ? 'short bar' : 'short bar only';
+    const label = mode === 'progress' ? 'long bar' : mode === 'progress-short' ? 'medium bar' : mode === 'slider' ? 'short bar' : mode === 'slider-only' ? 'short bar only' : 'line bar';
     return { displayText: this.getDisplayName(), modifierText: '(' + label + ')' };
   }
   handleEditorAction(action: string, item: WidgetItem): WidgetItem | null {
     if (action !== 'toggle-progress') return null;
     const mode = getDisplayMode(item);
-    const next = mode === 'progress-short' ? 'progress' : mode === 'progress' ? 'slider' : mode === 'slider' ? 'slider-only' : 'progress-short';
+    const next = mode === 'progress-short' ? 'progress' : mode === 'progress' ? 'slider' : mode === 'slider' ? 'slider-only' : mode === 'slider-only' ? 'line' : 'progress-short';
     return { ...item, metadata: { ...(item.metadata ?? {}), display: next } };
   }
   render(item: WidgetItem, context: RenderContext, settings: Settings): string | null {
@@ -45,11 +47,15 @@ export class ContextBarWidget implements Widget {
         const sliderDisplay = mode === 'slider' ? `${slider} ${usedDisplay}/${totalDisplay} (${percentDisplay})` : slider;
         return formatRawOrLabeledValue(item, 'Context: ', sliderDisplay);
       }
+      if (mode === 'line') {
+        return formatRawOrLabeledValue(item, 'Context: ', `${makeLineProgressBar(25, 16)} ${usedDisplay}/${totalDisplay} (${percentDisplay})`);
+      }
       const width = mode === 'progress' ? 32 : 16;
       return formatRawOrLabeledValue(item, 'Context: ', `${makeUsageProgressBar(25, width)} ${usedDisplay}/${totalDisplay} (${percentDisplay})`);
     }
     const metrics = getContextWindowMetrics(context.data);
-    const total = metrics.windowSize;
+    const modelIdentifier = getModelContextIdentifier(context.data?.model);
+    const total = getContextConfig(modelIdentifier, metrics.windowSize).maxTokens;
     const used = metrics.contextLengthTokens;
     if (total === null || used === null || total <= 0) return null;
     const percent = Math.max(0, Math.min(100, (used / total) * 100));
@@ -60,6 +66,9 @@ export class ContextBarWidget implements Widget {
       const slider = makeSliderBar(percent);
       const sliderDisplay = mode === 'slider' ? `${slider} ${usedText}/${totalText} (${percentText})` : slider;
       return formatRawOrLabeledValue(item, 'Context: ', sliderDisplay);
+    }
+    if (mode === 'line') {
+      return formatRawOrLabeledValue(item, 'Context: ', `${makeLineProgressBar(percent, 16)} ${usedText}/${totalText} (${percentText})`);
     }
     const width = mode === 'progress' ? 32 : 16;
     return formatRawOrLabeledValue(item, 'Context: ', `${makeUsageProgressBar(percent, width)} ${usedText}/${totalText} (${percentText})`);

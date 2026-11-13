@@ -48,15 +48,13 @@ describe("getJjChangeCounts parsing", () => {
     });
   });
 
-  it("parses change counts via getJjChangeCounts with mock", () => {
-    const spy = spyOn(childProcess, "execFileSync").mockReturnValue(
-      "777 insertions.txt | 1 +\n1 file changed, 1 insertion(+), 0 deletions(-)\n"
-    );
+  it("passes --color=never to jj invocations", () => {
+    const spy = spyOn(childProcess, "execFileSync").mockReturnValue("clean\n");
     try {
-      expect(getJjChangeCounts({} as any)).toEqual({
-        insertions: 1,
-        deletions: 0,
-      });
+      getJjChangeCounts({} as any);
+      expect(spy).toHaveBeenCalled();
+      const call = spy.mock.calls[0];
+      expect(call?.[1]).toEqual(["--color=never", "diff", "--stat"]);
     } finally {
       spy.mockRestore();
     }

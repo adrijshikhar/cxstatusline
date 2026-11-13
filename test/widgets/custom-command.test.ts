@@ -58,6 +58,19 @@ describe("CustomCommandWidget.render", () => {
     expect(new CustomCommandWidget(runner).render(item({ maxWidth: 8 }), live(), DEFAULT_SETTINGS)).toBe("first...");
   });
 
+  test("pipes rawData when present on context", () => {
+    const rawData = { extra_field: "foo", nested: { bar: 123 } };
+    const { runner, calls } = fakeRunner(() => ({ stdout: "ok" }));
+    const context: RenderContext = { ...live(), rawData };
+    new CustomCommandWidget(runner).render(item(), context, DEFAULT_SETTINGS);
+    expect(JSON.parse(calls[0]!.input)).toEqual({ extra_field: "foo", nested: { bar: 123 }, terminal_width: 100 });
+  });
+
+  test("renders null when preserved colors output has no visible text", () => {
+    const { runner } = fakeRunner(() => ({ stdout: "\x1b[32m\x1b[0m" }));
+    expect(new CustomCommandWidget(runner).render(item({ preserveColors: true }), live(), DEFAULT_SETTINGS)).toBeNull();
+  });
+
   test("strips ANSI unless preserveColors, then keeps SGR only", () => {
     const stdout = "\x1b[31mred\x1b[0m \x1b]8;;http://x\x1b\\link\x1b]8;;\x1b\\\x07\n";
     const { runner } = fakeRunner(() => ({ stdout }));

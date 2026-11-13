@@ -79,5 +79,7 @@ export interface Widget {
   getNumericValue?(context: RenderContext, item: WidgetItem): number | null;
   /** True when render() returns text carrying its own SGR styling that the renderer must keep. */
   emitsStyledOutput?(item: WidgetItem): boolean;
+  /** When true for the given item, the widget's rendered output colors some runs of its text itself. */
+  colorsOnlyItsRuns?(item: WidgetItem): boolean;
 }
 

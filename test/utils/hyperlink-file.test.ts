@@ -5,13 +5,15 @@ describe("buildIdeFileUrl", () => {
     it("builds IDE links for POSIX paths", () => {
         expect(buildIdeFileUrl("/home/user/code", "vscode")).toBe("vscode://file/home/user/code");
         expect(buildIdeFileUrl("/home/user/code", "cursor")).toBe("cursor://file/home/user/code");
+        expect(buildIdeFileUrl("/home/user/code", "zed")).toBe("zed://file/home/user/code");
     });
 
     it("builds IDE links for UNC paths", () => {
         expect(buildIdeFileUrl("\\\\server\\share\\my repo", "cursor")).toBe("cursor://file//server/share/my%20repo");
+        expect(buildIdeFileUrl("\\\\server\\share\\my repo", "zed")).toBe("zed://file//server/share/my%20repo");
     });
 
-    it.each(["vscode", "cursor"] as const)("preserves POSIX backslashes and normalizes Windows separators for %s", (mode) => {
+    it.each(["vscode", "cursor", "zed"] as const)("preserves POSIX backslashes and normalizes Windows separators for %s", (mode) => {
         expect(buildIdeFileUrl("/tmp/a\\b\\c", mode)).toBe(`${mode}://file/tmp/a%5Cb%5Cc`);
         expect(buildIdeFileUrl("C:\\Work\\my repo", mode)).toBe(`${mode}://file/C:/Work/my%20repo`);
         expect(buildIdeFileUrl("\\\\server\\share\\my repo", mode)).toBe(`${mode}://file//server/share/my%20repo`);

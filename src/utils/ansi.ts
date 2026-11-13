@@ -10,6 +10,8 @@ const BEL = '\x07';
 const C1_CSI = '\x9b';
 const C1_OSC = '\x9d';
 const ST = '\x9c';
+// What follows ESC in a DCS, SOS, PM or APC string
+const STRING_INTRODUCERS = new Set(['P', 'X', '^', '_']);
 const ZERO_WIDTH_JOINER = 0x200d;
 const COMBINING_ENCLOSING_KEYCAP = 0x20e3;
 const VARIATION_SELECTOR_START = 0xfe00;
@@ -188,6 +190,11 @@ function computeClusterWidth(cluster: string): number {
         return 0;
     }
 
+    // The sanitizer prints a tab as one space
+    if (cluster.startsWith('\t')) {
+        return 1;
+    }
+
     const clusterStringWidth = stringWidth(cluster);
     if (shouldTreatClusterAsNarrowTextPictograph(cluster, clusterStringWidth)) {
         return 1;
@@ -347,6 +354,62 @@ function parseOsc(
     };
 }
 
+// The bytes after ESC in ESC ( B and the like: intermediate bytes, then a
+// final byte. Past the end of the input, codePointAt gives undefined, which is
+// neither.
+function isIntermediateByte(codePoint: number | undefined): boolean {
+    return codePoint !== undefined && codePoint >= 0x20 && codePoint <= 0x2f;
+}
+
+function isEscapeFinalByte(codePoint: number | undefined): boolean {
+    return codePoint !== undefined && codePoint >= 0x30 && codePoint <= 0x7e;
+}
+
+function sliceSequence(input: string, start: number, end: number): ParsedEscapeSequence {
+    return {
+        nextIndex: end,
+        sequence: input.slice(start, end)
+    };
+}
+
+// A DCS, SOS, PM or APC string, which the terminal swallows up to ST or BEL.
+// Any other ESC starts a new sequence, so an unterminated string doesn't hide
+// the text after it.
+function parseControlString(input: string, start: number): ParsedEscapeSequence {
+    for (let index = start + 2; index < input.length; index++) {
+        const current = input[index];
+        if (current === BEL || current === ST) {
+            return sliceSequence(input, start, index + 1);
+        }
+        if (current === ESC) {
+            return sliceSequence(input, start, input[index + 1] === '\\' ? index + 2 : index);
+        }
+    }
+
+    return sliceSequence(input, start, input.length);
+}
+
+// ESC and a character other than [ or ]
+function parseOtherEscape(input: string, start: number): ParsedEscapeSequence {
+    const next = input.charAt(start + 1);
+    if (STRING_INTRODUCERS.has(next)) {
+        return parseControlString(input, start);
+    }
+
+    // ESC, intermediate bytes, then a final byte: ESC ( B selects a character
+    // set (`tput sgr0` prints it), ESC # 8 fills the screen
+    if (isIntermediateByte(next.codePointAt(0))) {
+        let end = start + 2;
+        while (end < input.length && isIntermediateByte(input.codePointAt(end))) {
+            end++;
+        }
+        return sliceSequence(input, start, isEscapeFinalByte(input.codePointAt(end)) ? end + 1 : end);
+    }
+
+    // ESC 7, ESC c and the like
+    return sliceSequence(input, start, start + 2);
+}
+
 function parseEscapeSequence(input: string, index: number): ParsedEscapeSequence | null {
     const current = input[index];
     if (!current) {
@@ -362,10 +425,7 @@ function parseEscapeSequence(input: string, index: number): ParsedEscapeSequence
             return parseOsc(input, index, index + 2);
         }
         if (next) {
-            return {
-                nextIndex: index + 2,
-                sequence: input.slice(index, index + 2)
-            };
+            return parseOtherEscape(input, index);
         }
         return {
             nextIndex: input.length,
@@ -405,34 +465,89 @@ export function stripSgrCodes(text: string): string {
     return text.replace(SGR_REGEX, '');
 }
 
-// Track background operations in order: a later explicit color overrides a
-// reset (0, an empty parameter, or 49). Skip extended color arguments so their
-// values aren't mistaken for resets or background operations.
-function sgrClearsBackground(sequence: string): boolean {
+type SgrEffect = 'clear' | 'set' | undefined;
+
+function getBackgroundEffect(param: number | undefined): SgrEffect {
+    if (param === 0 || param === 49) {
+        return 'clear';
+    }
+    if (param !== undefined && ((param >= 40 && param <= 47) || (param >= 100 && param <= 107) || param === 48)) {
+        return 'set';
+    }
+    return undefined;
+}
+
+// Bold (set by 1) and dim (set by 2) are both cleared by 0 and 22
+function getIntensityEffect(param: number | undefined, setBy: 1 | 2): SgrEffect {
+    if (param === 0 || param === 22) {
+        return 'clear';
+    }
+    return param === setBy ? 'set' : undefined;
+}
+
+interface SgrClears {
+    background: boolean;
+    bold: boolean;
+    dim: boolean;
+}
+
+// Track each attribute's operations in order: a later explicit setting
+// overrides a reset. Skip extended color arguments so their values aren't
+// mistaken for resets or background operations.
+function getSgrClears(sequence: string): SgrClears {
     const introducerLength = sequence.startsWith(C1_CSI) ? 1 : 2;
     const rawParts = sequence.slice(introducerLength, -1).split(';');
-    let clearsBackground = false;
+    const clears: SgrClears = { background: false, bold: false, dim: false };
+    const track = (attribute: keyof SgrClears, effect: SgrEffect) => {
+        if (effect) {
+            clears[attribute] = effect === 'clear';
+        }
+    };
     for (let i = 0; i < rawParts.length; i++) {
         const part = rawParts[i] ?? '';
         const subparams = part.split(':').map(p => Number.parseInt(p || '0', 10));
         const code = subparams[0] ?? 0;
-        if (code === 0 || code === 49) {
-            clearsBackground = true;
-        } else if ((code >= 40 && code <= 47) || (code >= 100 && code <= 107) || code === 48) {
-            clearsBackground = false;
-        }
-        if (subparams.length === 1 && (code === 38 || code === 48 || code === 58)) {
+        track('background', getBackgroundEffect(code));
+        track('bold', getIntensityEffect(code, 1));
+        track('dim', getIntensityEffect(code, 2));
+        if ((code === 38 || code === 48 || code === 58) && !part.includes(':')) {
             const next = Number.parseInt(rawParts[i + 1] || '0', 10);
             i += next === 5 ? 2 : 4;
         }
     }
-    return clearsBackground;
+    return clears;
+}
+
+// The styling restoreStyleAfterResets re-applies, with the background as the
+// SGR code that sets it
+export interface RestoredStyle {
+    background?: string;
+    bold?: boolean;
+    dim?: boolean;
+}
+
+// Re-apply a widget's own styling after each SGR sequence in the text that
+// clears it, so text that resets its own styling keeps the background, bold
+// and dim it's drawn with.
+export function restoreStyleAfterResets(text: string, style: RestoredStyle): string {
+    const background = style.background ?? '';
+    if (!background && !style.bold && !style.dim) {
+        return text;
+    }
+
+    return text.replace(SGR_REGEX, (sequence) => {
+        const clears = getSgrClears(sequence);
+        return sequence
+            + (style.bold && clears.bold ? '\x1b[1m' : '')
+            + (style.dim && clears.dim ? '\x1b[2m' : '')
+            + (clears.background ? background : '');
+    });
 }
 
 // Re-apply a background after each SGR sequence in the text that clears it,
 // so text that resets its own styling stays on the background it's drawn on.
 export function restoreBackgroundAfterResets(text: string, backgroundCode: string): string {
-    return text.replace(SGR_REGEX, sequence => (sgrClearsBackground(sequence) ? sequence + backgroundCode : sequence));
+    return restoreStyleAfterResets(text, { background: backgroundCode });
 }
 
 export function stripOscCodes(text: string): string {
@@ -490,6 +605,20 @@ export function getVisibleText(text: string): string {
     }
 
     return result;
+}
+
+// A space right after a Private Use Area character (Nerd Font icons), possibly
+// after color codes or link closers, becomes an EN SPACE: Ghostty and kitty
+// only draw such an icon two cells wide when the next cell is U+0020 or
+// U+2002, and U+00A0 keeps it at one. Powerline separators (U+E0B0-U+E0D7)
+// are left out: they're drawn one cell wide.
+const PUA_THEN_SPACE_REGEX = /([\uE000-\uE0AF\uE0D8-\uF8FF\u{F0000}-\u{FFFFD}\u{100000}-\u{10FFFD}](?:\x1b\[[0-9;:]*m|\x1b\]8;[^\x07\x1b]*(?:\x07|\x1b\\))*) /gu;
+
+// Swaps spaces for characters that editors like VS Code do not trim.
+export function replaceSpacesForOutput(text: string): string {
+    return text
+        .replace(PUA_THEN_SPACE_REGEX, '$1\u2002')
+        .replace(/ /g, '\u00A0');
 }
 
 export function getVisibleWidth(text: string): number {

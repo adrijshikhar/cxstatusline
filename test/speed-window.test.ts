@@ -21,7 +21,9 @@ describe("speed-window helpers", () => {
     expect(clampSpeedWindowSeconds(-1)).toBe(0);
     expect(clampSpeedWindowSeconds(0)).toBe(0);
     expect(clampSpeedWindowSeconds(90)).toBe(90);
-    expect(clampSpeedWindowSeconds(300)).toBe(120);
+    expect(clampSpeedWindowSeconds(300)).toBe(300);
+    expect(clampSpeedWindowSeconds(3600)).toBe(3600);
+    expect(clampSpeedWindowSeconds(5000)).toBe(3600);
   });
 
   it("returns default window seconds when metadata is missing or invalid", () => {
@@ -31,7 +33,9 @@ describe("speed-window helpers", () => {
 
   it("parses and clamps widget metadata window seconds", () => {
     expect(getWidgetSpeedWindowSeconds(createWidget({ windowSeconds: "45" }))).toBe(45);
-    expect(getWidgetSpeedWindowSeconds(createWidget({ windowSeconds: "999" }))).toBe(120);
+    expect(getWidgetSpeedWindowSeconds(createWidget({ windowSeconds: "600" }))).toBe(600);
+    expect(getWidgetSpeedWindowSeconds(createWidget({ windowSeconds: "3600" }))).toBe(3600);
+    expect(getWidgetSpeedWindowSeconds(createWidget({ windowSeconds: "9999" }))).toBe(3600);
   });
 
   it("stores clamped window seconds in metadata while preserving existing keys", () => {

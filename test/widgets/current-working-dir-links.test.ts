@@ -229,23 +229,26 @@ describe("CurrentWorkingDirWidget links", () => {
             })).modifierText).toBe("(~, segments: 2, link: file)");
         });
 
-        it("should show VS Code and Cursor link modes in editor display", () => {
+        it("should show VS Code, Cursor, and Zed link modes in editor display", () => {
             expect(widget.getEditorDisplay(createItem({ linkTo: "vscode" })).modifierText).toBe("(link: VS Code)");
             expect(widget.getEditorDisplay(createItem({ linkTo: "cursor" })).modifierText).toBe("(link: Cursor)");
+            expect(widget.getEditorDisplay(createItem({ linkTo: "zed" })).modifierText).toBe("(link: Zed)");
         });
     });
 
     describe("handleEditorAction", () => {
-        it("should cycle file, VS Code, Cursor, then off without changing display metadata", () => {
+        it("should cycle file, VS Code, Cursor, Zed, then off without changing display metadata", () => {
             const base = createItem({ abbreviateHome: "true", segments: "2" });
             const file = widget.handleEditorAction("cycle-link", base);
             const vscode = widget.handleEditorAction("cycle-link", file ?? base);
             const cursor = widget.handleEditorAction("cycle-link", vscode ?? base);
-            const off = widget.handleEditorAction("cycle-link", cursor ?? base);
+            const zed = widget.handleEditorAction("cycle-link", cursor ?? base);
+            const off = widget.handleEditorAction("cycle-link", zed ?? base);
 
             expect(file?.metadata).toEqual({ abbreviateHome: "true", segments: "2", linkTo: "file" });
             expect(vscode?.metadata?.linkTo).toBe("vscode");
             expect(cursor?.metadata?.linkTo).toBe("cursor");
+            expect(zed?.metadata?.linkTo).toBe("zed");
             expect(off?.metadata).toEqual({ abbreviateHome: "true", segments: "2" });
         });
     });

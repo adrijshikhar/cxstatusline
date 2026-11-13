@@ -43,4 +43,18 @@ describe("buildEnabledPowerlineSettings", () => {
 
     expect(disabled.lines[0]?.map((item) => item.type)).toEqual(["model", "separator", "context-length"]);
   });
+
+  it("keeps a custom theme when enabling powerline again", () => {
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      powerline: {
+        ...DEFAULT_SETTINGS.powerline,
+        enabled: false,
+        theme: "custom",
+      },
+    };
+
+    const updated = buildEnabledPowerlineSettings(settings);
+    expect(updated.powerline.theme).toBe("custom");
+  });
 });

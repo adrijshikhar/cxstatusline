@@ -16,6 +16,7 @@ import type {
 } from '../types/Widget';
 import { shouldInsertInput } from '../utils/input-guards';
 import { BlinkingCursor } from './shared/BlinkingCursor';
+import { getAdjacentBoundaries } from './shared/text-cursor';
 
 import {
     DEFAULT_TIMEOUT_MS,
@@ -139,6 +140,9 @@ export class CustomCommandWidget implements Widget {
 const CommandEditor: React.FC<WidgetEditorProps> = ({ widget, onComplete, onCancel }) => {
     const [command, setCommand] = useState(widget.commandPath ?? '');
     const [cursor, setCursor] = useState(command.length);
+    const { previous, next } = getAdjacentBoundaries(command, cursor);
+    // The grapheme under the cursor ends here, so an emoji is drawn whole
+    const cursorEnd = next ?? command.length;
 
     useInput((input, key) => {
         if (key.return) {
@@ -152,17 +156,17 @@ const CommandEditor: React.FC<WidgetEditorProps> = ({ widget, onComplete, onCanc
         } else if (key.escape) {
             onCancel();
         } else if (key.leftArrow) {
-            setCursor(Math.max(0, cursor - 1));
+            setCursor(previous ?? cursor);
         } else if (key.rightArrow) {
-            setCursor(Math.min(command.length, cursor + 1));
+            setCursor(next ?? cursor);
         } else if (key.backspace) {
-            if (cursor > 0) {
-                setCommand(command.slice(0, cursor - 1) + command.slice(cursor));
-                setCursor(cursor - 1);
+            if (previous !== undefined) {
+                setCommand(command.slice(0, previous) + command.slice(cursor));
+                setCursor(previous);
             }
         } else if (key.delete) {
-            if (cursor < command.length) {
-                setCommand(command.slice(0, cursor) + command.slice(cursor + 1));
+            if (next !== undefined) {
+                setCommand(command.slice(0, cursor) + command.slice(next));
             }
         } else if (shouldInsertInput(input, key)) {
             setCommand(command.slice(0, cursor) + input + command.slice(cursor));
@@ -176,8 +180,8 @@ const CommandEditor: React.FC<WidgetEditorProps> = ({ widget, onComplete, onCanc
                 Enter command:
                 {' '}
                 {command.slice(0, cursor)}
-                <BlinkingCursor>{command[cursor] ?? ' '}</BlinkingCursor>
-                {command.slice(cursor + 1)}
+                <BlinkingCursor>{command.slice(cursor, cursorEnd) || ' '}</BlinkingCursor>
+                {command.slice(cursorEnd)}
             </Text>
             <Text dimColor>Runs in your shell on every redraw. ←→ move cursor, Enter save, ESC cancel</Text>
         </Box>

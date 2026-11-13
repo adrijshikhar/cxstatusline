@@ -1,8 +1,10 @@
 export interface TimerProgressBarOptions { cursorPercent?: number }
 
-export function makeTimerProgressBar(
+function makeProgressBar(
     percent: number,
     width: number,
+    filledGlyph: string,
+    emptyGlyph: string,
     options?: TimerProgressBarOptions
 ): string {
     const clampedPercent = Math.max(0, Math.min(100, percent));
@@ -17,11 +19,27 @@ export function makeTimerProgressBar(
         if (i === cursorPos) {
             bar += '│';
         } else if (i < filledWidth) {
-            bar += '█';
+            bar += filledGlyph;
         } else {
-            bar += '░';
+            bar += emptyGlyph;
         }
     }
 
     return bar;
+}
+
+export function makeTimerProgressBar(
+    percent: number,
+    width: number,
+    options?: TimerProgressBarOptions
+): string {
+    return makeProgressBar(percent, width, '█', '░', options);
+}
+
+export function makeLineProgressBar(
+    percent: number,
+    width = 16,
+    options?: TimerProgressBarOptions
+): string {
+    return makeProgressBar(percent, width, '━', '─', options);
 }

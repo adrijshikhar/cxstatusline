@@ -31,6 +31,7 @@ import {
     isUsageProgressMode,
     isUsageSliderMode,
     makeSliderBar,
+    renderUsageProgressBar,
     toggleUsageCursor,
     toggleUsageInverted
 } from './shared/usage-display';
@@ -123,10 +124,8 @@ export class WeeklyUsageWidget implements Widget {
         };
 
         if (isUsageProgressMode(displayMode)) {
-            const width = getUsageProgressBarWidth(displayMode);
-
-            const progressBar = makeTimerProgressBar(renderedPercent, width, getCursorOptions());
-            const progressDisplay = `[${progressBar}] ${formatPercent(renderedPercent, format)}`;
+            const progressBar = renderUsageProgressBar(renderedPercent, displayMode, getCursorOptions());
+            const progressDisplay = `${progressBar} ${formatPercent(renderedPercent, format)}`;
             return formatRawOrLabeledValue(item, 'Weekly: ', progressDisplay);
         }
 

@@ -32,6 +32,7 @@ import {
     renderSymbolOverrideEditor
 } from './shared/symbol-override';
 import { formatRawOrLabeledValue } from './shared/raw-or-labeled';
+import { getGraphemes } from './shared/text-cursor';
 
 const LINK_KEY = 'linkTo';
 const CYCLE_LINK_ACTION = 'cycle-link';
@@ -40,7 +41,8 @@ type CwdLinkMode = (typeof CWD_LINK_MODES)[number];
 const LINK_MODE_LABELS: Record<CwdLinkMode, string> = {
     file: 'file',
     vscode: 'VS Code',
-    cursor: 'Cursor'
+    cursor: 'Cursor',
+    zed: 'Zed'
 };
 
 export class CurrentWorkingDirWidget implements Widget {
@@ -126,9 +128,11 @@ export class CurrentWorkingDirWidget implements Widget {
                     }
                 };
             } else {
-                // When disabling fish-style
-                const { fishStyle, ...restMetadata } = item.metadata ?? {};
+                // When disabling fish-style, also drop a segment count saved
+                // next to it, so a count hidden behind fish style doesn't apply
+                const { fishStyle, segments, ...restMetadata } = item.metadata ?? {};
                 void fishStyle;
+                void segments;
 
                 return {
                     ...item,
@@ -312,22 +316,20 @@ export class CurrentWorkingDirWidget implements Widget {
                 return part;  // Keep full
             }
 
+            // Whole graphemes, so an emoji or accented letter isn't cut in half
+            const [first = '', second = ''] = getGraphemes(part);
+
             // Hidden directories keep the dot
-            if (part.startsWith('.') && part.length > 1) {
-                return '.' + (part[1] ?? '');
+            if (first === '.' && second !== '') {
+                return first + second;
             }
 
-            return part[0];  // Only first letter for others
+            return first;  // Only first letter for others
         });
 
-        // Rebuild path
-        if (normalizedPath.startsWith('~')) {
-            return abbreviated.join(sep);
-        } else if (normalizedPath.startsWith('/')) {
-            return sep + abbreviated.join(sep);
-        } else {
-            return abbreviated.join(sep);
-        }
+        // Rebuild path on its root: '/', or the '\\' or '//' of a UNC path
+        const root = /^[\\/]+/.exec(normalizedPath)?.[0] ?? '';
+        return root + abbreviated.join(sep);
     }
 }
 
@@ -339,10 +341,13 @@ const CurrentWorkingDirEditor: React.FC<WidgetEditorProps> = ({ widget, onComple
             if (key.return) {
                 const segments = parseInt(segmentsInput, 10);
                 if (!isNaN(segments) && segments > 0) {
+                    // A segment count disables fishStyle (mutually exclusive)
+                    const { fishStyle, ...restMetadata } = widget.metadata ?? {};
+                    void fishStyle;
                     onComplete({
                         ...widget,
                         metadata: {
-                            ...widget.metadata,
+                            ...restMetadata,
                             segments: segments.toString()
                         }
                     });

@@ -30,3 +30,13 @@ test("Usage window calculations fail closed when nowMs or resetAt is NaN", async
   expect(getWeeklyUsageWindowFromResetAt("2026-09-05T08:30:00Z", NaN)).toBeNull();
   expect(getFiveHourUsageWindowFromResetAt("invalid-date", Date.now())).toBeNull();
 });
+
+test("uses Gregorian calendar and normalizes spaced dayPeriod", async () => {
+  const { formatUsageResetAt: format } = await import("../src/utils/usage-windows");
+  const es = format('2026-10-20T08:30:00.000Z', false, 'Europe/Madrid', 'es-ES', true);
+  expect(es).toContain('AM');
+  expect(es).not.toContain('a. m.');
+
+  const th = format('2026-10-20T08:30:00.000Z', false, 'UTC', 'th-TH');
+  expect(th).toContain('2026');
+});
