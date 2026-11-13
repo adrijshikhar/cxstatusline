@@ -3,6 +3,22 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.20.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.19.0...v0.20.0) (2026-11-13)
+
+
+### Features
+
+* port upstream ccstatusline v2.2.34 parity ([#207](https://github.com/adrijshikhar/cxstatusline/issues/207)) ([65a12bf](https://github.com/adrijshikhar/cxstatusline/commit/65a12bf4a8ddae72fe5fce9cdb5cb1a4c9699bae))
+* support Codex 0.167.0 ([#197](https://github.com/adrijshikhar/cxstatusline/issues/197)) ([174d4ae](https://github.com/adrijshikhar/cxstatusline/commit/174d4aeadb43a5cace5d320fbbfb7b3c101b381a))
+* support Codex 0.167.2 ([#206](https://github.com/adrijshikhar/cxstatusline/issues/206)) ([9094345](https://github.com/adrijshikhar/cxstatusline/commit/9094345fcc451279edef185114aa16433231fae4))
+* support Codex 0.168.0 ([#208](https://github.com/adrijshikhar/cxstatusline/issues/208)) ([76c2b80](https://github.com/adrijshikhar/cxstatusline/commit/76c2b80785f03635fca375b85ca594cc76e0d1ad))
+
+
+### Bug Fixes
+
+* remove obsolete set_status_line_hyperlink in 0.167.0 patch ([#200](https://github.com/adrijshikhar/cxstatusline/issues/200)) ([819a366](https://github.com/adrijshikhar/cxstatusline/commit/819a366a340c3b74ce971907d4677ac7aca9e7b4))
+* report network and rate-limit errors in prebuilt discovery ([#201](https://github.com/adrijshikhar/cxstatusline/issues/201)) ([ba55efb](https://github.com/adrijshikhar/cxstatusline/commit/ba55efba922f2f34c3db4fa61c42d8b385e52a89))
+
 ## [0.19.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.18.0...v0.19.0) (2026-11-04)
 
 
