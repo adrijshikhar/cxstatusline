@@ -8,11 +8,11 @@ const CCSTATUSLINE = process.env.CXSTATUSLINE_CCSTATUSLINE_CHECKOUT
 const available = existsSync(join(CCSTATUSLINE, ".git"));
 
 describe.skipIf(!available)("upstream absorbed parity", () => {
-  test("src/widgets/shared/progress-bar.ts is byte-identical to ccstatusline v2.2.29", () => {
+  test("src/widgets/shared/progress-bar.ts is byte-identical to ccstatusline v2.2.34", () => {
     const localPath = resolve(import.meta.dir, "../src/widgets/shared/progress-bar.ts");
     const localContent = readFileSync(localPath, "utf8");
 
-    const result = spawnSync("git", ["-C", CCSTATUSLINE, "show", "v2.2.29:src/widgets/shared/progress-bar.ts"], {
+    const result = spawnSync("git", ["-C", CCSTATUSLINE, "show", "v2.2.34:src/widgets/shared/progress-bar.ts"], {
       encoding: "utf8",
     });
 
