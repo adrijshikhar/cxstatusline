@@ -11,7 +11,6 @@ import {
   blockedIssueTitle,
   resolveDetection,
   selectHighestSupportedVersion,
-  selectStableVersion,
   UncoveredUpstreamError,
   UNCOVERED_EXIT_CODE,
   type Detection,
@@ -130,7 +129,7 @@ function patchTreeFor(source: SourceSelection): PatchTree {
 /** The upstream version this run is about: pinned by `--codex-version`, or the highest stable supported version. */
 async function resolveCodexVersion(
   flags: Record<string, string>,
-  manifest?: Manifest,
+  manifest: Manifest,
 ): Promise<{ version: string; pinned: boolean }> {
   const requested = flags["codex-version"];
   const pinned = requested !== undefined && requested !== "auto" && requested !== "true";
@@ -138,10 +137,7 @@ async function resolveCodexVersion(
   const releases = flags["releases-file"] !== undefined
     ? (JSON.parse(readFileSync(flags["releases-file"], "utf8")) as unknown)
     : await fetchUpstreamReleases(process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN);
-  const version = manifest !== undefined
-    ? selectHighestSupportedVersion(manifest, releases)
-    : selectStableVersion(releases);
-  return { version, pinned: false };
+  return { version: selectHighestSupportedVersion(manifest, releases), pinned: false };
 }
 
 /**
@@ -237,7 +233,7 @@ function finish(
 
 /**
  * Resolve the release inputs. `--codex-version` (anything but `auto`) pins the version; otherwise
- * the highest stable upstream release is chosen and must be covered by `patches/manifest.json`.
+ * the highest stable upstream release covered by `patches/manifest.json` is chosen.
  *
  * Exit codes are deliberately narrow: only an uncovered upstream or a release already published
  * from different inputs is "blocked, not broken" (`UNCOVERED_EXIT_CODE` with the blocked-issue

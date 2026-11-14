@@ -64,9 +64,8 @@ build steps holds release-write or issue-write credentials.
   `RUNNER_TEMP`/`GITHUB_WORKSPACE`/`GITHUB_OUTPUT` are assumed.
 - **`detect`** runs `bun scripts/prebuilt.ts detect`. With `codex_version=auto` it lists
   `openai/codex` releases, picks the highest **stable** `rust-vX.Y.Z` by semver comparison
-  (not by publish order and not lexicographically - `0.153.0` beats `0.99.0`), drops drafts,
-  prereleases and malformed tags, and then requires `patches/manifest.json` to cover that
-  version explicitly. If upstream has moved past every supported patch, `detect` exits 3 and
+  covered by `patches/manifest.json` (drops drafts, prereleases, and unmanifested tags).
+  If no listed upstream releases are covered by `patches/manifest.json`, `detect` exits 3 and
   names both the uncovered upstream version and `patches/manifest.json`'s `candidate`. That
   field is informational only: it never widens `resolvePatch`, which stays exact-match.
   The job outputs `codex_version`, `cx_version`, `tag`, `upstream_tag`, `patch_file`,
