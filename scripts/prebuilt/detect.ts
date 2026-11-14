@@ -68,6 +68,27 @@ export function selectStableVersion(releases: unknown): string {
   return highest.raw;
 }
 
+/**
+ * The highest stable `rust-v*` release in a GitHub releases payload that is covered by `patches/manifest.json`.
+ *
+ * Used for `auto` detection on scheduled and default runs, matching the contract:
+ * "auto = highest stable upstream release that this repo patches".
+ *
+ * If no releases in the payload are covered by the manifest, falls back to `selectStableVersion`
+ * so downstream detection can report the uncovered upstream version.
+ */
+export function selectHighestSupportedVersion(manifest: Manifest, releases: unknown): string {
+  const stable = listStableVersions(releases).map((v) => parseSemver(v)!);
+  if (stable.length === 0) throw new Error("upstream detection found no stable rust-v* Codex release");
+  const supported = stable.filter((v) => resolvePatch(manifest, v) !== null);
+  if (supported.length === 0) {
+    const highest = stable.reduce((best, v) => (compareSemver(v, best) > 0 ? v : best));
+    return highest.raw;
+  }
+  const highestSupported = supported.reduce((best, v) => (compareSemver(v, best) > 0 ? v : best));
+  return highestSupported.raw;
+}
+
 /** The title of the single tracking issue for a blocked prebuilt run. */
 export function blockedIssueTitle(version: string | null): string {
   return version === null ? "Prebuilt blocked: upstream detection" : `Prebuilt blocked: Codex ${version}`;

@@ -10,7 +10,7 @@ import { loadManifest, type Manifest } from "../../src/patch/manifest";
 import {
   blockedIssueTitle,
   resolveDetection,
-  selectStableVersion,
+  selectHighestSupportedVersion,
   UncoveredUpstreamError,
   UNCOVERED_EXIT_CODE,
   type Detection,
@@ -126,15 +126,18 @@ function patchTreeFor(source: SourceSelection): PatchTree {
     : workingTreePatches();
 }
 
-/** The upstream version this run is about: pinned by `--codex-version`, or the highest stable. */
-async function resolveCodexVersion(flags: Record<string, string>): Promise<{ version: string; pinned: boolean }> {
+/** The upstream version this run is about: pinned by `--codex-version`, or the highest stable supported version. */
+async function resolveCodexVersion(
+  flags: Record<string, string>,
+  manifest: Manifest,
+): Promise<{ version: string; pinned: boolean }> {
   const requested = flags["codex-version"];
   const pinned = requested !== undefined && requested !== "auto" && requested !== "true";
   if (pinned) return { version: requested!, pinned: true };
   const releases = flags["releases-file"] !== undefined
     ? (JSON.parse(readFileSync(flags["releases-file"], "utf8")) as unknown)
     : await fetchUpstreamReleases(process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN);
-  return { version: selectStableVersion(releases), pinned: false };
+  return { version: selectHighestSupportedVersion(manifest, releases), pinned: false };
 }
 
 /**
@@ -230,7 +233,7 @@ function finish(
 
 /**
  * Resolve the release inputs. `--codex-version` (anything but `auto`) pins the version; otherwise
- * the highest stable upstream release is chosen and must be covered by `patches/manifest.json`.
+ * the highest stable upstream release covered by `patches/manifest.json` is chosen.
  *
  * Exit codes are deliberately narrow: only an uncovered upstream or a release already published
  * from different inputs is "blocked, not broken" (`UNCOVERED_EXIT_CODE` with the blocked-issue
@@ -258,9 +261,10 @@ export async function runDetect(flags: Record<string, string>): Promise<void> {
   if (publishRequested) platforms = unionReleasePlatforms(platforms, DEFAULT_PREBUILT_PLATFORMS);
   const matrix = buildMatrix(platforms);
   const source = resolveSource(flags, event);
-  const { version: codexVersion, pinned } = await resolveCodexVersion(flags);
   const patches = patchTreeFor(source);
-  const detection = resolveOrBlock(loadManifest(patches.manifestDir), codexVersion, source, platforms, matrix);
+  const manifest = loadManifest(patches.manifestDir);
+  const { version: codexVersion, pinned } = await resolveCodexVersion(flags, manifest);
+  const detection = resolveOrBlock(manifest, codexVersion, source, platforms, matrix);
   const patchSha256 = (await sha256File(patches.patchPath(detection.patchFile))).sha256;
   const expected = { sourceCommit: source.sourceCommit, patchSha256, patchVersion: detection.patchVersion };
   const existing = await releaseState(execGh, detection, expected, platforms);
