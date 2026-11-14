@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.21.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.20.0...v0.21.0) (2026-11-14)
+
+
+### Features
+
+* support Codex 0.169.0 ([#210](https://github.com/adrijshikhar/cxstatusline/issues/210)) ([#213](https://github.com/adrijshikhar/cxstatusline/issues/213)) ([95fc6e5](https://github.com/adrijshikhar/cxstatusline/commit/95fc6e57f3b62551c23fdb9188b23b319fe24cfc))
+
+
+### Bug Fixes
+
+* restrict auto prebuilt detection to manifest-covered versions ([#211](https://github.com/adrijshikhar/cxstatusline/issues/211)) ([e346947](https://github.com/adrijshikhar/cxstatusline/commit/e3469470a6188699178cb21d5f126b16ee2ca07c))
+
 ## [0.20.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.19.0...v0.20.0) (2026-11-13)
 
 
