@@ -287,6 +287,7 @@ jobs:
             --upstream "$GITHUB_WORKSPACE/upstream" \
             --staging "$RUNNER_TEMP/staging" \
             --rust-notices "$RUNNER_TEMP/rust-notices.md" \
+            --workflow-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             --platform "$PLATFORM" \
             --out "$GITHUB_WORKSPACE/out" 2>&1 | tee -a "$RUNNER_TEMP/prebuilt-native.log"
       - name: Verify release assets
