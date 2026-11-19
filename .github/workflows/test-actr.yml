@@ -1,0 +1,17 @@
+name: Test actr Runner
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ feat/test-actr-runner ]
+
+jobs:
+  smoke:
+    runs-on: [ self-hosted, macOS ]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify Environment
+        run: |
+          echo "Running on actr multi-repo supervisor!"
+          uname -a
+          bun --version || true
