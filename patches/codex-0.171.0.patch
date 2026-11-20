@@ -484,7 +484,7 @@ index 58cce3a..1edc947 100644
          if self.footer.side_conversation_context_label == label {
              return false;
 diff --git a/codex-rs/tui/src/bottom_pane/chat_composer/warning_notice_tests.rs b/codex-rs/tui/src/bottom_pane/chat_composer/warning_notice_tests.rs
-index cfe7dca..7347428 100644
+index cfe7dca..7c6a0df 100644
 --- a/codex-rs/tui/src/bottom_pane/chat_composer/warning_notice_tests.rs
 +++ b/codex-rs/tui/src/bottom_pane/chat_composer/warning_notice_tests.rs
 @@ -166,3 +166,161 @@ fn warnings_yield_to_queue_controls_and_complete_navigation_hints() {
@@ -528,7 +528,7 @@ index cfe7dca..7347428 100644
 +        cursor_column: Some(3),
 +        is_interactive: true,
 +    };
-+    for mode in [FooterMode::ComposerEmpty, FooterMode::ShortcutOverlay] {
++    for mode in [FooterMode::ComposerEmpty, FooterMode::ShortcutOverlay(Default::default())] {
 +        composer.footer.mode = mode;
 +        for transcript in [None, Some(&footer)] {
 +            let options = composer.resolve_render_options(ComposerRenderOptions {
