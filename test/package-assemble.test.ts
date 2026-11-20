@@ -32,8 +32,8 @@ describe("assemblePackage", () => {
   });
 
   test("runs with a scrubbed environment: CODEX_REPO_ROOT and TMPDIR set, CARGO_TARGET_DIR and PYTHONPATH dropped", () => {
-    const env = assembleEnv(input, { PATH: "/usr/bin", HOME: "/Users/me", CARGO_TARGET_DIR: "/elsewhere", PYTHONPATH: "/evil", HTTPS_PROXY: "http://proxy:3128", SCCACHE_DIR: "/cache" });
-    expect(env).toEqual({ PATH: "/usr/bin", HOME: "/Users/me", HTTPS_PROXY: "http://proxy:3128", SCCACHE_DIR: "/cache", CODEX_REPO_ROOT: "/src/codex", TMPDIR: "/tmp/cache" });
+    const env = assembleEnv(input, { PATH: "/usr/bin", HOME: "/Users/me", CARGO_TARGET_DIR: "/elsewhere", PYTHONPATH: "/evil", HTTPS_PROXY: "http://proxy:3128", SCCACHE_DIR: "/cache", CARGO_BUILD_JOBS: "4" });
+    expect(env).toEqual({ PATH: "/usr/bin", HOME: "/Users/me", HTTPS_PROXY: "http://proxy:3128", SCCACHE_DIR: "/cache", CARGO_BUILD_JOBS: "4", CODEX_REPO_ROOT: "/src/codex", TMPDIR: "/tmp/cache" });
   });
 
   test("invokes the interpreter in the upstream checkout and surfaces the script's stderr on failure", () => {
