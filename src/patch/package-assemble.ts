@@ -59,7 +59,23 @@ export function assembleArgs(input: AssembleInput): string[] {
  * shadow `codex_package`).
  */
 export function assembleEnv(input: AssembleInput, base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  const keep = ["PATH", "HOME", "CARGO_HOME", "RUSTUP_HOME", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "https_proxy", "http_proxy", "no_proxy", "SSL_CERT_FILE", "RUSTC_WRAPPER", "SCCACHE_DIR"];
+  const keep = [
+    "PATH",
+    "HOME",
+    "CARGO_HOME",
+    "RUSTUP_HOME",
+    "CARGO_BUILD_JOBS",
+    "CARGO_TERM_COLOR",
+    "HTTPS_PROXY",
+    "HTTP_PROXY",
+    "NO_PROXY",
+    "https_proxy",
+    "http_proxy",
+    "no_proxy",
+    "SSL_CERT_FILE",
+    "RUSTC_WRAPPER",
+    "SCCACHE_DIR",
+  ];
   const env: NodeJS.ProcessEnv = {};
   for (const key of keep) if (base[key] !== undefined) env[key] = base[key];
   env.CODEX_REPO_ROOT = input.upstream;
