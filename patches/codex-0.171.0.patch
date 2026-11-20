@@ -1057,7 +1057,7 @@ index f27e7c4..f8e1419 100644
              current_goal_status_indicator: None,
              current_goal_status: None,
 diff --git a/codex-rs/tui/src/chatwidget/status_surfaces.rs b/codex-rs/tui/src/chatwidget/status_surfaces.rs
-index 881cd0e..ffb0bd5 100644
+index 881cd0e..6bbfe8d 100644
 --- a/codex-rs/tui/src/chatwidget/status_surfaces.rs
 +++ b/codex-rs/tui/src/chatwidget/status_surfaces.rs
 @@ -42,6 +42,16 @@ const TERMINAL_TITLE_ACTION_REQUIRED_INTERVAL: Duration = Duration::from_secs(1)
@@ -1303,7 +1303,7 @@ index 881cd0e..ffb0bd5 100644
 +                "project_root": project_root.map(|p| p.to_string_lossy().into_owned()),
 +                "hostname": os_host_name(),
 +                "approval_mode": self.config.permissions.approval_policy.value().to_string(),
-+                "permissions": self.config.legacy_sandbox_policy().to_string(),
++                "permissions": self.config.permissions.effective_permission_profile().legacy_sandbox_policy_label(&cwd),
 +                "run_state": self.run_state_status_text().to_lowercase(),
 +                "codex_version": crate::version::CODEX_CLI_VERSION,
 +                "started_at": self.cxstatusline_started_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, /*use_z*/ true),
