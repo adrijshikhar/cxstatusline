@@ -373,6 +373,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.detect.outputs.tag }}
           PLATFORMS: ${{ needs.detect.outputs.platforms }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
         run: |
           IFS=',' read -ra ADDR <<< "$PLATFORMS"
           for p in "${ADDR[@]}"; do
@@ -381,7 +383,7 @@ jobs:
               echo "::warning::$part/manifest.json missing; falling back to gh run download"
               rm -rf "$part"
               mkdir -p "$part"
-              gh run download "${{ github.run_id }}" --repo "${{ github.repository }}" -n "release-$TAG-$p" -D "$part"
+              gh run download "$RUN_ID" --repo "$REPO" -n "release-$TAG-$p" -D "$part"
             fi
           done
       - name: Merge release manifests and archives
@@ -449,12 +451,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.detect.outputs.tag }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
         run: |
           if [ ! -f release-assets/manifest.json ]; then
             echo "::warning::manifest.json missing after download-artifact; falling back to gh run download"
             rm -rf release-assets
             mkdir -p release-assets
-            gh run download "${{ github.run_id }}" --repo "${{ github.repository }}" -n "release-$TAG" -D release-assets
+            gh run download "$RUN_ID" --repo "$REPO" -n "release-$TAG" -D release-assets
           fi
       # The documented expired-artifact case: without this line the publish log would be empty and
       # `report` would say "no error excerpt captured" for a failure with a known, nameable cause.
