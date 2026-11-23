@@ -3,6 +3,22 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.21.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.20.0...v0.21.0) (2026-11-20)
+
+
+### Features
+
+* support Codex 0.169.0 ([#210](https://github.com/adrijshikhar/cxstatusline/issues/210)) ([#213](https://github.com/adrijshikhar/cxstatusline/issues/213)) ([95fc6e5](https://github.com/adrijshikhar/cxstatusline/commit/95fc6e57f3b62551c23fdb9188b23b319fe24cfc))
+* support Codex 0.170.0 ([#214](https://github.com/adrijshikhar/cxstatusline/issues/214)) ([543a537](https://github.com/adrijshikhar/cxstatusline/commit/543a53774104b7536b4f18d54fcb70a5229cda20))
+* support Codex 0.171.0 ([#216](https://github.com/adrijshikhar/cxstatusline/issues/216)) ([edcbdca](https://github.com/adrijshikhar/cxstatusline/commit/edcbdca554fefe18d71053c760c6121f819282b2))
+
+
+### Bug Fixes
+
+* resolve permission profile compilation in Codex 0.171.0 patch ([0a7355d](https://github.com/adrijshikhar/cxstatusline/commit/0a7355d12944413fc0367470dba1b0f3ec5536f0))
+* restrict auto prebuilt detection to manifest-covered versions ([#211](https://github.com/adrijshikhar/cxstatusline/issues/211)) ([e346947](https://github.com/adrijshikhar/cxstatusline/commit/e3469470a6188699178cb21d5f126b16ee2ca07c))
+* update FooterMode::ShortcutOverlay in 0.171.0 warning tests ([486a3a1](https://github.com/adrijshikhar/cxstatusline/commit/486a3a10843949f47bc785c7b8583dad6758a9ef))
+
 ## [0.20.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.19.0...v0.20.0) (2026-11-13)
 
 
