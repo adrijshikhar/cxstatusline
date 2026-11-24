@@ -1365,7 +1365,7 @@ index 45ff5f1..0b53ec8 100644
 +    })
 +}
 diff --git a/codex-rs/tui/src/chatwidget/tests/status_and_layout.rs b/codex-rs/tui/src/chatwidget/tests/status_and_layout.rs
-index fdc8c47..6f7b5c7 100644
+index fdc8c47..0b18741 100644
 --- a/codex-rs/tui/src/chatwidget/tests/status_and_layout.rs
 +++ b/codex-rs/tui/src/chatwidget/tests/status_and_layout.rs
 @@ -1,5 +1,9 @@
@@ -1459,7 +1459,7 @@ index fdc8c47..6f7b5c7 100644
 +    ]);
 +    let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
 +    chat.config.cwd = AbsolutePathBuf::try_from(repo.path().to_path_buf()).expect("absolute cwd");
-+    chat.current_cwd = Some(repo.path().to_path_buf());
++    chat.current_cwd = PathUri::from_abs_path(&chat.config.cwd);
 +    chat.local_settings.tui.status_line = Some(vec![]);
 +    chat.local_settings.tui.terminal_title = Some(vec![]);
 +    chat.cxstatusline_command = Some(vec!["unused-renderer".into()]);
