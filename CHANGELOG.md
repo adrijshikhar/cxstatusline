@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.22.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.21.0...v0.22.0) (2026-11-24)
+
+
+### Features
+
+* support Codex 0.172.0 ([#222](https://github.com/adrijshikhar/cxstatusline/issues/222)) ([e361322](https://github.com/adrijshikhar/cxstatusline/commit/e3613228fa8327a271c1b6ab8671ea306feff65d))
+
+
+### Bug Fixes
+
+* update current_cwd to PathUri in Codex 0.172.0 test ([#225](https://github.com/adrijshikhar/cxstatusline/issues/225)) ([09039fb](https://github.com/adrijshikhar/cxstatusline/commit/09039fba5a76ed9c4c215383f926c8a07963c233))
+
 ## [0.21.0](https://github.com/adrijshikhar/cxstatusline/compare/v0.20.0...v0.21.0) (2026-11-20)
 
 
