@@ -29,7 +29,7 @@ export class GhError extends Error {
   }
 }
 
-const TIMEOUT_MS = 900_000;
+const TIMEOUT_MS = 86_400_000; // 24 hours (1 day) to tolerate laptop sleep/idle windows
 const MAX_BUFFER = 64 * 1024 * 1024;
 
 /** The real runner. Argument array only; `gh` authenticates from `GH_TOKEN`/`GITHUB_TOKEN`. */
